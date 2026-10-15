@@ -71,6 +71,7 @@ import com.quran.labs.androidquran.data.QuranFileConstants
 import com.quran.labs.androidquran.data.TimingRepository
 import com.quran.labs.androidquran.extension.requiresBasmallah
 import com.quran.labs.androidquran.presenter.audio.service.AudioQueue
+import com.quran.labs.androidquran.service.memorization.RecitationRecorder
 import com.quran.labs.androidquran.service.util.QuranDownloadNotifier
 import com.quran.labs.androidquran.ui.PagerActivity
 import com.quran.labs.androidquran.util.AudioUtils
@@ -163,6 +164,7 @@ class AudioService : Service(), Player.Listener {
   private val compositeDisposable = CompositeDisposable()
   private lateinit var scope: CoroutineScope
   private var pauseCountdownJob: Job? = null
+  private var recitationRecorder: RecitationRecorder? = null
 
   @Inject
   lateinit var quranInfo: QuranInfo
@@ -300,6 +302,7 @@ class AudioService : Service(), Player.Listener {
     serviceLooper = thread.looper
     serviceHandler = ServiceHandler(serviceLooper)
     scope = CoroutineScope(serviceHandler.asCoroutineDispatcher() + SupervisorJob())
+    recitationRecorder = RecitationRecorder(this)
 
     val appContext = applicationContext
     (appContext as QuranApplication).applicationComponent.inject(this)
@@ -670,6 +673,10 @@ class AudioService : Service(), Player.Listener {
 
   private fun processPauseRequest() {
     if (memorizationEngine.state.value.isActive) {
+      if (memorizationEngine.state.value.isRecordingRecitation) {
+        recitationRecorder?.cancelRecording()
+        memorizationEngine.setRecordingRecitation(false)
+      }
       memorizationEngine.pause()
     }
     if (State.Playing == state) {
@@ -785,7 +792,11 @@ class AudioService : Service(), Player.Listener {
   private fun processStopRequest(force: Boolean = false) {
     pauseCountdownJob?.cancel()
     pauseCountdownJob = null
+    recitationRecorder?.cancelRecording()
+    recitationRecorder?.stopPlayback()
     if (memorizationEngine.state.value.isActive) {
+      memorizationEngine.setRecordingRecitation(false)
+      memorizationEngine.updateLastRecitationPath(null)
       memorizationEngine.stopMemorization()
     }
     setState(PlaybackStateCompat.STATE_STOPPED)
@@ -1243,12 +1254,26 @@ class AudioService : Service(), Player.Listener {
         else -> 3
       }
 
+      val shouldRecord = memorizationEngine.state.value.config?.recordRecitation == true
+      if (shouldRecord) {
+        val tempFile = File(cacheDir, "memorization_recitation_temp.m4a")
+        val started = recitationRecorder?.startRecording(tempFile) == true
+        memorizationEngine.setRecordingRecitation(started)
+      }
+
       pauseCountdownJob = scope.launch {
         for (remaining in delaySeconds downTo 1) {
           memorizationEngine.updatePauseRemaining(remaining)
           delay(1000L)
         }
         memorizationEngine.updatePauseRemaining(0)
+
+        if (shouldRecord) {
+          val recordedPath = recitationRecorder?.stopRecording()
+          memorizationEngine.setRecordingRecitation(false)
+          memorizationEngine.updateLastRecitationPath(recordedPath)
+        }
+
         withContext(Dispatchers.Main) {
           if (memorizationEngine.state.value.isActive && !memorizationEngine.state.value.isPaused) {
             val next = memorizationEngine.onAyahPlaybackCompleted(nextAyah)
@@ -1492,6 +1517,9 @@ class AudioService : Service(), Player.Listener {
     relaxResources(true, true)
     mediaSession.release()
     timingRepository.clear()
+    recitationRecorder?.cancelRecording()
+    recitationRecorder?.stopPlayback()
+    recitationRecorder = null
     scope.cancel()
     super.onDestroy()
   }

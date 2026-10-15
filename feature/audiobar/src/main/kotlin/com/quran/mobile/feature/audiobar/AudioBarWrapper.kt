@@ -88,6 +88,21 @@ class AudioBarWrapper @JvmOverloads constructor(
               eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
             },
             onToggleMask = { memorizationEngine.toggleTextMask() },
+            onReplayRecitation = {
+              val path = memorizationState.lastRecitationAudioPath
+              if (path != null) {
+                try {
+                  android.media.MediaPlayer().apply {
+                    setDataSource(path)
+                    setOnCompletionListener { it.release() }
+                    prepare()
+                    start()
+                  }
+                } catch (e: Exception) {
+                  android.util.Log.e("AudioBarWrapper", "Error playing recorded recitation", e)
+                }
+              }
+            },
             modifier = Modifier
               .padding(
                 WindowInsets.navigationBars.add(WindowInsets.displayCutout)

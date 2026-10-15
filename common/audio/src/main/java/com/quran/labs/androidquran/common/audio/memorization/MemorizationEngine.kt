@@ -59,8 +59,10 @@ class MemorizationEngine @Inject constructor(
       activeAyahsInStep = firstStep.ayahs,
       currentPlayingAyah = firstAyah,
       currentSubAyahIndex = 0,
-      isTextMasked = firstStep.isMaskedByDefault && config.memoryTestMode,
+      isTextMasked = shouldMaskText(firstStep, 1, config),
       pauseRemainingSeconds = 0,
+      isRecordingRecitation = false,
+      lastRecitationAudioPath = null,
       isSessionCompleted = false
     )
   }
@@ -160,6 +162,42 @@ class MemorizationEngine @Inject constructor(
   }
 
   /**
+   * Sets whether user recitation is actively being recorded.
+   */
+  fun setRecordingRecitation(isRecording: Boolean) {
+    val current = _state.value
+    if (!current.isActive) return
+    _state.value = current.copy(isRecordingRecitation = isRecording)
+  }
+
+  /**
+   * Updates the file path of the last recorded recitation.
+   */
+  fun updateLastRecitationPath(path: String?) {
+    val current = _state.value
+    if (!current.isActive) return
+    _state.value = current.copy(lastRecitationAudioPath = path)
+  }
+
+  /**
+   * Determines whether Quranic text should be visually masked based on configuration and iteration.
+   */
+  private fun shouldMaskText(step: MemorizationStep, repeatIteration: Int, config: MemorizationConfig?): Boolean {
+    if (config == null) return false
+    return when (config.maskingLevel) {
+      MaskingLevel.OFF -> false
+      MaskingLevel.MASK_ON_CONNECT -> step.isMaskedByDefault
+      MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT -> {
+        if (step.stepType == StepType.SOLO) {
+          repeatIteration > 1
+        } else {
+          true
+        }
+      }
+    }
+  }
+
+  /**
    * Called when audio playback of an Ayah finishes.
    * Advances sub-ayah index within a CONNECT step, or advances repeat iteration,
    * or transitions to the next step.
@@ -193,7 +231,7 @@ class MemorizationEngine @Inject constructor(
         currentRepeatIteration = nextRepeat,
         currentSubAyahIndex = 0,
         currentPlayingAyah = firstAyah,
-        isTextMasked = step.isMaskedByDefault && (current.config?.memoryTestMode == true)
+        isTextMasked = shouldMaskText(step, nextRepeat, current.config)
       )
       return firstAyah
     }
@@ -229,13 +267,24 @@ class MemorizationEngine @Inject constructor(
       activeAyahsInStep = nextStep.ayahs,
       currentPlayingAyah = firstAyah,
       currentSubAyahIndex = 0,
-      isTextMasked = nextStep.isMaskedByDefault && (config?.memoryTestMode == true),
+      isTextMasked = shouldMaskText(nextStep, 1, config),
       pauseRemainingSeconds = 0,
       isSessionCompleted = false
     )
   }
 
   private fun completeSession() {
+    val current = _state.value
+    current.config?.let { config ->
+      memorizationPreferences?.saveMasteredRange(
+        MasteredRange(
+          startAyah = config.startAyah,
+          endAyah = config.endAyah,
+          timestamp = System.currentTimeMillis(),
+          repetitions = config.singleRepeat + config.connectRepeat
+        )
+      )
+    }
     memorizationPreferences?.clearSession()
     _state.value = _state.value.copy(
       isActive = false,
@@ -243,7 +292,9 @@ class MemorizationEngine @Inject constructor(
       currentStep = null,
       currentPlayingAyah = null,
       activeAyahsInStep = emptyList(),
-      isTextMasked = false
+      isTextMasked = false,
+      isRecordingRecitation = false,
+      lastRecitationAudioPath = null
     )
   }
 }

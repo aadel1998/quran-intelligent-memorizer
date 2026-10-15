@@ -260,4 +260,135 @@ class MemorizationEngineTest {
     assertThat(engine.state.value.isActive).isFalse()
     assertThat(engine.state.value.currentStep).isNull()
   }
+
+  @Test
+  fun `progressive masking keeps text visible on solo repeat 1 and masks on repeat 2 and connect`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 2,
+      connectRepeat = 1,
+      maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
+    )
+
+    engine.startMemorization(config)
+
+    // Step 0 (Solo A1), Repeat 1: visible
+    assertThat(engine.state.value.stepType).isEqualTo(StepType.SOLO)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
+    assertThat(engine.state.value.isTextMasked).isFalse()
+
+    // Repeat 1 completes -> advances to Repeat 2: masked!
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
+    assertThat(engine.state.value.isTextMasked).isTrue()
+
+    // Solo A1 completes -> Step 1 (Solo A2), Repeat 1: visible
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
+    assertThat(engine.state.value.isTextMasked).isFalse()
+
+    // Repeat 1 completes -> Repeat 2: masked!
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
+    assertThat(engine.state.value.isTextMasked).isTrue()
+
+    // Solo A2 completes -> Step 2 (Connect A1..A2): always masked!
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+    assertThat(engine.state.value.stepType).isEqualTo(StepType.CONNECT)
+    assertThat(engine.state.value.isTextMasked).isTrue()
+  }
+
+  @Test
+  fun `recitation recording state and pause remaining update correctly`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 1),
+      singleRepeat = 1,
+      delayMode = MemorizationDelayMode.FixedSeconds(5)
+    )
+
+    engine.startMemorization(config)
+    assertThat(engine.state.value.isRecordingRecitation).isFalse()
+    assertThat(engine.state.value.lastRecitationAudioPath).isNull()
+
+    // Solo A1 completes -> advances to PAUSE_FOR_RECITATION step
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(engine.state.value.stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
+
+    engine.setRecordingRecitation(true)
+    assertThat(engine.state.value.isRecordingRecitation).isTrue()
+
+    engine.updatePauseRemaining(5)
+    assertThat(engine.state.value.pauseRemainingSeconds).isEqualTo(5)
+    assertThat(engine.state.value.hudSummary).contains("5s")
+    assertThat(engine.state.value.hudSummary).contains("Recording Recitation")
+
+    engine.updateLastRecitationPath("/cache/test.m4a")
+    assertThat(engine.state.value.lastRecitationAudioPath).isEqualTo("/cache/test.m4a")
+  }
+
+  @Test
+  fun `session completion logs mastered range to preferences`() {
+    val prefs = MemorizationPreferences(FakeTestSharedPreferences())
+    val engineWithPrefs = MemorizationEngine(quranInfo, prefs)
+
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 1),
+      windowSize = 1,
+      singleRepeat = 1,
+      connectRepeat = 1,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
+    )
+
+    engineWithPrefs.startMemorization(config)
+    assertThat(prefs.getMasteredRanges()).isEmpty()
+
+    // Solo A1 finishes -> session completes!
+    val next = engineWithPrefs.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(next).isNull()
+    assertThat(engineWithPrefs.state.value.isSessionCompleted).isTrue()
+
+    val mastered = prefs.getMasteredRanges()
+    assertThat(mastered).hasSize(1)
+    assertThat(mastered[0].startAyah).isEqualTo(SuraAyah(1, 1))
+    assertThat(mastered[0].endAyah).isEqualTo(SuraAyah(1, 1))
+    assertThat(mastered[0].repetitions).isEqualTo(2)
+  }
+
+  private class FakeTestSharedPreferences : android.content.SharedPreferences {
+    private val values = mutableMapOf<String, Any>()
+    override fun getAll(): MutableMap<String, *> = values
+    override fun getString(key: String?, defValue: String?): String? = values[key] as? String ?: defValue
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
+      @Suppress("UNCHECKED_CAST") (values[key] as? MutableSet<String> ?: defValues)
+    override fun getInt(key: String?, defValue: Int): Int = values[key] as? Int ?: defValue
+    override fun getLong(key: String?, defValue: Long): Long = values[key] as? Long ?: defValue
+    override fun getFloat(key: String?, defValue: Float): Float = values[key] as? Float ?: defValue
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean = values[key] as? Boolean ?: defValue
+    override fun contains(key: String?): Boolean = values.containsKey(key)
+    override fun edit(): android.content.SharedPreferences.Editor = object : android.content.SharedPreferences.Editor {
+      private val pending = mutableMapOf<String, Any>()
+      private val removed = mutableSetOf<String>()
+      private var clear = false
+      override fun putString(k: String?, v: String?) = apply { if (k != null && v != null) { pending[k] = v; removed.remove(k) } }
+      override fun putStringSet(k: String?, v: MutableSet<String>?) = apply { if (k != null && v != null) { pending[k] = v; removed.remove(k) } }
+      override fun putInt(k: String?, v: Int) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putLong(k: String?, v: Long) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putFloat(k: String?, v: Float) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putBoolean(k: String?, v: Boolean) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun remove(k: String?) = apply { if (k != null) { pending.remove(k); removed.add(k) } }
+      override fun clear() = apply { clear = true }
+      override fun commit(): Boolean { apply(); return true }
+      override fun apply() { if (clear) values.clear(); for (k in removed) values.remove(k); values.putAll(pending) }
+    }
+    override fun registerOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
+    override fun unregisterOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
+  }
 }

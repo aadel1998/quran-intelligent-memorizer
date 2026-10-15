@@ -47,6 +47,7 @@ fun MemorizationHud(
   onSkipStep: () -> Unit,
   onStop: () -> Unit,
   onToggleMask: () -> Unit,
+  onReplayRecitation: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val colors = LocalQuranColors.current
@@ -67,17 +68,19 @@ fun MemorizationHud(
         modifier = Modifier.fillMaxWidth()
       ) {
         // Step Type Badge
-        val badgeLabel = when (state.stepType) {
-          StepType.SOLO -> "SOLO"
-          StepType.CONNECT -> "CONNECT"
-          StepType.PAUSE_FOR_RECITATION -> "RECITE"
-          StepType.BRIDGE -> "BRIDGE"
-          null -> ""
+        val badgeLabel = when {
+          state.isRecordingRecitation -> "RECORDING"
+          state.stepType == StepType.SOLO -> "SOLO"
+          state.stepType == StepType.CONNECT -> "CONNECT"
+          state.stepType == StepType.PAUSE_FOR_RECITATION -> "RECITE"
+          state.stepType == StepType.BRIDGE -> "BRIDGE"
+          else -> ""
         }
-        val badgeColor = when (state.stepType) {
-          StepType.CONNECT -> MaterialTheme.colorScheme.primary
-          StepType.PAUSE_FOR_RECITATION -> MaterialTheme.colorScheme.tertiary
-          StepType.BRIDGE -> MaterialTheme.colorScheme.secondary
+        val badgeColor = when {
+          state.isRecordingRecitation -> MaterialTheme.colorScheme.error
+          state.stepType == StepType.CONNECT -> MaterialTheme.colorScheme.primary
+          state.stepType == StepType.PAUSE_FOR_RECITATION -> MaterialTheme.colorScheme.tertiary
+          state.stepType == StepType.BRIDGE -> MaterialTheme.colorScheme.secondary
           else -> MaterialTheme.colorScheme.outline
         }
 
@@ -104,15 +107,34 @@ fun MemorizationHud(
           )
         }
 
-        // Tap-to-peek toggle if test mode active
-        if (state.config?.memoryTestMode == true && (state.stepType == StepType.CONNECT || state.stepType == StepType.PAUSE_FOR_RECITATION)) {
-          TextButton(onClick = onToggleMask) {
-            Text(
-              text = if (state.isTextMasked) "Peek Text" else "Hide Text",
-              fontSize = 12.sp,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.primary
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          if (state.lastRecitationAudioPath != null && onReplayRecitation != null) {
+            TextButton(onClick = onReplayRecitation) {
+              Icon(
+                QuranIcons.Mic,
+                contentDescription = "Replay My Recitation",
+                modifier = Modifier.padding(end = 4.dp),
+                tint = MaterialTheme.colorScheme.primary
+              )
+              Text(
+                text = "Replay Voice",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+
+          // Tap-to-peek toggle if test mode active
+          if (state.config?.memoryTestMode == true) {
+            TextButton(onClick = onToggleMask) {
+              Text(
+                text = if (state.isTextMasked) "Peek Text" else "Hide Text",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
           }
         }
       }

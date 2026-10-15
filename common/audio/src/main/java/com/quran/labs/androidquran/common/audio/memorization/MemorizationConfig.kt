@@ -5,6 +5,15 @@ import com.quran.data.model.SuraAyah
 import kotlinx.parcelize.Parcelize
 
 /**
+ * Defines progressive masking levels for memory scaffolding.
+ */
+enum class MaskingLevel {
+  OFF,
+  MASK_ON_CONNECT,
+  PROGRESSIVE_SOLO_AND_CONNECT
+}
+
+/**
  * Configuration options for the Intelligent Quran Memorization Mode.
  *
  * @param startAyah The first Ayah in the memorization session.
@@ -14,6 +23,8 @@ import kotlinx.parcelize.Parcelize
  * @param connectRepeat Number of times accumulated Ayahs in the window are repeated together (Rc, default 2).
  * @param delayMode Pause between repetitions (None, FixedSeconds, or MatchAyahDuration).
  * @param memoryTestMode When true, masks/blurs Ayah text during CONNECT and recitation steps.
+ * @param maskingLevel Progressive masking difficulty (OFF, MASK_ON_CONNECT, PROGRESSIVE_SOLO_AND_CONNECT).
+ * @param recordRecitation When true, records user's voice recitation during pauses for self-check replay.
  * @param enableBridge When true, plays a bridge step connecting the previous window with the new window before advancing.
  */
 @Parcelize
@@ -25,6 +36,8 @@ data class MemorizationConfig(
   val connectRepeat: Int = 2,
   val delayMode: MemorizationDelayMode = MemorizationDelayMode.None,
   val memoryTestMode: Boolean = false,
+  val maskingLevel: MaskingLevel = if (memoryTestMode) MaskingLevel.MASK_ON_CONNECT else MaskingLevel.OFF,
+  val recordRecitation: Boolean = false,
   val enableBridge: Boolean = true
 ) : Parcelable {
   init {

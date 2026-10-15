@@ -38,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
+import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
 
@@ -54,6 +56,8 @@ fun MemorizationSetupSheet(
   savedSessionConfig: MemorizationConfig? = null,
   savedSessionStep: Int = 0,
   onResumeSession: (() -> Unit)? = null,
+  masteredRanges: List<MasteredRange> = emptyList(),
+  onReviewRange: ((MasteredRange) -> Unit)? = null,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
   var startAyahNum by remember { mutableIntStateOf(initialStartAyah.ayah) }
@@ -62,7 +66,8 @@ fun MemorizationSetupSheet(
   var singleRepeat by remember { mutableIntStateOf(3) }
   var connectRepeat by remember { mutableIntStateOf(2) }
   var selectedDelayOption by remember { mutableIntStateOf(0) } // 0: None, 1: 3s, 2: 5s, 3: Match Duration
-  var memoryTestMode by remember { mutableStateOf(false) }
+  var maskingLevel by remember { mutableStateOf(MaskingLevel.OFF) }
+  var recordRecitation by remember { mutableStateOf(false) }
   var enableBridge by remember { mutableStateOf(true) }
 
   ModalBottomSheet(
@@ -124,6 +129,77 @@ fun MemorizationSetupSheet(
               )
             ) {
               Text("Resume")
+            }
+          }
+        }
+      }
+
+      if (masteredRanges.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+          text = "Recently Mastered & Quick Review",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          masteredRanges.take(3).forEach { range ->
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+              )
+            ) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = "Surah ${range.startAyah.sura}:${range.startAyah.ayah}–${range.endAyah.ayah}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                  )
+                  Text(
+                    text = "Mastered • ${range.repetitions}x repeats",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+
+                FilledTonalButton(
+                  onClick = {
+                    if (onReviewRange != null) {
+                      onReviewRange(range)
+                    } else {
+                      onStartMemorization(
+                        MemorizationConfig(
+                          startAyah = range.startAyah,
+                          endAyah = range.endAyah,
+                          windowSize = 4,
+                          singleRepeat = 1,
+                          connectRepeat = 2,
+                          delayMode = MemorizationDelayMode.None,
+                          memoryTestMode = true,
+                          maskingLevel = MaskingLevel.MASK_ON_CONNECT,
+                          recordRecitation = false,
+                          enableBridge = false
+                        )
+                      )
+                    }
+                  },
+                  contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                ) {
+                  Text("Review Now", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+              }
             }
           }
         }
@@ -244,7 +320,50 @@ fun MemorizationSetupSheet(
       HorizontalDivider()
       Spacer(modifier = Modifier.height(12.dp))
 
-      // Memory Test Mode Toggle
+      // Memory Test Masking Difficulty
+      Text(
+        text = "Memory Test Masking",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold
+      )
+
+      Spacer(modifier = Modifier.height(4.dp))
+
+      Text(
+        text = "Masks Ayah text so you can test your memory (tap Peek anytime to reveal)",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        FilterChip(
+          selected = maskingLevel == MaskingLevel.OFF,
+          onClick = { maskingLevel = MaskingLevel.OFF },
+          label = { Text("Off") }
+        )
+        FilterChip(
+          selected = maskingLevel == MaskingLevel.MASK_ON_CONNECT,
+          onClick = { maskingLevel = MaskingLevel.MASK_ON_CONNECT },
+          label = { Text("Connect Steps") }
+        )
+        FilterChip(
+          selected = maskingLevel == MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
+          onClick = { maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT },
+          label = { Text("Progressive") }
+        )
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Record & Replay My Recitation Toggle
+      val canRecord = selectedDelayOption != 0
       Row(
         modifier = Modifier
           .fillMaxWidth()
@@ -254,21 +373,28 @@ fun MemorizationSetupSheet(
       ) {
         Column(modifier = Modifier.weight(1f)) {
           Text(
-            text = "Memory Test Mode",
+            text = "Record & Replay My Recitation",
             style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Medium,
+            color = if (canRecord) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
           )
           Text(
-            text = "Hide/Blur text during connection steps (tap to peek)",
+            text = if (canRecord) "Records your voice during pauses for instant self-check against the Qari"
+                   else "Requires a recitation pause duration (select 3s, 5s, or Match Ayah above)",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
         Switch(
-          checked = memoryTestMode,
-          onCheckedChange = { memoryTestMode = it }
+          checked = recordRecitation && canRecord,
+          enabled = canRecord,
+          onCheckedChange = { recordRecitation = it }
         )
       }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
 
       // Bridge Step Toggle
       Row(
@@ -325,7 +451,9 @@ fun MemorizationSetupSheet(
               singleRepeat = singleRepeat,
               connectRepeat = connectRepeat,
               delayMode = delayMode,
-              memoryTestMode = memoryTestMode,
+              memoryTestMode = maskingLevel != MaskingLevel.OFF,
+              maskingLevel = maskingLevel,
+              recordRecitation = recordRecitation && canRecord,
               enableBridge = enableBridge
             )
 

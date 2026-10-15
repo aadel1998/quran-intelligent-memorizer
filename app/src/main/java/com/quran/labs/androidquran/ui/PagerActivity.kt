@@ -6,7 +6,9 @@ import android.content.ComponentName
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import androidx.core.content.ContextCompat
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -1737,6 +1739,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     val hasSaved = memorizationPreferences.hasSavedSession()
     val savedConfig = if (hasSaved) memorizationPreferences.getSavedConfig() else null
     val savedStep = if (hasSaved) memorizationPreferences.getSavedStepIndex() else 0
+    val masteredRanges = memorizationPreferences.getMasteredRanges()
 
     val memorizationSetupSheetWrapper = MemorizationSetupSheetWrapper(
       context = this,
@@ -1744,6 +1747,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       initialEndAyah = ending,
       savedSessionConfig = savedConfig,
       savedSessionStep = savedStep,
+      masteredRanges = masteredRanges,
       onResume = {
         if (savedConfig != null) {
           memorizationEngine.resumeSavedSession()
@@ -1752,6 +1756,10 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         }
       },
       onStart = { config ->
+        if (config.recordRecitation &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+          ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 101)
+        }
         memorizationEngine.startMemorization(config)
         playFromAyah(config.startAyah.sura, config.startAyah.ayah)
       },

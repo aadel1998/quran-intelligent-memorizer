@@ -24,6 +24,8 @@ data class MemorizationState(
   val currentSubAyahIndex: Int = 0,
   val isTextMasked: Boolean = false,
   val pauseRemainingSeconds: Int = 0,
+  val isRecordingRecitation: Boolean = false,
+  val lastRecitationAudioPath: String? = null,
   val isSessionCompleted: Boolean = false
 ) : Parcelable {
   /**
@@ -46,7 +48,10 @@ data class MemorizationState(
           val last = activeAyahsInStep.lastOrNull()?.ayah ?: ""
           "Connecting Ayah $first–$last"
         }
-        StepType.PAUSE_FOR_RECITATION -> "Pause for Recitation"
+        StepType.PAUSE_FOR_RECITATION -> {
+          val remaining = if (pauseRemainingSeconds > 0) " (${pauseRemainingSeconds}s)" else ""
+          if (isRecordingRecitation) "Recording Recitation$remaining" else "Recite Ayah$remaining"
+        }
         StepType.BRIDGE -> "Bridge Window ${currentWindowIndex + 1} ➔ ${currentWindowIndex + 2}"
         null -> ""
       }

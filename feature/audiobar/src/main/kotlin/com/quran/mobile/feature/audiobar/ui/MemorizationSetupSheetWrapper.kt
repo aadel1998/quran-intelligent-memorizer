@@ -5,7 +5,10 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
 import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
+import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
 import com.quran.labs.androidquran.common.ui.core.QuranTheme
 
 /**
@@ -20,7 +23,9 @@ class MemorizationSetupSheetWrapper(
   private val onDismissed: () -> Unit,
   private val savedSessionConfig: MemorizationConfig? = null,
   private val savedSessionStep: Int = 0,
-  private val onResume: (() -> Unit)? = null
+  private val onResume: (() -> Unit)? = null,
+  private val masteredRanges: List<MasteredRange> = emptyList(),
+  private val onReview: ((MasteredRange) -> Unit)? = null
 ) : FrameLayout(context) {
 
   init {
@@ -36,8 +41,29 @@ class MemorizationSetupSheetWrapper(
             initialEndAyah = initialEndAyah,
             savedSessionConfig = savedSessionConfig,
             savedSessionStep = savedSessionStep,
+            masteredRanges = masteredRanges,
             onResumeSession = {
               onResume?.invoke()
+              onDismissed()
+            },
+            onReviewRange = { range ->
+              if (onReview != null) {
+                onReview.invoke(range)
+              } else {
+                val reviewConfig = MemorizationConfig(
+                  startAyah = range.startAyah,
+                  endAyah = range.endAyah,
+                  windowSize = 4,
+                  singleRepeat = 1,
+                  connectRepeat = 2,
+                  delayMode = MemorizationDelayMode.None,
+                  memoryTestMode = true,
+                  maskingLevel = MaskingLevel.MASK_ON_CONNECT,
+                  recordRecitation = false,
+                  enableBridge = false
+                )
+                onStart(reviewConfig)
+              }
               onDismissed()
             },
             onStartMemorization = { config ->

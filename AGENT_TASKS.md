@@ -195,13 +195,13 @@
 
 ---
 
-## [ ] Phase 7: Progressive Word/Ayah Vanishing & Voice Self-Check Mode
-- [ ] **1. Progressive Masking Levels (Gradual Memory Scaffolding):**
+## [x] Phase 7: Progressive Word/Ayah Vanishing & Voice Self-Check Mode
+- [x] **1. Progressive Masking Levels (Gradual Memory Scaffolding):**
   - Enhance `memoryTestMode` in `MemorizationConfig` to support progressive difficulty across repetitions:
     - `OFF`: Text always visible.
     - `MASK_ON_CONNECT`: Text visible during `SOLO` steps, masked during `CONNECT` and `BRIDGE` steps.
     - `PROGRESSIVE_SOLO_AND_CONNECT`: During `SOLO` repeats, keep text visible on iteration 1, semi-transparent/dimmed on iteration 2, and fully masked on iteration $R_s$ and all `CONNECT` steps.
-- [ ] **2. User Recitation Voice Recording & Self-Check Playback (Optional Toggle):**
+- [x] **2. User Recitation Voice Recording & Self-Check Playback (Optional Toggle):**
   - Add a `"Record & Replay My Recitation"` toggle in `MemorizationSetupSheet` (enabled when `delayMode != NONE`).
   - Request `Manifest.permission.RECORD_AUDIO` gracefully when the user enables this toggle.
   - During `PAUSE_FOR_RECITATION`, record the user's recitation to a temporary cache file (`context.cacheDir/memorization_recitation_temp.m4a` via `MediaRecorder`), and optionally replay it or allow one-tap replay in `MemorizationHud` so the user can compare their recitation against the Qari.
@@ -209,12 +209,26 @@
 
 ---
 
-## [ ] Phase 8: Hifz Progress Tracker & Completed Windows History
-- [ ] **1. Memorization Mastery Persistence:**
-  - Extend `MemorizationPreferences` (or a lightweight SQLite/SharedPreferences store) to log completed memorization ranges (`SuraAyah` start/end, completion timestamp, and repetition count).
-- [ ] **2. History & Quick Review in Setup Sheet:**
-  - Add a **"Recent & Mastered Ranges"** section in `MemorizationSetupSheet` showing the user's recently completed windows/pages with a one-tap **"Review Now"** action (which launches a fast review session with `singleRepeat = 1`, `connectRepeat = 2`).
-- [ ] **3. Final Verification & APK Build:**
-  - Add unit tests for all new state machine and preference capabilities.
-  - Run `./gradlew :common:audio:testReleaseUnitTest` and `./gradlew assembleMadaniDebug`.
-  - Update `AGENT_TASKS.md` checkboxes, commit, and `git push origin main`.
+## [x] Phase 8: Hifz Progress Tracker & Completed Windows History
+- [x] **1. Memorization Mastery Persistence:**
+  - Created `MasteredRange.kt` (`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MasteredRange.kt`):
+    - Models completed memorization ranges (`startAyah: SuraAyah`, `endAyah: SuraAyah`, `timestamp: Long`, `repetitions: Int`).
+    - Implemented compact string serialization/deserialization (`startSura:startAyah-endSura:endAyah@timestamp#repetitions`).
+  - Extended `MemorizationPreferences.kt`:
+    - Persists mastered ranges history with deduplication and most-recent sorting (`saveMasteredRange`, `getMasteredRanges`, `clearMasteredRanges`).
+    - Fully persists all configuration options (`delayMode`, `maskingLevel`, `recordRecitation`, `windowSize`, `singleRepeat`, `connectRepeat`).
+  - In `MemorizationEngine.kt`:
+    - When `completeSession()` is reached, automatically logs the mastered range into `MemorizationPreferences` with timestamp and total repetition count.
+- [x] **2. History & Quick Review in Setup Sheet:**
+  - In `MemorizationSetupSheet.kt`:
+    - Added **"Recently Mastered & Quick Review"** card section displaying recently mastered ranges.
+    - Added one-tap **"Review Now"** action launching a quick revision session (`singleRepeat = 1, connectRepeat = 2, delayMode = None, memoryTestMode = true, maskingLevel = MASK_ON_CONNECT`).
+  - In `MemorizationSetupSheetWrapper.kt` and `PagerActivity.kt`:
+    - Wired `masteredRanges` from `MemorizationPreferences` directly into the bottom sheet UI.
+- [x] **3. Final Verification & APK Build:**
+  - Added comprehensive unit tests in `MemorizationPreferencesTest.kt` for `MasteredRange` serialization, history logging, deduplication, and full configuration persistence.
+  - Added unit test in `MemorizationEngineTest.kt` verifying session completion logs mastered range to preferences.
+  - Ran `./gradlew.bat :common:audio:testReleaseUnitTest`: 48 tests completed, 0 failures, 100% success.
+  - Ran `./gradlew.bat compileMadaniDebugKotlin`: 220 actionable tasks, BUILD SUCCESSFUL.
+  - Ran `./gradlew.bat assembleMadaniDebug`: 490 actionable tasks, BUILD SUCCESSFUL. Output APK: `app/build/outputs/apk/madani/debug/app-madani-debug.apk` (37 MB).
+  - All Phase 1 through Phase 8 tasks completed, verified, and synchronized to GitHub `main`.
