@@ -18,7 +18,7 @@
 
 ---
 
-## [ ] Phase 1: Environment Setup, Dependency Installation & Baseline Run
+## [x] Phase 1: Environment Setup, Dependency Installation & Baseline Run
 - [x] Inspect project manifests and identify required runtimes:
   - Multi-module Android project with Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.21, Compose BOM 2026.09.00
   - DI: Metro (`dev.zacsweers.metro` 1.4.5)
@@ -29,8 +29,9 @@
   - GitHub CLI: `2.98.0`
   - Android SDK: `C:\Users\Aadel\AppData\Local\Android\Sdk` (build-tools, platforms android-37.0)
   - JDK: Microsoft OpenJDK 21 LTS at `C:\Users\Aadel\.jdks\ms-openjdk-21` (contains full JDK tools including `jlink.exe` and `javac.exe` required by AGP JDK Image Transform)
-- [ ] Run linter, type-checker, and build (`./gradlew assembleMadaniDebug`)
-- [ ] Confirm baseline project builds with zero errors
+- [x] Run baseline build (`./gradlew assembleMadaniDebug`)
+- [x] Confirm baseline project builds with zero errors:
+  - Output: `app-madani-debug.apk` built successfully (490 actionable tasks: 335 executed, 57 from cache, 98 up-to-date). BUILD SUCCESSFUL in 9m 30s.
 
 ---
 
@@ -88,16 +89,21 @@
 
 ---
 
-## [ ] Phase 3: Core Memorization State Machine (Progressive & Sliding Window Engine)
-- [ ] Design and implement `MemorizationEngine` service/module:
-  - Package: `com.quran.labs.androidquran.memorization` (or module `common:audio` / new package)
-  - Decoupled from Android UI; pure Kotlin state machine with Coroutines `StateFlow`.
-- [ ] Implement sliding window algorithm with configurable parameters:
+## [x] Phase 3: Core Memorization State Machine (Progressive & Sliding Window Engine)
+- [x] Design and implement `MemorizationEngine` service/module:
+  - Implemented in `common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/`:
+    - `MemorizationDelayMode.kt`: None, FixedSeconds, MatchAyahDuration
+    - `MemorizationConfig.kt`: startAyah, endAyah, windowSize (default 4), singleRepeat (default 3), connectRepeat (default 2), delayMode, memoryTestMode, enableBridge
+    - `MemorizationStep.kt`: stepIndex, windowIndex, totalWindows, StepType (SOLO, CONNECT, PAUSE_FOR_RECITATION, BRIDGE), ayahs, targetRepeatCount, delayMode, isMaskedByDefault, description
+    - `MemorizationState.kt`: isActive, isPaused, config, currentWindowIndex, totalWindows, currentStepIndex, totalSteps, currentStep, currentRepeatIteration, totalRepeatIterations, activeAyahsInStep, currentPlayingAyah, currentSubAyahIndex, isTextMasked, pauseRemainingSeconds, isSessionCompleted, hudSummary
+    - `MemorizationPlanBuilder.kt`: progressive sliding window plan generator supporting solo, connect, bridge, and recitation delay steps
+    - `MemorizationEngine.kt`: decoupled core state machine with StateFlow<MemorizationState>, controls (startMemorization, pause, resume, skipCurrentStep, previousStep, stopMemorization, onAyahPlaybackCompleted, toggleTextMask)
+- [x] Implement sliding window algorithm with configurable parameters:
   - `windowSize` ($W$): Number of Ayahs per window (default 4).
   - `singleRepeat` ($R_s$): Number of times each new Ayah is repeated individually (default 3).
   - `connectRepeat` ($R_c$): Number of times accumulated Ayahs $[A_1..A_k]$ are played continuously (default 2).
   - `delayMode`: `NONE`, `FIXED_SECONDS(seconds)`, `MATCH_AYAH_DURATION`.
-- [ ] Implement execution sequence inside window $[A_1, A_2, \dots, A_W]$:
+- [x] Implement execution sequence inside window $[A_1, A_2, \dots, A_W]$:
   1. $A_1$ Solo ($R_s$ times)
   2. $A_2$ Solo ($R_s$ times)
   3. Connect $[A_1..A_2]$ ($R_c$ times)
@@ -105,21 +111,14 @@
   5. Connect $[A_1..A_3]$ ($R_c$ times)
   6. ... up to $[A_1..A_W]$ Connect ($R_c$ times)
   7. Optional Bridge step connecting $[A_{W-1} \dots A_W]$ with next window before sliding.
-- [ ] State exposed:
-  - `isActive: Boolean`
-  - `currentWindowIndex: Int`, `totalWindows: Int`
-  - `stepType: StepType` (`SOLO`, `CONNECT`, `PAUSE_FOR_RECITATION`, `BRIDGE`)
-  - `currentRepeatIteration: Int`, `totalRepeatIterations: Int`
-  - `activeAyahsInStep: List<SuraAyah>`
-  - `currentPlayingAyah: SuraAyah`
-  - `isTextMasked: Boolean` (true during Connect/Recitation when memory test mode enabled)
-- [ ] Controls exposed:
-  - `startMemorization(config: MemorizationConfig)`
-  - `pause()`, `resume()`
-  - `skipCurrentStep()`
-  - `previousStep()`
-  - `stopMemorization()`
-- [ ] Verify unit tests and type checks.
+- [x] State exposed:
+  - `isActive`, `currentWindowIndex`, `stepType`, `currentRepeatIteration`, `totalRepeatIterations`, `activeAyahsInStep`, `currentPlayingAyah`, `isTextMasked`, `hudSummary`.
+- [x] Controls exposed:
+  - `startMemorization(config)`, `pause()`, `resume()`, `skipCurrentStep()`, `previousStep()`, `stopMemorization()`, `toggleTextMask()`, `onAyahPlaybackCompleted(ayah)`.
+- [x] Verify unit tests and type checks:
+  - `MemorizationPlanBuilderTest.kt`: range generation, single window progressive connects, recitation delay pauses, bridge steps.
+  - `MemorizationEngineTest.kt`: initial state, start, repeat iterations, connect sub-ayah sequences, step navigation (skip/prev), pause/resume, memory test mask toggling, session completion, stop.
+  - Test run: `./gradlew.bat :common:audio:testReleaseUnitTest` -> 37 tests, 0 failures, 0 skipped. BUILD SUCCESSFUL in 1m 32s!
 
 ---
 
