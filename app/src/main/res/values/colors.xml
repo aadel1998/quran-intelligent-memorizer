@@ -9,6 +9,12 @@
   <color name="accent_color">#ff00838f</color>
   <color name="accent_color_dark">@color/color_control_normal</color>
   <color name="page_background">#FFF4CB</color>
+  <color name="memorization_mask_color">#FFF4CB</color>
+  <color name="memorization_mask_color_night">#FF181818</color>
+  <color name="memorization_mask_border">#55795548</color>
+  <color name="memorization_mask_border_night">#55FFFFFF</color>
+  <color name="memorization_window_color">#264DB6AC</color>
+  <color name="memorization_window_color_night">#334DB6AC</color>
   <color name="secondary_dark_background">#ffffffff</color>
   <color name="header_background">#dee2e6</color>
   <color name="header_text_color">@color/sura_number_color</color>

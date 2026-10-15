@@ -23,6 +23,7 @@ import com.quran.data.model.selection.startSuraAyah
 import com.quran.data.model.selection.withSelectionIndicator
 import com.quran.data.model.selection.withYScroll
 import com.quran.data.source.PageProvider
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
 import com.quran.labs.androidquran.common.audio.model.playback.currentPlaybackAyah
 import com.quran.labs.androidquran.common.audio.model.playback.currentPlaybackWord
 import com.quran.labs.androidquran.common.audio.repository.AudioStatusRepository
@@ -79,6 +80,7 @@ class QuranLineByLinePresenter @Inject constructor(
   private val crashReporter: CrashReporter,
   private val quranInfo: QuranInfo,
   private val imlaeiUthmaniMapper: ImlaeiUthmaniMapper,
+  private val memorizationEngine: MemorizationEngine,
   pages: IntArray
 ) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -308,7 +310,8 @@ class QuranLineByLinePresenter @Inject constructor(
       highlightsForPage(),
       readingEventPresenter.ayahSelectionFlow,
       audioStatusRepository.audioPlaybackFlow,
-    ) { bookmarks, highlights, selectedAyah, audioPlaybackStatus ->
+      memorizationEngine.state
+    ) { bookmarks, highlights, selectedAyah, audioPlaybackStatus, memState ->
       val pageDetails = pageDetailsFetcher.await()
       val ayahHighlights = pageDetails.ayahBounds
       val currentBookmarkHighlights = bookmarks.map {
@@ -377,7 +380,28 @@ class QuranLineByLinePresenter @Inject constructor(
       val audioAyahHighlights = HighlightAyah(HighlightType.Audio, audioHighlight, wordHighlights.isEmpty())
       val audioWordHighlights = HighlightAyah(HighlightType.AudioWord, wordHighlights, true)
 
-      (colorHighlights + bookmarkHighlights + selectedHighlights + audioAyahHighlights + audioWordHighlights)
+      val memMaskHighlights = if (memState.isActive && memState.isTextMasked && memState.activeAyahsInStep.isNotEmpty()) {
+        val maskedAyahs = ayahHighlights.filter { ayah ->
+          memState.activeAyahsInStep.any { it.sura == ayah.sura && it.ayah == ayah.ayah }
+        }
+        HighlightAyah(HighlightType.MemorizationMask, maskedAyahs)
+      } else {
+        null
+      }
+
+      val memWindowHighlights = if (memState.isActive && memState.currentStep?.ayahs?.isNotEmpty() == true) {
+        val stepAyahs = memState.currentStep.ayahs
+        val windowAyahs = ayahHighlights.filter { ayah ->
+          stepAyahs.any { it.sura == ayah.sura && it.ayah == ayah.ayah }
+        }
+        HighlightAyah(HighlightType.MemorizationWindow, windowAyahs)
+      } else {
+        null
+      }
+
+      val extraHighlights = listOfNotNull(memWindowHighlights, memMaskHighlights)
+
+      (colorHighlights + bookmarkHighlights + selectedHighlights + audioAyahHighlights + audioWordHighlights + extraHighlights)
         .filter { it.ayahHighlights.isNotEmpty() }
         .toImmutableList()
     }

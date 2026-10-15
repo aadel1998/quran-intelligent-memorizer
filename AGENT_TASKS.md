@@ -174,3 +174,47 @@
   - Generated debug APK at `app/build/outputs/apk/madani/debug/app-madani-debug.apk`.
 - [x] Remote sync:
   - Committing and pushing all final changes to `origin/main` (`https://github.com/aadel1998/quran-intelligent-memorizer.git`).
+
+---
+
+## [x] Phase 6: True Mushaf Visual Masking, Gapless Seek Audit & Smart Setup UX
+- [x] **1. True Opaque Ayah Masking & Window Framing on the Mushaf Page:**
+  - Inspect how `HighlightTypes` / `HighlightType` work in `HighlightingImageView.kt` (Image Mode) and `QuranLineLayout.kt` / `Highlight.kt` (Compose Line-by-Line Mode).
+  - Calling `setSelection(sura, ayah, true)` only draws a translucent selection tint and does NOT hide the Quranic text during Memory Test mode.
+  - Implement a dedicated `MEMORIZATION_MASK` highlight/overlay mode that draws an opaque (100% alpha, matching theme page background with a subtle border/pattern) mask over the glyph bounds of all Ayahs in `activeAyahsInStep` whenever `memorizationEngine.state.isTextMasked == true`.
+  - Implement a subtle `MEMORIZATION_WINDOW` highlight/border around all Ayahs in the current active window ($[A_1 \dots A_W]$) so the user visually sees the boundaries of the sliding window on the Mushaf page.
+  - Ensure tapping the Peek button (`toggleTextMask()`) immediately invalidates/recomposes the page overlay to reveal or hide the masked Ayah text.
+- [x] **2. AudioService Gapless & Gapped Seek/Pause Precision Audit:**
+  - Audit `AudioService.kt` integration with `MemorizationEngine`:
+    - When `MemorizationEngine` transitions between steps (e.g., looping the same Ayah in `SOLO`, jumping back from $A_k$ to $A_1$ in `CONNECT`, or clicking `skipCurrentStep()` / `previousStep()`), verify that `AudioService` explicitly seeks `ExoPlayer` to `gaplessSuraData.ayahTimings[targetAyah]` for gapless Qaris, or loads the exact `SuraAyah` file for gapped Qaris.
+    - During `PAUSE_FOR_RECITATION` (or inter-repetition delays `FIXED_SECONDS` / `MATCH_AYAH_DURATION`), ensure `ExoPlayer` pauses cleanly, calculates the exact target pause duration (using `ayahTimings[ayah + 1] - ayahTimings[ayah]` for gapless or `player.duration` for gapped when `MATCH_AYAH_DURATION` is active), ticks `pauseRemainingSeconds` every 1 second on a coroutine/handler so `MemorizationHud` shows a live countdown, and automatically resumes playback of the next step when the countdown reaches 0.
+- [x] **3. Page-Aware Setup Defaults & Session Resume UI:**
+  - In `PagerActivity.kt` / `MemorizationSetupSheetWrapper.kt`, pass the currently visible Mushaf page's first and last `SuraAyah` (via `quranInfo`) into `MemorizationSetupSheet` as the default `startAyah` and `endAyah`.
+  - Wire `MemorizationPreferences` into `MemorizationSetupSheet` and `StoppedAudioBar`: if `hasSavedSession()` is true, display a prominent **"Resume Last Session (Surah X:Y • Step M/N)"** banner/button alongside "Start New Session".
+  - Run `./gradlew :common:audio:testReleaseUnitTest` and `./gradlew compileMadaniDebugKotlin` to verify zero errors.
+
+---
+
+## [ ] Phase 7: Progressive Word/Ayah Vanishing & Voice Self-Check Mode
+- [ ] **1. Progressive Masking Levels (Gradual Memory Scaffolding):**
+  - Enhance `memoryTestMode` in `MemorizationConfig` to support progressive difficulty across repetitions:
+    - `OFF`: Text always visible.
+    - `MASK_ON_CONNECT`: Text visible during `SOLO` steps, masked during `CONNECT` and `BRIDGE` steps.
+    - `PROGRESSIVE_SOLO_AND_CONNECT`: During `SOLO` repeats, keep text visible on iteration 1, semi-transparent/dimmed on iteration 2, and fully masked on iteration $R_s$ and all `CONNECT` steps.
+- [ ] **2. User Recitation Voice Recording & Self-Check Playback (Optional Toggle):**
+  - Add a `"Record & Replay My Recitation"` toggle in `MemorizationSetupSheet` (enabled when `delayMode != NONE`).
+  - Request `Manifest.permission.RECORD_AUDIO` gracefully when the user enables this toggle.
+  - During `PAUSE_FOR_RECITATION`, record the user's recitation to a temporary cache file (`context.cacheDir/memorization_recitation_temp.m4a` via `MediaRecorder`), and optionally replay it or allow one-tap replay in `MemorizationHud` so the user can compare their recitation against the Qari.
+  - Ensure temporary audio files and recorder resources are cleaned up on stop/pause.
+
+---
+
+## [ ] Phase 8: Hifz Progress Tracker & Completed Windows History
+- [ ] **1. Memorization Mastery Persistence:**
+  - Extend `MemorizationPreferences` (or a lightweight SQLite/SharedPreferences store) to log completed memorization ranges (`SuraAyah` start/end, completion timestamp, and repetition count).
+- [ ] **2. History & Quick Review in Setup Sheet:**
+  - Add a **"Recent & Mastered Ranges"** section in `MemorizationSetupSheet` showing the user's recently completed windows/pages with a one-tap **"Review Now"** action (which launches a fast review session with `singleRepeat = 1`, `connectRepeat = 2`).
+- [ ] **3. Final Verification & APK Build:**
+  - Add unit tests for all new state machine and preference capabilities.
+  - Run `./gradlew :common:audio:testReleaseUnitTest` and `./gradlew assembleMadaniDebug`.
+  - Update `AGENT_TASKS.md` checkboxes, commit, and `git push origin main`.

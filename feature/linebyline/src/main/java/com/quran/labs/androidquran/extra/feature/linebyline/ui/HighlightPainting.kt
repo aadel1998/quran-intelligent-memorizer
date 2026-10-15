@@ -6,7 +6,7 @@ import com.quran.labs.androidquran.common.ui.core.HighlightColors
 import com.quran.labs.androidquran.extra.feature.linebyline.model.HighlightType
 
 val HighlightType.isUnderText: Boolean
-  get() = this is HighlightType.Highlight
+  get() = this is HighlightType.Highlight || this is HighlightType.MemorizationWindow
 
 private const val NightHighlightAlpha = 0.40f
 
@@ -16,6 +16,8 @@ fun HighlightType.paintColor(isNightMode: Boolean): Color {
     HighlightType.Audio -> Color(0x46, 0xa6, 0x46, 0x40)
     HighlightType.AudioWord -> Color(0xff, 0xb3, 0x3d, 0x60)
     HighlightType.Bookmark -> Color(0xa4, 0xa4, 0xa4, 0x40)
+    HighlightType.MemorizationMask -> if (isNightMode) Color(0xFF1E1E1E) else Color(0xFFFFF4CB)
+    HighlightType.MemorizationWindow -> if (isNightMode) Color(0x334DB6AC) else Color(0x2600897B)
     is HighlightType.Highlight -> {
       val paletteColor = HighlightColors[color].color
       if (isNightMode) paletteColor.copy(alpha = NightHighlightAlpha) else paletteColor

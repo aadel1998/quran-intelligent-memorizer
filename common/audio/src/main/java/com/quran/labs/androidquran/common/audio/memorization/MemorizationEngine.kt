@@ -151,6 +151,15 @@ class MemorizationEngine @Inject constructor(
   }
 
   /**
+   * Updates the remaining countdown seconds during a recitation pause step.
+   */
+  fun updatePauseRemaining(seconds: Int) {
+    val current = _state.value
+    if (!current.isActive) return
+    _state.value = current.copy(pauseRemainingSeconds = seconds)
+  }
+
+  /**
    * Called when audio playback of an Ayah finishes.
    * Advances sub-ayah index within a CONNECT step, or advances repeat iteration,
    * or transitions to the next step.

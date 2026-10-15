@@ -20,6 +20,8 @@ import com.quran.data.model.highlight.HighlightType.Mode.HIDE
 import com.quran.data.model.highlight.HighlightType.Mode.HIGHLIGHT
 import com.quran.data.model.highlight.HighlightType.Mode.UNDERLAY
 import com.quran.data.model.highlight.HighlightType.Mode.UNDERLINE
+import com.quran.labs.androidquran.R
+import com.quran.labs.androidquran.ui.helpers.HighlightTypes
 import com.quran.labs.androidquran.ui.helpers.AyahHighlight
 import com.quran.labs.androidquran.ui.helpers.AyahHighlight.TransitionAyahHighlight
 import com.quran.page.common.data.AyahBounds
@@ -65,6 +67,16 @@ class HighlightsDrawer(
             else -> this.color = color
           }
         }
+      }
+    }
+
+    fun getMaskBorderPaint(context: Context, isNightMode: Boolean): Paint {
+      val colorRes = if (isNightMode) R.color.memorization_mask_border_night else R.color.memorization_mask_border
+      val color = ContextCompat.getColor(context, colorRes)
+      return Paint().apply {
+        this.color = color
+        this.style = Paint.Style.STROKE
+        this.strokeWidth = TypedValue.applyDimension(COMPLEX_UNIT_DIP, 1.5f, context.resources.displayMetrics)
       }
     }
   }
@@ -145,6 +157,10 @@ class HighlightsDrawer(
               UNDERLAY, HIGHLIGHT, BACKGROUND, UNDERLINE -> {
                 // Draw a rectangle with the specified paint
                 canvas.drawRect(scaledRect, paint)
+                if (highlightType == HighlightTypes.MEMORIZATION_MASK) {
+                  val borderPaint = PaintCache.getMaskBorderPaint(image.context, isNightMode())
+                  canvas.drawRect(scaledRect, borderPaint)
+                }
               }
             }
           }

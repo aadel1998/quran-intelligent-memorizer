@@ -19,6 +19,22 @@ object HighlightTypes {
   val NOTE =      HighlightType(3,  R.color.note_highlight,      HIGHLIGHT)
   @JvmField
   val BOOKMARK =  HighlightType(4,  R.color.bookmark_highlight,  HIGHLIGHT)
+  @JvmField
+  val MEMORIZATION_MASK = HighlightType(
+    100L,
+    R.color.memorization_mask_color,
+    HIGHLIGHT,
+    isSingle = false,
+    nightColorResId = R.color.memorization_mask_color_night
+  )
+  @JvmField
+  val MEMORIZATION_WINDOW = HighlightType(
+    101L,
+    R.color.memorization_window_color,
+    HIGHLIGHT,
+    isSingle = false,
+    nightColorResId = R.color.memorization_window_color_night
+  )
 
   private const val FIRST_HIGHLIGHT_ID = 5L
 

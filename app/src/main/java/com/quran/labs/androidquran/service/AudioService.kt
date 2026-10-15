@@ -81,10 +81,14 @@ import io.reactivex.rxjava3.core.Maybe
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import java.io.IOException
@@ -158,6 +162,7 @@ class AudioService : Service(), Player.Listener {
   private var currentWord: Int? = null
   private val compositeDisposable = CompositeDisposable()
   private lateinit var scope: CoroutineScope
+  private var pauseCountdownJob: Job? = null
 
   @Inject
   lateinit var quranInfo: QuranInfo
@@ -644,6 +649,9 @@ class AudioService : Service(), Player.Listener {
       relaxResources(releaseExoPlayer = true, stopForeground = true)
       return
     }
+    if (memorizationEngine.state.value.isActive) {
+      memorizationEngine.resume()
+    }
     // actually play the file
     if (State.Stopped == state) {
       // If we're stopped, just go ahead to the next file and start playing
@@ -661,6 +669,9 @@ class AudioService : Service(), Player.Listener {
   }
 
   private fun processPauseRequest() {
+    if (memorizationEngine.state.value.isActive) {
+      memorizationEngine.pause()
+    }
     if (State.Playing == state) {
       // Pause exo player and cancel the 'foreground service' state.
       state = State.Paused
@@ -682,6 +693,15 @@ class AudioService : Service(), Player.Listener {
   }
 
   private fun processRewindRequest() {
+    if (memorizationEngine.state.value.isActive) {
+      memorizationEngine.previousStep()
+      val prevAyah = memorizationEngine.state.value.currentPlayingAyah
+      val localAudioQueue = audioQueue
+      if (prevAyah != null && localAudioQueue != null) {
+        handleNextMemorizationAyah(prevAyah, localAudioQueue)
+      }
+      return
+    }
     if (State.Playing == state || State.Paused == state) {
       setState(PlaybackStateCompat.STATE_REWINDING)
       val localPlayer = player ?: return
@@ -726,6 +746,17 @@ class AudioService : Service(), Player.Listener {
     if (audioRequest == null) {
       return
     }
+    if (memorizationEngine.state.value.isActive) {
+      memorizationEngine.skipCurrentStep()
+      val nextAyah = memorizationEngine.state.value.currentPlayingAyah
+      val localAudioQueue = audioQueue
+      if (nextAyah != null && localAudioQueue != null) {
+        handleNextMemorizationAyah(nextAyah, localAudioQueue)
+      } else {
+        processStopRequest(true)
+      }
+      return
+    }
     if (State.Playing == state || State.Paused == state) {
       setState(PlaybackStateCompat.STATE_SKIPPING_TO_NEXT)
       if (playerOverride) {
@@ -752,6 +783,8 @@ class AudioService : Service(), Player.Listener {
   }
 
   private fun processStopRequest(force: Boolean = false) {
+    pauseCountdownJob?.cancel()
+    pauseCountdownJob = null
     if (memorizationEngine.state.value.isActive) {
       memorizationEngine.stopMemorization()
     }
@@ -1177,31 +1210,76 @@ class AudioService : Service(), Player.Listener {
   }
 
   private fun handleNextMemorizationAyah(nextAyah: SuraAyah, localAudioQueue: AudioQueue) {
+    pauseCountdownJob?.cancel()
+    pauseCountdownJob = null
+
     val currentStep = memorizationEngine.state.value.currentStep
     if (currentStep?.stepType == StepType.PAUSE_FOR_RECITATION) {
-      val delaySeconds = when (val delay = memorizationEngine.state.value.config?.delayMode) {
-        is MemorizationDelayMode.FixedSeconds -> delay.seconds.toLong()
+      player?.pause()
+      serviceHandler.removeMessages(MSG_UPDATE_AUDIO_POS)
+      state = State.Paused
+      setState(PlaybackStateCompat.STATE_PAUSED)
+      updateAudioPlaybackStatus()
+      updateNotification()
+
+      val delaySeconds: Int = when (val delay = memorizationEngine.state.value.config?.delayMode) {
+        is MemorizationDelayMode.FixedSeconds -> delay.seconds
         is MemorizationDelayMode.MatchAyahDuration -> {
-          val durationMs = player?.duration ?: 3000L
-          (durationMs / 1000L).coerceAtLeast(1L)
-        }
-        else -> 3L
-      }
-      serviceHandler.postDelayed({
-        if (memorizationEngine.state.value.isActive) {
-          val next = memorizationEngine.onAyahPlaybackCompleted(nextAyah)
-          if (next != null) {
-            handleNextMemorizationAyah(next, localAudioQueue)
+          val localAudioRequest = audioRequest
+          if (localAudioRequest?.isGapless() == true && gaplessSura == nextAyah.sura) {
+            val start = gaplessSuraData.ayahTimings.get(nextAyah.ayah, -1L)
+            val end = gaplessSuraData.ayahTimings.get(nextAyah.ayah + 1, -1L)
+            if (start > -1L && end > start) {
+              val durationMs = end - start
+              (durationMs / 1000L).toInt().coerceAtLeast(1)
+            } else {
+              3
+            }
           } else {
-            processStopRequest(true)
+            val durationMs = player?.duration ?: 3000L
+            (durationMs / 1000L).toInt().coerceAtLeast(1)
           }
         }
-      }, delaySeconds * 1000L)
+        else -> 3
+      }
+
+      pauseCountdownJob = scope.launch {
+        for (remaining in delaySeconds downTo 1) {
+          memorizationEngine.updatePauseRemaining(remaining)
+          delay(1000L)
+        }
+        memorizationEngine.updatePauseRemaining(0)
+        withContext(Dispatchers.Main) {
+          if (memorizationEngine.state.value.isActive && !memorizationEngine.state.value.isPaused) {
+            val next = memorizationEngine.onAyahPlaybackCompleted(nextAyah)
+            if (next != null) {
+              handleNextMemorizationAyah(next, localAudioQueue)
+            } else {
+              processStopRequest(true)
+            }
+          }
+        }
+      }
       return
     }
 
+    memorizationEngine.updatePauseRemaining(0)
+    val localAudioRequest = audioRequest ?: return
     val beforeSura = localAudioQueue.getCurrentSura()
     localAudioQueue.playAt(nextAyah.sura, nextAyah.ayah, true)
+
+    if (localAudioRequest.isGapless() && gaplessSura == nextAyah.sura && beforeSura == nextAyah.sura) {
+      val timing = gaplessSuraData.ayahTimings.get(nextAyah.ayah, -1L)
+      if (timing > -1L) {
+        player?.seekTo(timing)
+        state = State.Playing
+        configAndStartExoPlayer()
+        notifyAyahChanged()
+        updateNotification()
+        return
+      }
+    }
+
     val flag = beforeSura != localAudioQueue.getCurrentSura()
     playAudio(flag)
   }

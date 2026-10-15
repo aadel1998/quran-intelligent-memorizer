@@ -7,6 +7,8 @@ sealed interface HighlightType {
   data object Audio : HighlightType
   data object AudioWord : HighlightType
   data object Bookmark : HighlightType
+  data object MemorizationMask : HighlightType
+  data object MemorizationWindow : HighlightType
 
   data class Highlight(val color: HighlightColor) : HighlightType
 }

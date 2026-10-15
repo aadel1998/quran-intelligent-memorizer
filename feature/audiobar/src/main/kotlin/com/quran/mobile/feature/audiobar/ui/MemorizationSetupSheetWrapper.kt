@@ -17,7 +17,10 @@ class MemorizationSetupSheetWrapper(
   private val initialStartAyah: SuraAyah,
   private val initialEndAyah: SuraAyah,
   private val onStart: (MemorizationConfig) -> Unit,
-  private val onDismissed: () -> Unit
+  private val onDismissed: () -> Unit,
+  private val savedSessionConfig: MemorizationConfig? = null,
+  private val savedSessionStep: Int = 0,
+  private val onResume: (() -> Unit)? = null
 ) : FrameLayout(context) {
 
   init {
@@ -31,6 +34,12 @@ class MemorizationSetupSheetWrapper(
           MemorizationSetupSheet(
             initialStartAyah = initialStartAyah,
             initialEndAyah = initialEndAyah,
+            savedSessionConfig = savedSessionConfig,
+            savedSessionStep = savedSessionStep,
+            onResumeSession = {
+              onResume?.invoke()
+              onDismissed()
+            },
             onStartMemorization = { config ->
               onStart(config)
               onDismissed()

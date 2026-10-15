@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
@@ -48,6 +51,9 @@ fun MemorizationSetupSheet(
   initialEndAyah: SuraAyah,
   onStartMemorization: (MemorizationConfig) -> Unit,
   onDismissRequest: () -> Unit,
+  savedSessionConfig: MemorizationConfig? = null,
+  savedSessionStep: Int = 0,
+  onResumeSession: (() -> Unit)? = null,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
   var startAyahNum by remember { mutableIntStateOf(initialStartAyah.ayah) }
@@ -81,6 +87,47 @@ fun MemorizationSetupSheet(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
+
+      if (savedSessionConfig != null && onResumeSession != null) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(
+          modifier = Modifier.fillMaxWidth(),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+          )
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "Resume Last Session",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+              )
+              Text(
+                text = "Surah ${savedSessionConfig.startAyah.sura}:${savedSessionConfig.startAyah.ayah}–${savedSessionConfig.endAyah.ayah} • Step ${savedSessionStep + 1}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+              )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+              onClick = onResumeSession,
+              colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+              )
+            ) {
+              Text("Resume")
+            }
+          }
+        }
+      }
 
       Spacer(modifier = Modifier.height(16.dp))
       HorizontalDivider()

@@ -23,6 +23,8 @@ import com.quran.data.model.selection.AyahSelection
 import com.quran.data.model.selection.SelectionIndicator
 import com.quran.data.model.selection.startSuraAyah
 import com.quran.labs.androidquran.common.QuranAyahInfo
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationState
 import com.quran.labs.androidquran.common.audio.model.playback.currentPlaybackAyah
 import com.quran.labs.androidquran.common.audio.repository.AudioStatusRepository
 import com.quran.labs.androidquran.data.QuranDisplayData
@@ -67,6 +69,7 @@ class AyahTrackerPresenter @Inject constructor(
   private val highlightsDao: HighlightsDao,
   private val readingBookmarksDao: ReadingBookmarksDao,
   private val audioStatusRepository: AudioStatusRepository,
+  private val memorizationEngine: MemorizationEngine,
   recitationPresenter: RecitationPresenter,
   private val recitationEventPresenter: RecitationEventPresenter,
   private val recitationPopupPresenter: RecitationPopupPresenter,
@@ -105,6 +108,10 @@ class AyahTrackerPresenter @Inject constructor(
 
     readingBookmarksDao.readingBookmarksFlow()
       .onEach { readingBookmarks -> onReadingBookmarksChanged(readingBookmarks) }
+      .launchIn(scope)
+
+    memorizationEngine.state
+      .onEach { onMemorizationStateChanged(it) }
       .launchIn(scope)
   }
 
@@ -237,6 +244,40 @@ class AyahTrackerPresenter @Inject constructor(
         .forEach {
           tracker.onHighlightAyat(tracker.page, setOf("${it.sura}:${it.ayah}"), HighlightTypes[it.slot])
         }
+    }
+  }
+
+  private fun onMemorizationStateChanged(memState: MemorizationState) {
+    unHighlightAyahs(HighlightTypes.MEMORIZATION_MASK)
+    unHighlightAyahs(HighlightTypes.MEMORIZATION_WINDOW)
+
+    if (!memState.isActive) {
+      return
+    }
+
+    // 1. Opaque text masking for active Ayahs during memory test mode
+    if (memState.isTextMasked && memState.activeAyahsInStep.isNotEmpty()) {
+      val maskedKeys = memState.activeAyahsInStep.map { "${it.sura}:${it.ayah}" }.toSet()
+      items.forEach { tracker ->
+        val pageAyat = quranDisplayData.getAyahKeysOnPage(tracker.page)
+        val elements = pageAyat.intersect(maskedKeys)
+        if (elements.isNotEmpty()) {
+          tracker.onHighlightAyat(tracker.page, elements, HighlightTypes.MEMORIZATION_MASK)
+        }
+      }
+    }
+
+    // 2. Sliding window boundary framing
+    val currentStep = memState.currentStep
+    if (currentStep != null && currentStep.ayahs.isNotEmpty()) {
+      val windowKeys = currentStep.ayahs.map { "${it.sura}:${it.ayah}" }.toSet()
+      items.forEach { tracker ->
+        val pageAyat = quranDisplayData.getAyahKeysOnPage(tracker.page)
+        val elements = pageAyat.intersect(windowKeys)
+        if (elements.isNotEmpty()) {
+          tracker.onHighlightAyat(tracker.page, elements, HighlightTypes.MEMORIZATION_WINDOW)
+        }
+      }
     }
   }
 

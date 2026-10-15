@@ -132,6 +132,7 @@ import com.quran.mobile.feature.audiobar.presenter.AudioBarEventRepository
 import com.quran.mobile.feature.ayahbookmark.AyahBookmarkWrapper
 import com.quran.mobile.feature.ayahbookmark.di.AyahBookmarkWrapperInjector
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationPreferences
 import com.quran.mobile.feature.audiobar.ui.MemorizationSetupSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.ReadingBookmarkSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.di.ReadingBookmarkSheetWrapperInjector
@@ -244,6 +245,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   @Inject lateinit var quranEventLogger: QuranEventLogger
   @Inject lateinit var audioStatusRepository: AudioStatusRepository
   @Inject lateinit var memorizationEngine: MemorizationEngine
+  @Inject lateinit var memorizationPreferences: MemorizationPreferences
   @Inject lateinit var readingEventPresenter: ReadingEventPresenter
   @Inject lateinit var pageProviderFactoryProvider: PageViewFactoryProvider
   @Inject lateinit var additionalAyahPanels: Set<@JvmSuppressWildcards AyahActionFragmentProvider>
@@ -1728,17 +1730,27 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     val start = selectionStart
     val end = selectionEnd
 
-    val startSura = quranDisplayData.safelyGetSuraOnPage(page)
-    val startAyah = quranInfo.getFirstAyahOnPage(page)
+    val pageRange = quranInfo.getVerseRangeForPage(page)
+    val starting = start ?: SuraAyah(pageRange.startSura, pageRange.startAyah)
+    val ending = end ?: SuraAyah(pageRange.endingSura, pageRange.endingAyah)
 
-    val starting = start ?: SuraAyah(startSura, startAyah)
-    val maxAyahs = quranInfo.getNumberOfAyahs(starting.sura)
-    val ending = end ?: SuraAyah(starting.sura, (starting.ayah + 7).coerceAtMost(maxAyahs))
+    val hasSaved = memorizationPreferences.hasSavedSession()
+    val savedConfig = if (hasSaved) memorizationPreferences.getSavedConfig() else null
+    val savedStep = if (hasSaved) memorizationPreferences.getSavedStepIndex() else 0
 
     val memorizationSetupSheetWrapper = MemorizationSetupSheetWrapper(
       context = this,
       initialStartAyah = starting,
       initialEndAyah = ending,
+      savedSessionConfig = savedConfig,
+      savedSessionStep = savedStep,
+      onResume = {
+        if (savedConfig != null) {
+          memorizationEngine.resumeSavedSession()
+          val currentAyah = memorizationEngine.state.value.currentPlayingAyah ?: savedConfig.startAyah
+          playFromAyah(currentAyah.sura, currentAyah.ayah)
+        }
+      },
       onStart = { config ->
         memorizationEngine.startMemorization(config)
         playFromAyah(config.startAyah.sura, config.startAyah.ayah)
