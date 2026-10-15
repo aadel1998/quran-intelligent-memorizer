@@ -131,6 +131,8 @@ import com.quran.mobile.feature.audiobar.AudioBarWrapper
 import com.quran.mobile.feature.audiobar.presenter.AudioBarEventRepository
 import com.quran.mobile.feature.ayahbookmark.AyahBookmarkWrapper
 import com.quran.mobile.feature.ayahbookmark.di.AyahBookmarkWrapperInjector
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
+import com.quran.mobile.feature.audiobar.ui.MemorizationSetupSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.ReadingBookmarkSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.di.ReadingBookmarkSheetWrapperInjector
 import com.quran.mobile.feature.qarilist.QariListWrapper
@@ -155,7 +157,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
@@ -239,6 +243,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   @Inject lateinit var audioPresenter: AudioPresenter
   @Inject lateinit var quranEventLogger: QuranEventLogger
   @Inject lateinit var audioStatusRepository: AudioStatusRepository
+  @Inject lateinit var memorizationEngine: MemorizationEngine
   @Inject lateinit var readingEventPresenter: ReadingEventPresenter
   @Inject lateinit var pageProviderFactoryProvider: PageViewFactoryProvider
   @Inject lateinit var additionalAyahPanels: Set<@JvmSuppressWildcards AyahActionFragmentProvider>
@@ -403,6 +408,16 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         onAyahSelectionChanged(ayahSelection)
       }
     )
+
+    memorizationEngine.state
+      .onEach { memState ->
+        val ayah = memState.currentPlayingAyah
+        if (memState.isActive && ayah != null) {
+          ensurePage(ayah.sura, ayah.ayah)
+          readingEventPresenterBridge.setSelection(ayah.sura, ayah.ayah, true)
+        }
+      }
+      .launchIn(scope)
 
     // remove the window background to avoid overdraw. note that, per Romain's blog, this is
     // acceptable (as long as we don't set the background color to null in the theme, since
@@ -1520,6 +1535,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   }
 
   override fun onPlayPressed() {
+    if (memorizationEngine.state.value.isActive) {
+      memorizationEngine.stopMemorization()
+    }
     val position = viewPager.currentItem
     val page = quranInfo.getPageFromPosition(position, isDualPageVisible)
 
@@ -1705,6 +1723,42 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     toggleActionBarVisibility(false)
   }
 
+  override fun onMemorizePressed() {
+    val page = currentPage
+    val start = selectionStart
+    val end = selectionEnd
+
+    val startSura = quranDisplayData.safelyGetSuraOnPage(page)
+    val startAyah = quranInfo.getFirstAyahOnPage(page)
+
+    val starting = start ?: SuraAyah(startSura, startAyah)
+    val maxAyahs = quranInfo.getNumberOfAyahs(starting.sura)
+    val ending = end ?: SuraAyah(starting.sura, (starting.ayah + 7).coerceAtMost(maxAyahs))
+
+    val memorizationSetupSheetWrapper = MemorizationSetupSheetWrapper(
+      context = this,
+      initialStartAyah = starting,
+      initialEndAyah = ending,
+      onStart = { config ->
+        memorizationEngine.startMemorization(config)
+        playFromAyah(config.startAyah.sura, config.startAyah.ayah)
+      },
+      onDismissed = {
+        overlay.removeAllViews()
+        overlay.visibility = View.GONE
+        toggleActionBarVisibility(true)
+      }
+    )
+    overlay.removeAllViews()
+    overlay.addView(
+      memorizationSetupSheetWrapper,
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.MATCH_PARENT
+    )
+    overlay.visibility = View.VISIBLE
+    toggleActionBarVisibility(false)
+  }
+
   private fun showReadingBookmarkSheet(target: ReadingBookmarkTarget) {
     val readingBookmarkSheetWrapper = ReadingBookmarkSheetWrapper(
       context = this,
@@ -1779,6 +1833,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   }
 
   override fun onStopPressed() {
+    if (memorizationEngine.state.value.isActive) {
+      memorizationEngine.stopMemorization()
+    }
     startService(audioUtils.getAudioIntent(this, AudioService.ACTION_STOP))
   }
 

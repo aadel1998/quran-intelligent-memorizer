@@ -57,6 +57,10 @@ import com.quran.labs.androidquran.QuranApplication
 import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.audio.model.playback.AudioRequest
 import com.quran.labs.androidquran.common.audio.model.playback.AudioStatus
+import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
+import com.quran.labs.androidquran.common.audio.memorization.StepType
 import com.quran.labs.androidquran.common.audio.model.playback.PlaybackStatus
 import com.quran.labs.androidquran.common.audio.repository.AudioStatusRepository
 import com.quran.labs.androidquran.dao.audio.AudioPlaybackInfo
@@ -172,6 +176,9 @@ class AudioService : Service(), Player.Listener {
 
   @Inject
   lateinit var quranSettings: QuranSettings
+
+  @Inject
+  lateinit var memorizationEngine: MemorizationEngine
 
   private inner class ServiceHandler(looper: Looper) : Handler(looper) {
     override fun handleMessage(msg: Message) {
@@ -486,6 +493,28 @@ class AudioService : Service(), Player.Listener {
           serviceHandler.sendEmptyMessageDelayed(MSG_UPDATE_AUDIO_POS, 150)
           return
         }
+
+        if (memorizationEngine.state.value.isActive) {
+          val currentAyah = SuraAyah(sura, ayah)
+          val nextAyah = memorizationEngine.onAyahPlaybackCompleted(currentAyah)
+          if (nextAyah != null) {
+            serviceHandler.removeMessages(MSG_UPDATE_AUDIO_POS)
+            currentWord = null
+            localAudioQueue.playAt(nextAyah.sura, nextAyah.ayah, true)
+            if (nextAyah.sura == sura) {
+              val seekPos = getSeekPosition(false)
+              if (seekPos > -1) {
+                localPlayer.seekTo(seekPos)
+              }
+            } else {
+              playAudio(true)
+            }
+          } else {
+            processStopRequest(true)
+          }
+          return
+        }
+
         val success = localAudioQueue.playAt(sura, updatedAyah, false)
         val nextSura = localAudioQueue.getCurrentSura()
         val nextAyah = localAudioQueue.getCurrentAyah()
@@ -723,6 +752,9 @@ class AudioService : Service(), Player.Listener {
   }
 
   private fun processStopRequest(force: Boolean = false) {
+    if (memorizationEngine.state.value.isActive) {
+      memorizationEngine.stopMemorization()
+    }
     setState(PlaybackStateCompat.STATE_STOPPED)
     serviceHandler.removeMessages(MSG_UPDATE_AUDIO_POS)
     currentWord = null
@@ -1107,6 +1139,18 @@ class AudioService : Service(), Player.Listener {
     } else {
       val localAudioQueue = audioQueue ?: return
       val localAudioRequest = audioRequest ?: return
+
+      if (memorizationEngine.state.value.isActive) {
+        val currentAyah = SuraAyah(localAudioQueue.getCurrentSura(), localAudioQueue.getCurrentAyah())
+        val nextAyah = memorizationEngine.onAyahPlaybackCompleted(currentAyah)
+        if (nextAyah != null) {
+          handleNextMemorizationAyah(nextAyah, localAudioQueue)
+        } else {
+          processStopRequest(true)
+        }
+        return
+      }
+
       val beforeSura = localAudioQueue.getCurrentSura()
       if (localAudioQueue.playNextAyah(false)) {
         if (localAudioRequest.isGapless() && beforeSura == localAudioQueue.getCurrentSura()
@@ -1130,6 +1174,36 @@ class AudioService : Service(), Player.Listener {
         processStopRequest(true)
       }
     }
+  }
+
+  private fun handleNextMemorizationAyah(nextAyah: SuraAyah, localAudioQueue: AudioQueue) {
+    val currentStep = memorizationEngine.state.value.currentStep
+    if (currentStep?.stepType == StepType.PAUSE_FOR_RECITATION) {
+      val delaySeconds = when (val delay = memorizationEngine.state.value.config?.delayMode) {
+        is MemorizationDelayMode.FixedSeconds -> delay.seconds.toLong()
+        is MemorizationDelayMode.MatchAyahDuration -> {
+          val durationMs = player?.duration ?: 3000L
+          (durationMs / 1000L).coerceAtLeast(1L)
+        }
+        else -> 3L
+      }
+      serviceHandler.postDelayed({
+        if (memorizationEngine.state.value.isActive) {
+          val next = memorizationEngine.onAyahPlaybackCompleted(nextAyah)
+          if (next != null) {
+            handleNextMemorizationAyah(next, localAudioQueue)
+          } else {
+            processStopRequest(true)
+          }
+        }
+      }, delaySeconds * 1000L)
+      return
+    }
+
+    val beforeSura = localAudioQueue.getCurrentSura()
+    localAudioQueue.playAt(nextAyah.sura, nextAyah.ayah, true)
+    val flag = beforeSura != localAudioQueue.getCurrentSura()
+    playAudio(flag)
   }
 
   private fun onPlayerReady() {

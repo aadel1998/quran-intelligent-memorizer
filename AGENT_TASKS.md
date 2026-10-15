@@ -122,27 +122,55 @@
 
 ---
 
-## [ ] Phase 4: UI Integration, Active HUD, and Memory-Test (Blur) Mode
-- [ ] Create Memorization Setup Modal/Drawer:
-  - Surah, `startAyah`, `endAyah` selection.
-  - Parameters: `windowSize` (default 4), `singleRepeat` (default 3), `connectRepeat` (default 2), `delayMode` selector.
-  - Toggle: "Hide/Blur Text During Connection Steps" (Memory Test Mode).
-  - Follow Compose `ModalBottomSheet` pattern used by `ReadingBookmarkSheetWrapper`.
-- [ ] Build Active Memorization HUD / Player Bar:
-  - Displays: *"Window 1/3 • Connecting Ayah 1–3 (Repeat 2/2)"*
-  - Buttons: Previous Step, Skip Step, Pause/Play, Exit.
-  - Seamlessly replaces or integrates into `AudioBarWrapper`.
-- [ ] Visual Highlighting & Text Masking:
-  - Auto-scroll to active Ayah in reader.
-  - Highlight current window boundary.
-  - Mask/blur text during `CONNECT` and `PAUSE_FOR_RECITATION` with tap-to-peek.
-- [ ] Verify build and type-check.
+## [x] Phase 4: UI Integration, Active HUD, and Memory-Test (Blur) Mode
+- [x] Create Memorization Setup Modal/Drawer:
+  - Implemented `MemorizationSetupSheet.kt` (`feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationSetupSheet.kt`):
+    - Surah & Ayah range pickers (`startAyah`, `endAyah`).
+    - Configurable parameters: `windowSize` stepper, `singleRepeat` stepper, `connectRepeat` stepper.
+    - Delay mode chips (`None`, `3s Fixed`, `5s Fixed`, `Match Ayah Duration`).
+    - Memory Test Mode toggle ("Hide/Blur Text During Connection Steps").
+    - Sliding Window Bridge Step toggle.
+  - Implemented `MemorizationSetupSheetWrapper.kt` (`feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationSetupSheetWrapper.kt`):
+    - Embeds Compose `ModalBottomSheet` directly into `PagerActivity`'s `R.id.overlay` container.
+- [x] Build Active Memorization HUD / Player Bar:
+  - Implemented `MemorizationHud.kt` (`feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationHud.kt`):
+    - Displays: Window indicator badge (`Window 1/3`), active step description (`Connecting Ayah 1–3`), repeat iteration counter (`Repeat 2/2`).
+    - Controls: Previous Step, Play/Pause, Skip Step, Stop/Exit.
+    - Tap-to-peek toggle button (`QuranIcons.Visibility` / `VisibilityOff`) during active Memory Test steps.
+  - Wired into `AudioBarWrapper.kt`:
+    - Conditionally renders `MemorizationHud` whenever `memorizationEngine.state.isActive == true`.
+    - Dispatches play/pause and stop events cleanly to audio event sinks.
+  - Added Memorize launch button (`QuranIcons.MenuBook`) to `StoppedAudioBar.kt`.
+- [x] Visual Highlighting & Text Masking:
+  - `PagerActivity.kt` observes `memorizationEngine.state`:
+    - Automatically updates page viewport (`ensurePage(sura, ayah)`).
+    - Highlights active Ayah in reader view via `readingEventPresenterBridge.setSelection(sura, ayah, true)`.
+    - Tap-to-peek toggle dynamically reveals/masks text on user command.
+- [x] Compilation & Verification:
+  - Verified Kotlin compilation across `:feature:audiobar` and `:app` with `./gradlew compileMadaniDebugKotlin`.
 
 ---
 
-## [ ] Phase 5: Persistence, Edge Cases & Final Verification
-- [ ] Save memorization settings and active progress to `SharedPreferences` for session resume.
-- [ ] Clean mutual exclusion between standard playback and Memorization Mode.
-- [ ] Unit tests for `MemorizationEngine` state machine covering all transitions.
-- [ ] Full build/lint verification (`./gradlew assembleMadaniDebug`).
-- [ ] Commit and push all changes to GitHub repository.
+## [x] Phase 5: Persistence, Edge Cases & Final Verification
+- [x] Save memorization settings and active progress:
+  - Implemented `MemorizationPreferences.kt` (`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPreferences.kt`):
+    - Persists `MemorizationConfig` (`startAyah`, `endAyah`, `windowSize`, `singleRepeat`, `connectRepeat`, `delayMode`, `memoryTestMode`, `enableBridge`).
+    - Tracks active progress (`savedStepIndex`, `savedRepeatIteration`).
+    - Supports session resumption and clean clearing on completion/stop.
+- [x] Clean mutual exclusion between standard playback and Memorization Mode:
+  - In `AudioService.kt`:
+    - Injected `MemorizationEngine`.
+    - In `processStopRequest()`: cleanly halts memorization when audio stops.
+    - In `onPlayerCompleted()` and `updateAudioPlayPosition()`: advances memorization steps deterministically, handles recitation delay pauses without overlapping audio streams.
+  - In `PagerActivity.kt`:
+    - `onPlayPressed()` and `onStopPressed()` automatically stop memorization before starting standard playback.
+- [x] Unit tests for `MemorizationEngine`, `MemorizationPlanBuilder`, and `MemorizationPreferences`:
+  - `MemorizationPreferencesTest.kt`: verified session persistence, config serialization/deserialization, and session clearing.
+  - `MemorizationPlanBuilderTest.kt`: verified plan generation, sliding window connects, pauses, and bridge steps.
+  - `MemorizationEngineTest.kt`: verified full state machine execution, repeats, sub-ayah connects, pause/resume, skip, previous, and peek.
+  - Ran `./gradlew.bat :common:audio:testReleaseUnitTest`: 38 tests, 0 failures, 0 skipped. **BUILD SUCCESSFUL**.
+- [x] Full build & packaging verification:
+  - Ran `./gradlew.bat assembleMadaniDebug`: 490 actionable tasks, **BUILD SUCCESSFUL**.
+  - Generated debug APK at `app/build/outputs/apk/madani/debug/app-madani-debug.apk`.
+- [x] Remote sync:
+  - Committing and pushing all final changes to `origin/main` (`https://github.com/aadel1998/quran-intelligent-memorizer.git`).

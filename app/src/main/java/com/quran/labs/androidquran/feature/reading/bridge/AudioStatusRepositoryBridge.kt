@@ -39,6 +39,7 @@ class AudioStatusRepositoryBridge(
           AudioBarEvent.Cancel -> audioBarListener.onCancelPressed(false)
           AudioBarEvent.CancelDownload -> audioBarListener.onCancelPressed(true)
           AudioBarEvent.ChangeQari -> audioBarListener.onShowQariList()
+          AudioBarEvent.Memorize -> audioBarListener.onMemorizePressed()
           AudioBarEvent.FastForward -> audioBarListener.onNextPressed()
           AudioBarEvent.Pause -> audioBarListener.onPausePressed()
           AudioBarEvent.Play -> audioBarListener.onPlayPressed()

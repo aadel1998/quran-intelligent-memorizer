@@ -31,6 +31,12 @@ import com.quran.mobile.feature.audiobar.presenter.AudioBarPresenter
 import com.quran.mobile.feature.audiobar.ui.AudioBar
 import dev.zacsweers.metro.Inject
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
+import com.quran.mobile.feature.audiobar.state.AudioBarUiEvent
+import com.quran.mobile.feature.audiobar.ui.MemorizationHud
+
 class AudioBarWrapper @JvmOverloads constructor(
   context: Context,
   attrs: AttributeSet? = null,
@@ -39,6 +45,9 @@ class AudioBarWrapper @JvmOverloads constructor(
 
   @Inject
   lateinit var audioBarPresenter: AudioBarPresenter
+
+  @Inject
+  lateinit var memorizationEngine: MemorizationEngine
 
   init {
     (context as? AudioBarInjector)?.inject(this)
@@ -54,24 +63,55 @@ class AudioBarWrapper @JvmOverloads constructor(
         }
       }
       val eventListeners = remember(audioBarPresenter) { audioBarPresenter.eventListeners() }
+      val memorizationState by memorizationEngine.state.collectAsState()
 
       Card(
         shape = CardDefaults.shape.topOnly(),
         modifier = Modifier.fillMaxWidth()
       ) {
-        AudioBar(
-          flow,
-          eventListeners,
-          modifier = Modifier
-            .padding(
-              WindowInsets.navigationBars.add(WindowInsets.displayCutout)
-                  .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
-                .asPaddingValues()
-            )
-            .padding(top = 8.dp)
-            .padding(horizontal = 16.dp)
-            .heightIn(min = dimensionResource(id = R.dimen.audiobar_height))
-        )
+        if (memorizationState.isActive) {
+          MemorizationHud(
+            state = memorizationState,
+            onPreviousStep = { memorizationEngine.previousStep() },
+            onPlayPause = {
+              if (memorizationState.isPaused) {
+                memorizationEngine.resume()
+                eventListeners.pausedPlaybackEventSink(AudioBarUiEvent.PausedPlaybackEvent.Play)
+              } else {
+                memorizationEngine.pause()
+                eventListeners.playingPlaybackEventSink(AudioBarUiEvent.PlayingPlaybackEvent.Pause)
+              }
+            },
+            onSkipStep = { memorizationEngine.skipCurrentStep() },
+            onStop = {
+              memorizationEngine.stopMemorization()
+              eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
+            },
+            onToggleMask = { memorizationEngine.toggleTextMask() },
+            modifier = Modifier
+              .padding(
+                WindowInsets.navigationBars.add(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
+                  .asPaddingValues()
+              )
+              .padding(top = 4.dp)
+              .padding(horizontal = 8.dp)
+          )
+        } else {
+          AudioBar(
+            flow,
+            eventListeners,
+            modifier = Modifier
+              .padding(
+                WindowInsets.navigationBars.add(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
+                  .asPaddingValues()
+              )
+              .padding(top = 8.dp)
+              .padding(horizontal = 16.dp)
+              .heightIn(min = dimensionResource(id = R.dimen.audiobar_height))
+          )
+        }
       }
     }
   }

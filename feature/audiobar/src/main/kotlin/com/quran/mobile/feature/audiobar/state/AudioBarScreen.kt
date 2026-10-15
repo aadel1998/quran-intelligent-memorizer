@@ -92,6 +92,7 @@ internal sealed class AudioBarUiEvent(val audioBarEvent: AudioBarEvent) {
   sealed class StoppedPlaybackEvent(audioBarEvent: AudioBarEvent) :
     AudioBarUiEvent(audioBarEvent) {
     data object ChangeQari : StoppedPlaybackEvent(AudioBarEvent.ChangeQari)
+    data object Memorize : StoppedPlaybackEvent(AudioBarEvent.Memorize)
     data object Play : StoppedPlaybackEvent(AudioBarEvent.Play)
     data object Record : StoppedPlaybackEvent(AudioBarEvent.Record)
   }

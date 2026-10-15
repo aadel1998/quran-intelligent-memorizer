@@ -21,7 +21,8 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 @SingleIn(AppScope::class)
 class MemorizationEngine @Inject constructor(
-  private val quranInfo: QuranInfo
+  private val quranInfo: QuranInfo,
+  private val memorizationPreferences: MemorizationPreferences? = null
 ) {
 
   private val _state = MutableStateFlow(MemorizationState())
@@ -42,6 +43,8 @@ class MemorizationEngine @Inject constructor(
     val firstStep = plan[0]
     val firstAyah = firstStep.ayahs.firstOrNull()
 
+    memorizationPreferences?.saveSession(config, 0, 1)
+
     _state.value = MemorizationState(
       isActive = true,
       isPaused = false,
@@ -60,6 +63,20 @@ class MemorizationEngine @Inject constructor(
       pauseRemainingSeconds = 0,
       isSessionCompleted = false
     )
+  }
+
+  /**
+   * Resumes the previously saved memorization session if one exists.
+   */
+  fun resumeSavedSession(): Boolean {
+    val savedConfig = memorizationPreferences?.getSavedConfig() ?: return false
+    val savedStepIdx = memorizationPreferences.getSavedStepIndex()
+
+    startMemorization(savedConfig)
+    if (savedStepIdx in plan.indices) {
+      goToStep(savedStepIdx)
+    }
+    return true
   }
 
   /**
@@ -110,6 +127,7 @@ class MemorizationEngine @Inject constructor(
    * Terminates the memorization session and returns to idle state.
    */
   fun stopMemorization() {
+    memorizationPreferences?.clearSession()
     plan = emptyList()
     _state.value = MemorizationState(isActive = false)
   }
@@ -188,6 +206,10 @@ class MemorizationEngine @Inject constructor(
     val firstAyah = nextStep.ayahs.firstOrNull()
     val config = _state.value.config
 
+    if (config != null) {
+      memorizationPreferences?.saveSession(config, stepIndex, 1)
+    }
+
     _state.value = _state.value.copy(
       currentWindowIndex = nextStep.windowIndex,
       totalWindows = nextStep.totalWindows,
@@ -205,6 +227,7 @@ class MemorizationEngine @Inject constructor(
   }
 
   private fun completeSession() {
+    memorizationPreferences?.clearSession()
     _state.value = _state.value.copy(
       isActive = false,
       isSessionCompleted = true,

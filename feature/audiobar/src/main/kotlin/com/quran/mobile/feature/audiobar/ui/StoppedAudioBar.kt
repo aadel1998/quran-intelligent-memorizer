@@ -33,6 +33,10 @@ internal fun StoppedAudioBar(
       Icon(QuranIcons.PlayArrow, contentDescription = "")
     }
 
+    IconButton(onClick = { eventSink(AudioBarUiEvent.StoppedPlaybackEvent.Memorize) }) {
+      Icon(QuranIcons.MenuBook, contentDescription = "Memorization Mode")
+    }
+
     TextButton(
       modifier = Modifier.weight(1f),
       onClick = { eventSink(AudioBarUiEvent.StoppedPlaybackEvent.ChangeQari) }
