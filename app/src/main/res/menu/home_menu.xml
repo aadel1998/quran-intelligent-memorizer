@@ -45,6 +45,11 @@
       android:title="@string/menu_jump_last_page"
       app:showAsAction="ifRoom" />
   <item
+      android:id="@+id/playlists"
+      android:icon="@drawable/ic_playlist"
+      android:title="Playlists"
+      app:showAsAction="ifRoom" />
+  <item
       android:id="@+id/search"
       android:icon="@drawable/ic_ab_search"
       android:title="@string/menu_search"

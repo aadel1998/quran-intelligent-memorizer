@@ -28,7 +28,8 @@ class MemorizationSetupSheetWrapper(
   private val masteredRanges: List<MasteredRange> = emptyList(),
   private val onReview: ((MasteredRange) -> Unit)? = null,
   private val savedPlaylists: List<CustomPlaylist> = emptyList(),
-  private val initialPlaylist: CustomPlaylist? = null
+  private val initialPlaylist: CustomPlaylist? = null,
+  private val maxAyahsForSura: Int = 286
 ) : FrameLayout(context) {
 
   init {
@@ -47,6 +48,7 @@ class MemorizationSetupSheetWrapper(
             masteredRanges = masteredRanges,
             savedPlaylists = savedPlaylists,
             initialPlaylist = initialPlaylist,
+            maxAyahsForSura = maxAyahsForSura,
             onResumeSession = {
               onResume?.invoke()
               onDismissed()

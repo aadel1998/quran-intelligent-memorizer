@@ -30,9 +30,12 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentPagerAdapter
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.ViewPager
+import com.quran.data.core.QuranInfo
 import com.quran.data.dao.RecentPagesDao
 import com.quran.data.model.Page
 import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.common.audio.memorization.PlaylistRepository
+import com.quran.mobile.feature.audiobar.ui.PlaylistSheetWrapper
 import com.quran.labs.androidquran.AboutUsActivity
 import com.quran.labs.androidquran.HelpActivity
 import com.quran.labs.androidquran.QuranApplication
@@ -136,6 +139,10 @@ class QuranActivity : AppCompatActivity(),
   lateinit var quranIndexEventLogger: QuranIndexEventLogger
   @Inject
   lateinit var extraScreens: Set<@JvmSuppressWildcards ExtraScreenProvider>
+  @Inject
+  lateinit var playlistRepository: PlaylistRepository
+  @Inject
+  lateinit var quranInfo: QuranInfo
 
   private var jumpToPageOnResume: Int? = null
 
@@ -358,6 +365,9 @@ class QuranActivity : AppCompatActivity(),
       R.id.jump -> {
         gotoPageDialog()
       }
+      R.id.playlists -> {
+        showPlaylistsSheet()
+      }
       R.id.other_apps -> {
         val intent = Intent(Intent.ACTION_VIEW)
         intent.data = "market://search?q=pub:quran.com".toUri()
@@ -372,6 +382,44 @@ class QuranActivity : AppCompatActivity(),
       }
     }
     return true
+  }
+
+  private fun showPlaylistsSheet() {
+    val root = findViewById<ViewGroup>(android.R.id.content)
+    var wrapper: PlaylistSheetWrapper? = null
+    wrapper = PlaylistSheetWrapper(
+      context = this,
+      playlistRepository = playlistRepository,
+      quranInfo = quranInfo,
+      onPlayPlaylist = { playlist ->
+        val firstSeg = playlist.segments.firstOrNull()
+        val intent = Intent(this, PagerActivity::class.java).apply {
+          if (firstSeg != null) {
+            putExtra("page", quranInfo.getPageFromSuraAyah(firstSeg.sura, firstSeg.startAyah))
+          }
+          putExtra(PagerActivity.EXTRA_PLAY_PLAYLIST_ID, playlist.id)
+        }
+        startActivity(intent)
+      },
+      onMemorizePlaylist = { playlist ->
+        val firstSeg = playlist.segments.firstOrNull()
+        val intent = Intent(this, PagerActivity::class.java).apply {
+          if (firstSeg != null) {
+            putExtra("page", quranInfo.getPageFromSuraAyah(firstSeg.sura, firstSeg.startAyah))
+          }
+          putExtra(PagerActivity.EXTRA_MEMORIZE_PLAYLIST_ID, playlist.id)
+        }
+        startActivity(intent)
+      },
+      onDismissed = {
+        wrapper?.let { root.removeView(it) }
+      }
+    )
+    root.addView(
+      wrapper,
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.MATCH_PARENT
+    )
   }
 
   override fun onSupportActionModeFinished(mode: ActionMode) {

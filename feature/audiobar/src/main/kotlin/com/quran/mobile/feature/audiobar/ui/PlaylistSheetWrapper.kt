@@ -33,12 +33,12 @@ class PlaylistSheetWrapper(
             playlistRepository = playlistRepository,
             quranInfo = quranInfo,
             onPlayPlaylist = { playlist ->
-              onPlayPlaylist(playlist)
               onDismissed()
+              onPlayPlaylist(playlist)
             },
             onMemorizePlaylist = { playlist ->
-              onMemorizePlaylist(playlist)
               onDismissed()
+              onMemorizePlaylist(playlist)
             },
             onDismissRequest = onDismissed
           )

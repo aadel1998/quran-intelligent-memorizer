@@ -49,7 +49,7 @@ data class MemorizationConfig(
   init {
     require(windowSize >= 1) { "windowSize must be at least 1" }
     require(singleRepeat >= 1) { "singleRepeat must be at least 1" }
-    require(connectRepeat >= 1) { "connectRepeat must be at least 1" }
+    require(connectRepeat >= 0) { "connectRepeat must be at least 0" }
     if (segments.isEmpty()) {
       require(startAyah <= endAyah) { "startAyah ($startAyah) must be <= endAyah ($endAyah)" }
     }

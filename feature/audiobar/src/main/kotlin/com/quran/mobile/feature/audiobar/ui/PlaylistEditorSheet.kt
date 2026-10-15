@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quran.data.core.QuranInfo
@@ -332,7 +336,7 @@ fun PlaylistEditorSheet(
             )
           }
 
-          // Ayah Steppers when Custom Range is active
+          // Ayah Steppers & Range Slider when Custom Range is active
           if (!isFullSurah) {
             Spacer(modifier = Modifier.height(10.dp))
             Row(
@@ -340,24 +344,48 @@ fun PlaylistEditorSheet(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {
-              NumberStepperCompact(
+              NumberInputOrStepper(
                 label = "From Ayah",
                 value = startAyah,
                 minValue = 1,
-                maxValue = endAyah,
-                onValueChange = {
-                  startAyah = it.coerceIn(1, endAyah)
+                maxValue = maxAyahsForSelectedSura,
+                onValueChange = { newStart ->
+                  startAyah = newStart
+                  if (endAyah < newStart) endAyah = newStart
                 }
               )
 
-              NumberStepperCompact(
+              NumberInputOrStepper(
                 label = "To Ayah",
                 value = endAyah,
-                minValue = startAyah,
+                minValue = 1,
                 maxValue = maxAyahsForSelectedSura,
-                onValueChange = {
-                  endAyah = it.coerceIn(startAyah, maxAyahsForSelectedSura)
+                onValueChange = { newEnd ->
+                  endAyah = newEnd
+                  if (startAyah > newEnd) startAyah = newEnd
                 }
+              )
+            }
+
+            if (maxAyahsForSelectedSura > 1) {
+              Spacer(modifier = Modifier.height(10.dp))
+              Text(
+                text = "Slide to adjust: Ayah $startAyah – $endAyah",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+              )
+              RangeSlider(
+                value = startAyah.toFloat()..endAyah.toFloat(),
+                onValueChange = { range ->
+                  val newStart = range.start.toInt().coerceIn(1, maxAyahsForSelectedSura)
+                  val newEnd = range.endInclusive.toInt().coerceIn(newStart, maxAyahsForSelectedSura)
+                  startAyah = newStart
+                  endAyah = newEnd
+                },
+                valueRange = 1f..maxAyahsForSelectedSura.toFloat(),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(horizontal = 4.dp)
               )
             }
           }
@@ -422,50 +450,6 @@ fun PlaylistEditorSheet(
         ) {
           Text("Save Playlist", fontWeight = FontWeight.Bold)
         }
-      }
-    }
-  }
-}
-
-@Composable
-private fun NumberStepperCompact(
-  label: String,
-  value: Int,
-  minValue: Int,
-  maxValue: Int,
-  onValueChange: (Int) -> Unit
-) {
-  Column(horizontalAlignment = Alignment.CenterHorizontally) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.labelSmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-
-    Spacer(modifier = Modifier.height(4.dp))
-
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      FilledTonalButton(
-        onClick = { if (value > minValue) onValueChange(value - 1) },
-        enabled = value > minValue,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-      ) {
-        Text("-", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-      }
-
-      Text(
-        text = value.toString(),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(horizontal = 10.dp)
-      )
-
-      FilledTonalButton(
-        onClick = { if (value < maxValue) onValueChange(value + 1) },
-        enabled = value < maxValue,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-      ) {
-        Text("+", fontSize = 16.sp, fontWeight = FontWeight.Bold)
       }
     }
   }

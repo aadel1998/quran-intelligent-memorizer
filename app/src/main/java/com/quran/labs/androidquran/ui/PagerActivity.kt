@@ -650,6 +650,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         { ayah: SuraAyah -> ensurePage(ayah.sura, ayah.ayah) },
         { sliderPage: Int -> showSlider(slidingPagerAdapter.getPagePosition(sliderPage)) }
       ))
+    checkPlaylistIntent(intent)
   }
 
   private fun registerBackPressedCallbacks() {
@@ -1100,6 +1101,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       }
 
       setIntent(intent)
+      checkPlaylistIntent(intent)
     }
   }
 
@@ -1744,28 +1746,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       playlistRepository = playlistRepository,
       quranInfo = quranInfo,
       onPlayPlaylist = { playlist ->
-        if (playlist.segments.isNotEmpty()) {
-          playlistRepository.updateLastPlayed(playlist.id)
-          val firstSeg = playlist.segments.first()
-          val lastSeg = playlist.segments.last()
-          val playConfig = MemorizationConfig(
-            startAyah = SuraAyah(firstSeg.sura, firstSeg.startAyah),
-            endAyah = SuraAyah(lastSeg.sura, lastSeg.endAyah),
-            windowSize = playlist.totalAyahsCount.coerceAtLeast(1),
-            singleRepeat = 1,
-            connectRepeat = 0,
-            delayMode = MemorizationDelayMode.None,
-            memoryTestMode = false,
-            maskingLevel = MaskingLevel.OFF,
-            recordRecitation = false,
-            enableBridge = false,
-            segments = playlist.segments,
-            playlistId = playlist.id,
-            playlistName = playlist.name
-          )
-          memorizationEngine.startMemorization(playConfig)
-          playFromAyah(firstSeg.sura, firstSeg.startAyah)
-        }
+        playPlaylist(playlist)
       },
       onMemorizePlaylist = { playlist ->
         openMemorizationSetup(initialPlaylist = playlist)
@@ -1784,6 +1765,56 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     )
     overlay.visibility = View.VISIBLE
     toggleActionBarVisibility(false)
+  }
+
+  private fun playPlaylist(playlist: CustomPlaylist) {
+    if (playlist.segments.isNotEmpty()) {
+      playlistRepository.updateLastPlayed(playlist.id)
+      val firstSeg = playlist.segments.first()
+      val lastSeg = playlist.segments.last()
+      val playConfig = MemorizationConfig(
+        startAyah = SuraAyah(firstSeg.sura, firstSeg.startAyah),
+        endAyah = SuraAyah(lastSeg.sura, lastSeg.endAyah),
+        windowSize = playlist.totalAyahsCount.coerceAtLeast(1),
+        singleRepeat = 1,
+        connectRepeat = 0,
+        delayMode = MemorizationDelayMode.None,
+        memoryTestMode = false,
+        maskingLevel = MaskingLevel.OFF,
+        recordRecitation = false,
+        enableBridge = false,
+        segments = playlist.segments,
+        playlistId = playlist.id,
+        playlistName = playlist.name
+      )
+      ensurePage(firstSeg.sura, firstSeg.startAyah)
+      memorizationEngine.startMemorization(playConfig)
+      playFromAyah(firstSeg.sura, firstSeg.startAyah)
+    }
+  }
+
+  private fun checkPlaylistIntent(intent: Intent?) {
+    if (intent == null) return
+    val playPlaylistId = intent.getStringExtra(EXTRA_PLAY_PLAYLIST_ID)
+    val memorizePlaylistId = intent.getStringExtra(EXTRA_MEMORIZE_PLAYLIST_ID)
+
+    if (playPlaylistId != null) {
+      intent.removeExtra(EXTRA_PLAY_PLAYLIST_ID)
+      val playlist = playlistRepository.getPlaylistById(playPlaylistId)
+      if (playlist != null) {
+        viewPager.post {
+          playPlaylist(playlist)
+        }
+      }
+    } else if (memorizePlaylistId != null) {
+      intent.removeExtra(EXTRA_MEMORIZE_PLAYLIST_ID)
+      val playlist = playlistRepository.getPlaylistById(memorizePlaylistId)
+      if (playlist != null) {
+        viewPager.post {
+          openMemorizationSetup(initialPlaylist = playlist)
+        }
+      }
+    }
   }
 
   private fun openMemorizationSetup(initialPlaylist: CustomPlaylist? = null) {
@@ -1810,6 +1841,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       masteredRanges = masteredRanges,
       savedPlaylists = savedPlaylists,
       initialPlaylist = initialPlaylist,
+      maxAyahsForSura = quranInfo.getNumberOfAyahs(starting.sura),
       onResume = {
         if (savedConfig != null) {
           memorizationEngine.resumeSavedSession()
@@ -2172,6 +2204,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     const val EXTRA_HIGHLIGHT_SURA: String = "highlightSura"
     const val EXTRA_HIGHLIGHT_AYAH: String = "highlightAyah"
     const val LAST_WAS_DUAL_PAGES: String = "wasDualPages"
+    const val EXTRA_PLAY_PLAYLIST_ID: String = "playPlaylistId"
+    const val EXTRA_MEMORIZE_PLAYLIST_ID: String = "memorizePlaylistId"
 
     private const val DEFAULT_HIDE_AFTER_TIME: Long = 2000
 

@@ -21,6 +21,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -61,6 +62,7 @@ fun MemorizationSetupSheet(
   onReviewRange: ((MasteredRange) -> Unit)? = null,
   savedPlaylists: List<CustomPlaylist> = emptyList(),
   initialPlaylist: CustomPlaylist? = null,
+  maxAyahsForSura: Int = 286,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
   var selectedPlaylist by remember { mutableStateOf<CustomPlaylist?>(initialPlaylist) }
@@ -278,21 +280,48 @@ fun MemorizationSetupSheet(
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          NumberStepper(
+          NumberInputOrStepper(
             label = "From Ayah",
             value = startAyahNum,
-            onValueChange = {
-              startAyahNum = it.coerceAtLeast(1)
-              if (endAyahNum < startAyahNum) endAyahNum = startAyahNum
+            minValue = 1,
+            maxValue = maxAyahsForSura,
+            onValueChange = { newStart ->
+              startAyahNum = newStart
+              if (endAyahNum < newStart) endAyahNum = newStart
             }
           )
 
-          NumberStepper(
+          NumberInputOrStepper(
             label = "To Ayah",
             value = endAyahNum,
-            onValueChange = {
-              endAyahNum = it.coerceAtLeast(startAyahNum)
+            minValue = 1,
+            maxValue = maxAyahsForSura,
+            onValueChange = { newEnd ->
+              endAyahNum = newEnd
+              if (startAyahNum > newEnd) startAyahNum = newEnd
             }
+          )
+        }
+
+        if (maxAyahsForSura > 1) {
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = "Slide to adjust: Ayah $startAyahNum – $endAyahNum",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary
+          )
+          RangeSlider(
+            value = startAyahNum.toFloat()..endAyahNum.toFloat(),
+            onValueChange = { range ->
+              val newStart = range.start.toInt().coerceIn(1, maxAyahsForSura)
+              val newEnd = range.endInclusive.toInt().coerceIn(newStart, maxAyahsForSura)
+              startAyahNum = newStart
+              endAyahNum = newEnd
+            },
+            valueRange = 1f..maxAyahsForSura.toFloat(),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 4.dp)
           )
         }
       }
