@@ -11,53 +11,139 @@
 
 ## [x] Phase 0: Clone, GitHub Repo Creation & Remote Sync Setup
 - [x] Clone `quran/quran_android` into workspace
-- [x] Verify GitHub CLI installed and authenticated (gh v2.98.0, user: aadel1998)
+- [x] Verify GitHub CLI installed and authenticated (gh v2.98.0, user: `aadel1998`)
 - [x] Rename `origin` → `upstream`, create `aadel1998/quran-intelligent-memorizer` (public)
-- [x] Push initial codebase to `origin/main`
+- [x] Push initial codebase to `origin/main` (`https://github.com/aadel1998/quran-intelligent-memorizer.git`)
 - [x] Create this `AGENT_TASKS.md` protocol file
 
 ---
 
 ## [ ] Phase 1: Environment Setup, Dependency Installation & Baseline Run
-- [ ] Inspect project manifests and identify required runtimes
-- [ ] Verify local runtime versions (JDK, Android SDK, Gradle)
-- [ ] Setup any required `.env` or local config files
+- [x] Inspect project manifests and identify required runtimes:
+  - Multi-module Android project with Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.21, Compose BOM 2026.09.00
+  - DI: Metro (`dev.zacsweers.metro` 1.4.5)
+  - UI State: Molecule (`app.cash.molecule:molecule-runtime` 2.2.0)
+- [x] Verify local runtime versions:
+  - Node.js: `v24.22.0`
+  - Git: `2.55.0`
+  - GitHub CLI: `2.98.0`
+  - Android SDK: `C:\Users\Aadel\AppData\Local\Android\Sdk` (build-tools, platforms android-37.0)
+  - JDK: Microsoft OpenJDK 21 LTS at `C:\Users\Aadel\.jdks\ms-openjdk-21` (contains full JDK tools including `jlink.exe` and `javac.exe` required by AGP JDK Image Transform)
 - [ ] Run linter, type-checker, and build (`./gradlew assembleMadaniDebug`)
 - [ ] Confirm baseline project builds with zero errors
 
 ---
 
-## [ ] Phase 2: Deep Codebase & Audio Architecture Discovery
-- [ ] Document Data Layer (Surahs, Ayahs, audio URLs/timestamps)
-- [ ] Document Audio Engine (player, queues, onEnded events, playback state)
-- [ ] Document State Management & Storage (state library, local storage)
-- [ ] Document UI Architecture (file paths for player controls, reader view, settings)
+## [x] Phase 2: Deep Codebase & Audio Architecture Discovery
+
+### 1. Data Layer Architecture
+- **SuraAyah**: [`common/data/src/main/java/com/quran/data/model/SuraAyah.kt`](common/data/src/main/java/com/quran/data/model/SuraAyah.kt)
+  - Primary coordinate model `(val sura: Int, val ayah: Int)`. Implements `Comparable<SuraAyah>`, `Serializable`, `QuranId`.
+  - Methods: `next(quranInfo)`, `prev(quranInfo)`, `min`, `max`, `after`.
+- **Qari & Audio Formats**: [`common/data/src/main/java/com/quran/data/model/audio/Qari.kt`](common/data/src/main/java/com/quran/data/model/audio/Qari.kt), [`QariItem.kt`](common/audio/src/main/java/com/quran/labs/androidquran/common/audio/model/QariItem.kt)
+  - Gapped (non-gapless): One MP3 file per Ayah (`urlFormat = "${qari.url}/%03d%03d.$ext"`).
+  - Gapless: One MP3/Opus file per Surah (`urlFormat = "${qari.url}/%03d.$ext"`), timed via SQLite database (`${qari.databaseName}.db`).
+- **AudioRequest & AudioPathInfo**: [`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/model/playback/AudioRequest.kt`](common/audio/src/main/java/com/quran/labs/androidquran/common/audio/model/playback/AudioRequest.kt)
+  - Specifies `start: SuraAyah`, `end: SuraAyah`, `qari: QariItem`, `repeatInfo: Int`, `rangeRepeatInfo: Int`, `enforceBounds: Boolean`, `playbackSpeed: Float`, `shouldStream: Boolean`.
+- **Timings**: [`app/src/main/java/com/quran/labs/androidquran/dao/audio/SuraTimings.kt`](app/src/main/java/com/quran/labs/androidquran/dao/audio/SuraTimings.kt), [`TimingRepository.kt`](app/src/main/java/com/quran/labs/androidquran/data/TimingRepository.kt)
+  - `ayahTimings: SparseLongArray` (index 0 = Basmallah, index 1..N = verse offset ms, index 999 = surah end).
+
+### 2. Audio Engine & Playback Flow
+- **AudioService**: [`app/src/main/java/com/quran/labs/androidquran/service/AudioService.kt`](app/src/main/java/com/quran/labs/androidquran/service/AudioService.kt)
+  - Android foreground service running Media3 `ExoPlayer` on background `HandlerThread("AyahAudioService")`.
+  - Commands sent via intents: `ACTION_PLAYBACK` (`EXTRA_PLAY_INFO`), `ACTION_PLAY`, `ACTION_PAUSE`, `ACTION_STOP`, `ACTION_SKIP`, `ACTION_REWIND`, `ACTION_UPDATE_SETTINGS`.
+  - Stream caching: `SimpleCache` (128MB LRU) + `CacheDataSource.Factory`.
+- **AudioQueue**: [`app/src/main/java/com/quran/labs/androidquran/presenter/audio/service/AudioQueue.kt`](app/src/main/java/com/quran/labs/androidquran/presenter/audio/service/AudioQueue.kt)
+  - Maintains virtual queue: tracks `currentAyah`, `timesPlayed`, `rangePlayedTimes`, and `shouldPlayBasmallah`.
+  - Handles `playNextAyah(skipAyahRepeat)` and bounds enforcement (`isOutOfBounds`).
+- **Track Completion (`onEnded`)**:
+  - Non-Gapless: Media3 `Player.STATE_ENDED` triggers `AudioService.onPlayerCompleted()` -> `audioQueue.playNextAyah()` -> `playAudio()` or `processStopRequest()`.
+  - Gapless: Polling loop `MSG_UPDATE_AUDIO_POS` compares `player.currentPosition` with `gaplessSuraData.ayahTimings[ayah]` to trigger verse transitions without interrupting audio.
+
+### 3. State Management & Storage
+- **Dependency Injection**: **Metro** (`dev.zacsweers.metro` 1.4.5), using `@Inject`, `@SingleIn(AppScope::class)`, `@ActivityScope`.
+- **UI State**: **Molecule** (`app.cash.molecule:molecule-runtime` 2.2.0) with `@Composable fun present(): UiState`.
+- **Audio Status Repository**: [`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/repository/AudioStatusRepository.kt`](common/audio/src/main/java/com/quran/labs/androidquran/common/audio/repository/AudioStatusRepository.kt)
+  - Holds `audioPlaybackFlow = MutableStateFlow<AudioStatus>(AudioStatus.Stopped)`.
+  - Emits `AudioStatus.Playback(currentAyah, audioRequest, playbackStatus, currentWord)`.
+- **Audio Bar Events**: [`feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/presenter/AudioBarEventRepository.kt`](feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/presenter/AudioBarEventRepository.kt)
+  - SharedFlow of `AudioBarEvent` (`Play`, `Pause`, `FastForward`, `Rewind`, `SetRepeat`, `SetSpeed`, `Stop`).
+- **Activity Bridge**: [`app/src/main/java/com/quran/labs/androidquran/feature/reading/bridge/AudioStatusRepositoryBridge.kt`](app/src/main/java/com/quran/labs/androidquran/feature/reading/bridge/AudioStatusRepositoryBridge.kt)
+  - Bridges events to `PagerActivity` and updates active page via `ensurePage(sura, ayah)`.
+- **Preferences & Storage**:
+  - `QuranSettings.java`: SharedPreferences wrapper for app-wide settings.
+
+### 4. UI Architecture & Integration Points
+- **Reader Activity**: [`app/src/main/java/com/quran/labs/androidquran/ui/PagerActivity.kt`](app/src/main/java/com/quran/labs/androidquran/ui/PagerActivity.kt)
+  - Hosts Quran page `ViewPager`, audio bar container (`R.id.audio_area`), sliding panel (`R.id.sliding_panel`), and overlay (`R.id.overlay`).
+- **Reader Modes**:
+  1. *Image Mode*: `QuranPageFragment.kt` -> `QuranImagePageLayout` -> `HighlightingImageView` (draws highlight boxes over Ayah coordinates on canvas).
+  2. *Line-by-Line Compose Mode*: `QuranLineByLineFragment.kt` -> `QuranPageWrapper` -> `QuranLineLayout` -> `QuranLine` + `Highlight`.
+- **Audio Bar UI**: [`feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/AudioBarWrapper.kt`](feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/AudioBarWrapper.kt)
+  - Embedded in `PagerActivity`, powered by Molecule presenter.
+  - Controls: Play/Pause, Rewind, Fast Forward, Stop, Repeat, Speed, Settings.
+- **Modal / Bottom Sheet Extension Pattern**:
+  - `PagerActivity` contains `overlay = findViewById<FrameLayout>(R.id.overlay)`.
+  - Features (e.g. `ReadingBookmarkSheetWrapper`, `QariListWrapper`) attach a Compose `ModalBottomSheet` directly into this overlay container.
 
 ---
 
 ## [ ] Phase 3: Core Memorization State Machine (Progressive & Sliding Window Engine)
-- [ ] Design and implement `MemorizationEngine` service/module
+- [ ] Design and implement `MemorizationEngine` service/module:
+  - Package: `com.quran.labs.androidquran.memorization` (or module `common:audio` / new package)
+  - Decoupled from Android UI; pure Kotlin state machine with Coroutines `StateFlow`.
 - [ ] Implement sliding window algorithm with configurable parameters:
-  - `windowSize` (W), `singleRepeat` (Rs), `connectRepeat` (Rc), `delayMode`
-- [ ] Implement execution flow: Solo → Connect → Bridge → Window advance
-- [ ] Expose state: `isActive`, `currentWindowIndex`, `stepType`, `currentRepeatIteration`, etc.
-- [ ] Expose controls: `startMemorization()`, `pause()`, `resume()`, `skipCurrentStep()`, `previousStep()`, `stopMemorization()`
-- [ ] Verify with linter/type-checker
+  - `windowSize` ($W$): Number of Ayahs per window (default 4).
+  - `singleRepeat` ($R_s$): Number of times each new Ayah is repeated individually (default 3).
+  - `connectRepeat` ($R_c$): Number of times accumulated Ayahs $[A_1..A_k]$ are played continuously (default 2).
+  - `delayMode`: `NONE`, `FIXED_SECONDS(seconds)`, `MATCH_AYAH_DURATION`.
+- [ ] Implement execution sequence inside window $[A_1, A_2, \dots, A_W]$:
+  1. $A_1$ Solo ($R_s$ times)
+  2. $A_2$ Solo ($R_s$ times)
+  3. Connect $[A_1..A_2]$ ($R_c$ times)
+  4. $A_3$ Solo ($R_s$ times)
+  5. Connect $[A_1..A_3]$ ($R_c$ times)
+  6. ... up to $[A_1..A_W]$ Connect ($R_c$ times)
+  7. Optional Bridge step connecting $[A_{W-1} \dots A_W]$ with next window before sliding.
+- [ ] State exposed:
+  - `isActive: Boolean`
+  - `currentWindowIndex: Int`, `totalWindows: Int`
+  - `stepType: StepType` (`SOLO`, `CONNECT`, `PAUSE_FOR_RECITATION`, `BRIDGE`)
+  - `currentRepeatIteration: Int`, `totalRepeatIterations: Int`
+  - `activeAyahsInStep: List<SuraAyah>`
+  - `currentPlayingAyah: SuraAyah`
+  - `isTextMasked: Boolean` (true during Connect/Recitation when memory test mode enabled)
+- [ ] Controls exposed:
+  - `startMemorization(config: MemorizationConfig)`
+  - `pause()`, `resume()`
+  - `skipCurrentStep()`
+  - `previousStep()`
+  - `stopMemorization()`
+- [ ] Verify unit tests and type checks.
 
 ---
 
 ## [ ] Phase 4: UI Integration, Active HUD, and Memory-Test (Blur) Mode
-- [ ] Create Memorization Setup Modal/Drawer (Surah, ayah range, parameters)
-- [ ] Build Active Memorization HUD / Player Bar with step/repeat counters
-- [ ] Implement visual highlighting & auto-scroll for active Ayah
-- [ ] Implement text blur/masking during CONNECT and PAUSE_FOR_RECITATION steps
-- [ ] Verify build/type-check passes
+- [ ] Create Memorization Setup Modal/Drawer:
+  - Surah, `startAyah`, `endAyah` selection.
+  - Parameters: `windowSize` (default 4), `singleRepeat` (default 3), `connectRepeat` (default 2), `delayMode` selector.
+  - Toggle: "Hide/Blur Text During Connection Steps" (Memory Test Mode).
+  - Follow Compose `ModalBottomSheet` pattern used by `ReadingBookmarkSheetWrapper`.
+- [ ] Build Active Memorization HUD / Player Bar:
+  - Displays: *"Window 1/3 • Connecting Ayah 1–3 (Repeat 2/2)"*
+  - Buttons: Previous Step, Skip Step, Pause/Play, Exit.
+  - Seamlessly replaces or integrates into `AudioBarWrapper`.
+- [ ] Visual Highlighting & Text Masking:
+  - Auto-scroll to active Ayah in reader.
+  - Highlight current window boundary.
+  - Mask/blur text during `CONNECT` and `PAUSE_FOR_RECITATION` with tap-to-peek.
+- [ ] Verify build and type-check.
 
 ---
 
 ## [ ] Phase 5: Persistence, Edge Cases & Final Verification
-- [ ] Save memorization settings and progress to local storage
-- [ ] Ensure normal playback cleanly exits Memorization Mode
-- [ ] Write unit tests for Memorization state machine
-- [ ] Run full lint/type-check/build verification
-- [ ] Final commit and push
+- [ ] Save memorization settings and active progress to `SharedPreferences` for session resume.
+- [ ] Clean mutual exclusion between standard playback and Memorization Mode.
+- [ ] Unit tests for `MemorizationEngine` state machine covering all transitions.
+- [ ] Full build/lint verification (`./gradlew assembleMadaniDebug`).
+- [ ] Commit and push all changes to GitHub repository.
