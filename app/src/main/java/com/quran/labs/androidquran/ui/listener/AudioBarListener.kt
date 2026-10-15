@@ -15,5 +15,6 @@ interface AudioBarListener {
   fun onAudioSettingsPressed()
   fun onShowQariList()
   fun onMemorizePressed()
+  fun onPlaylistsPressed()
 }
 

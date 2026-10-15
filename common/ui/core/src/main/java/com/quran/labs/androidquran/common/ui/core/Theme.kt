@@ -97,6 +97,12 @@ object QuranIcons {
   val Speed: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Speed
   val Stop: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Stop
   val Sync: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Sync
+  val Add: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Add
+  val Delete: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Delete
+  val Edit: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Edit
+  val List: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.List
+  val KeyboardArrowUp: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.KeyboardArrowUp
+  val KeyboardArrowDown: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.KeyboardArrowDown
 }
 
 @Composable

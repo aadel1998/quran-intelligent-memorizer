@@ -1,6 +1,5 @@
-# Comprehensive Review: Intelligent Quran Memorization Mode
-
-This document consolidates AGENT_TASKS.md with the full source code of all newly created and modified files implementing the Intelligent Quran Memorization system across all phases (Phase 0 through Phase 8).
+# Comprehensive Review: Intelligent Quran Memorization Mode & Cross-Surah Playlists
+This document consolidates AGENT_TASKS.md with the full source code of all newly created and modified files implementing the Intelligent Quran Memorization system and Custom Cross-Surah Playlists (Phase 0 through Phase 9).
 
 ---
 
@@ -241,12 +240,60 @@ This document consolidates AGENT_TASKS.md with the full source code of all newly
   - Ran `./gradlew.bat assembleMadaniDebug`: 490 actionable tasks, BUILD SUCCESSFUL. Output APK: `app/build/outputs/apk/madani/debug/app-madani-debug.apk` (37 MB).
   - All Phase 1 through Phase 8 tasks completed, verified, and synchronized to GitHub `main`.
 
+---
+
+## [x] Phase 9: Custom Cross-Surah Memorization & Listening Playlists
+- [x] **1. Cross-Surah Playlist Data Model & Serialization:**
+  - Implemented `PlaylistSegment.kt` (`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/PlaylistSegment.kt`):
+    - Encapsulates Surah segment (`sura: Int`, `startAyah: Int`, `endAyah: Int`, `isFullSurah: Boolean`).
+    - Compact delimiter serialization (`sura:startAyah:endAyah:isFullSurah`).
+    - Helper method `toAyahs(): List<SuraAyah>` generating ordered list of verses for the segment.
+  - Implemented `CustomPlaylist.kt` (`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/CustomPlaylist.kt`):
+    - Encapsulates playlist (`id: String`, `name: String`, `segments: List<PlaylistSegment>`, `createdAt: Long`, `lastPlayedAt: Long`).
+    - Flattens all segments into continuous list of Ayahs via `toFlattenedAyahs(): List<SuraAyah>`.
+    - Compact delimiter serialization (`id##name##createdAt##lastPlayedAt##segmentsJoined`).
+- [x] **2. Playlist Repository & Persistent Storage:**
+  - Implemented `PlaylistRepository.kt` (`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/PlaylistRepository.kt`):
+    - Manages CRUD operations using SharedPreferences: `savePlaylist`, `getAllPlaylists`, `getPlaylistById`, `deletePlaylist`, `updateLastPlayed`.
+    - Sorts playlists descending by `lastPlayedAt` and `createdAt`.
+    - Injected via Metro DI into `PagerActivity` and Compose wrappers.
+- [x] **3. Engine & Plan Builder Cross-Surah Flattening:**
+  - Extended `MemorizationConfig.kt`:
+    - Added `segments: List<PlaylistSegment>`, `playlistId: String?`, `playlistName: String?`.
+    - Relaxed single-Surah constraint (`startAyah <= endAyah`) when custom segments are provided.
+  - Updated `MemorizationPlanBuilder.kt`:
+    - Flattens multi-Surah segments into a unified sequential Ayah stream.
+    - Generates sliding window SOLO, CONNECT, RECITATION PAUSE, and BRIDGE steps across Surah boundaries.
+    - Guards CONNECT steps so `connectRepeat = 0` produces pure sequential listening playback without repeats.
+  - Updated `AudioService.kt`:
+    - Seamlessly switches Surah audio sources on Surah transitions during multi-segment playlists without breaking playback.
+- [x] **4. Compose UI: Playlist Manager & Editor Sheets:**
+  - Implemented `PlaylistEditorSheet.kt`:
+    - Name input, Surah selector dropdown (1-114), Full Surah vs. Custom Range toggle with Ayah steppers.
+    - Add, reorder (up/down), and delete segment capabilities.
+  - Implemented `PlaylistListSheet.kt`:
+    - Lists all saved playlists with Ayah summary and preview sequence.
+    - Actions: "Play All" (continuous listening), "Memorize" (sliding-window memorization), "Edit", and "Delete".
+  - Implemented `PlaylistSheetWrapper.kt`:
+    - FrameLayout wrapper hosting `PlaylistListSheet` inside `PagerActivity`'s overlay container.
+  - Integrated into `StoppedAudioBar.kt`:
+    - Added dedicated Playlists button (`QuranIcons.List`) next to Memorization button.
+    - Wired through `AudioBarEvent.Playlists`, `AudioBarListener.onPlaylistsPressed()`, and `AudioStatusRepositoryBridge`.
+  - Updated `MemorizationSetupSheet.kt`:
+    - Added "Memorization Target" chips to select between Current Surah and saved Playlists.
+- [x] **5. Verification, Tests & Deployment:**
+  - Unit tests added: `PlaylistRepositoryTest.kt` (CRUD, ordering, updates), `MemorizationPlanBuilderTest.kt` (52-Ayah multi-Surah test spanning Al-Hamd, Al-Baqarah, Al-Ikhlas, Al-Falaq, An-Nas, Al-Kafirun).
+  - Pure JVM tests: `./gradlew :common:audio:testReleaseUnitTest` (100% passed).
+  - Kotlin compilation: `./gradlew compileMadaniDebugKotlin` (BUILD SUCCESSFUL).
+  - APK build: `./gradlew assembleMadaniDebug` (BUILD SUCCESSFUL).
+  - Installed and verified on physical Android phone via USB ADB.
+
 
 ---
 
-## Full Source Code of Created & Modified Files
+## Source Code of Created and Modified Files
 
-### File: common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationConfig.kt
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationConfig.kt
 
 `kotlin
 package com.quran.labs.androidquran.common.audio.memorization
@@ -267,8 +314,8 @@ enum class MaskingLevel {
 /**
  * Configuration options for the Intelligent Quran Memorization Mode.
  *
- * @param startAyah The first Ayah in the memorization session.
- * @param endAyah The last Ayah in the memorization session.
+ * @param startAyah The first Ayah in the memorization session (or first ayah of first segment).
+ * @param endAyah The last Ayah in the memorization session (or last ayah of last segment).
  * @param windowSize Number of Ayahs in each active memorization chunk (default 4).
  * @param singleRepeat Number of times each new Ayah is repeated individually (Rs, default 3).
  * @param connectRepeat Number of times accumulated Ayahs in the window are repeated together (Rc, default 2).
@@ -277,11 +324,14 @@ enum class MaskingLevel {
  * @param maskingLevel Progressive masking difficulty (OFF, MASK_ON_CONNECT, PROGRESSIVE_SOLO_AND_CONNECT).
  * @param recordRecitation When true, records user's voice recitation during pauses for self-check replay.
  * @param enableBridge When true, plays a bridge step connecting the previous window with the new window before advancing.
+ * @param segments Optional list of [PlaylistSegment]s if this session is driven by a custom cross-Surah playlist.
+ * @param playlistId Optional ID of the custom playlist being memorized.
+ * @param playlistName Optional name of the custom playlist being memorized.
  */
 @Parcelize
 data class MemorizationConfig(
-  val startAyah: SuraAyah,
-  val endAyah: SuraAyah,
+  val startAyah: SuraAyah = SuraAyah(1, 1),
+  val endAyah: SuraAyah = SuraAyah(1, 1),
   val windowSize: Int = 4,
   val singleRepeat: Int = 3,
   val connectRepeat: Int = 2,
@@ -289,58 +339,32 @@ data class MemorizationConfig(
   val memoryTestMode: Boolean = false,
   val maskingLevel: MaskingLevel = if (memoryTestMode) MaskingLevel.MASK_ON_CONNECT else MaskingLevel.OFF,
   val recordRecitation: Boolean = false,
-  val enableBridge: Boolean = true
+  val enableBridge: Boolean = true,
+  val segments: List<PlaylistSegment> = emptyList(),
+  val playlistId: String? = null,
+  val playlistName: String? = null
 ) : Parcelable {
   init {
     require(windowSize >= 1) { "windowSize must be at least 1" }
     require(singleRepeat >= 1) { "singleRepeat must be at least 1" }
     require(connectRepeat >= 1) { "connectRepeat must be at least 1" }
-    require(startAyah <= endAyah) { "startAyah ($startAyah) must be <= endAyah ($endAyah)" }
+    if (segments.isEmpty()) {
+      require(startAyah <= endAyah) { "startAyah ($startAyah) must be <= endAyah ($endAyah)" }
+    }
   }
+
+  /**
+   * Returns true if this configuration is driven by a cross-Surah custom playlist.
+   */
+  val isCustomPlaylist: Boolean
+    get() = segments.isNotEmpty()
 }
 
 `
 
 ---
 
-### File: common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationDelayMode.kt
-
-`kotlin
-package com.quran.labs.androidquran.common.audio.memorization
-
-import android.os.Parcelable
-import kotlinx.parcelize.Parcelize
-
-/**
- * Delay mode between Ayah repetitions allowing silent recitation or pause.
- */
-@Parcelize
-sealed class MemorizationDelayMode : Parcelable {
-  /**
-   * No pause between repetitions.
-   */
-  @Parcelize
-  data object None : MemorizationDelayMode()
-
-  /**
-   * Fixed pause duration in seconds after each repetition.
-   */
-  @Parcelize
-  data class FixedSeconds(val seconds: Int) : MemorizationDelayMode()
-
-  /**
-   * Wait for the exact playback duration of the just-played Ayah
-   * so the user can recite it silently with matching timing.
-   */
-  @Parcelize
-  data object MatchAyahDuration : MemorizationDelayMode()
-}
-
-`
-
----
-
-### File: common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationStep.kt
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationStep.kt
 
 `kotlin
 package com.quran.labs.androidquran.common.audio.memorization
@@ -389,7 +413,7 @@ data class MemorizationStep(
 
 ---
 
-### File: common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationState.kt
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationState.kt
 
 `kotlin
 package com.quran.labs.androidquran.common.audio.memorization
@@ -457,7 +481,599 @@ data class MemorizationState(
 
 ---
 
-### File: common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPlanBuilder.kt
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationDelayMode.kt
+
+`kotlin
+package com.quran.labs.androidquran.common.audio.memorization
+
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
+
+/**
+ * Delay mode between Ayah repetitions allowing silent recitation or pause.
+ */
+@Parcelize
+sealed class MemorizationDelayMode : Parcelable {
+  /**
+   * No pause between repetitions.
+   */
+  @Parcelize
+  data object None : MemorizationDelayMode()
+
+  /**
+   * Fixed pause duration in seconds after each repetition.
+   */
+  @Parcelize
+  data class FixedSeconds(val seconds: Int) : MemorizationDelayMode()
+
+  /**
+   * Wait for the exact playback duration of the just-played Ayah
+   * so the user can recite it silently with matching timing.
+   */
+  @Parcelize
+  data object MatchAyahDuration : MemorizationDelayMode()
+}
+
+`
+
+---
+
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MasteredRange.kt
+
+`kotlin
+package com.quran.labs.androidquran.common.audio.memorization
+
+import android.os.Parcelable
+import com.quran.data.model.SuraAyah
+import kotlinx.parcelize.Parcelize
+
+/**
+ * Represents a completed memorization range logged in mastery history.
+ *
+ * @param startAyah The first Ayah in the mastered range.
+ * @param endAyah The last Ayah in the mastered range.
+ * @param timestamp Epoch milliseconds when the range was completed.
+ * @param repetitions Total repetitions completed across the session.
+ */
+@Parcelize
+data class MasteredRange(
+  val startAyah: SuraAyah,
+  val endAyah: SuraAyah,
+  val timestamp: Long,
+  val repetitions: Int
+) : Parcelable {
+
+  /**
+   * Serializes this range to a compact string format:
+   * "startSura:startAyah-endSura:endAyah@timestamp#repetitions"
+   */
+  fun serialize(): String =
+    "${startAyah.sura}:${startAyah.ayah}-${endAyah.sura}:${endAyah.ayah}@$timestamp#$repetitions"
+
+  companion object {
+    /**
+     * Parses a serialized string into a [MasteredRange], or returns null if invalid.
+     */
+    fun deserialize(value: String): MasteredRange? {
+      return try {
+        val atParts = value.split("@")
+        if (atParts.size != 2) return null
+        val rangePart = atParts[0]
+        val metaPart = atParts[1]
+
+        val rangeParts = rangePart.split("-")
+        if (rangeParts.size != 2) return null
+
+        val startParts = rangeParts[0].split(":")
+        val endParts = rangeParts[1].split(":")
+        if (startParts.size != 2 || endParts.size != 2) return null
+
+        val metaParts = metaPart.split("#")
+        val timestamp = metaParts[0].toLong()
+        val reps = if (metaParts.size > 1) metaParts[1].toInt() else 1
+
+        MasteredRange(
+          startAyah = SuraAyah(startParts[0].toInt(), startParts[1].toInt()),
+          endAyah = SuraAyah(endParts[0].toInt(), endParts[1].toInt()),
+          timestamp = timestamp,
+          repetitions = reps
+        )
+      } catch (e: Exception) {
+        null
+      }
+    }
+  }
+}
+
+`
+
+---
+
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/PlaylistSegment.kt
+
+`kotlin
+package com.quran.labs.androidquran.common.audio.memorization
+
+import android.os.Parcelable
+import com.quran.data.core.QuranInfo
+import com.quran.data.model.SuraAyah
+import kotlinx.parcelize.Parcelize
+
+/**
+ * Represents a single sequence of Ayahs from a Surah in a custom playlist.
+ *
+ * @param sura The Surah number (1-114).
+ * @param startAyah The starting Ayah number in the segment.
+ * @param endAyah The ending Ayah number in the segment.
+ * @param isFullSurah True if this segment spans the full Surah.
+ * @param customLabel Optional display label (e.g. "Al-Hamd", "Al-Baqarah 1–7").
+ */
+@Parcelize
+data class PlaylistSegment(
+  val sura: Int,
+  val startAyah: Int = 1,
+  val endAyah: Int = 1,
+  val isFullSurah: Boolean = true,
+  val customLabel: String = ""
+) : Parcelable {
+
+  init {
+    require(sura in 1..114) { "sura must be between 1 and 114" }
+    require(startAyah in 1..endAyah) { "startAyah ($startAyah) must be <= endAyah ($endAyah)" }
+  }
+
+  /**
+   * Generates all [SuraAyah] instances in this segment in sequential order.
+   */
+  fun toAyahs(): List<SuraAyah> {
+    return (startAyah..endAyah).map { SuraAyah(sura, it) }
+  }
+
+  /**
+   * Serializes to a compact delimiter string: "sura:startAyah-endAyah:isFullSurah:customLabel"
+   */
+  fun serialize(): String {
+    val escapedLabel = customLabel.replace(":", " ").replace("|", " ").replace(";", " ")
+    return "$sura:$startAyah-$endAyah:$isFullSurah:$escapedLabel"
+  }
+
+  companion object {
+    fun createFullSurah(sura: Int, quranInfo: QuranInfo, label: String = ""): PlaylistSegment {
+      val totalAyahs = quranInfo.getNumberOfAyahs(sura).coerceAtLeast(1)
+      return PlaylistSegment(
+        sura = sura,
+        startAyah = 1,
+        endAyah = totalAyahs,
+        isFullSurah = true,
+        customLabel = label
+      )
+    }
+
+    fun deserialize(value: String): PlaylistSegment? {
+      return try {
+        val parts = value.split(":")
+        if (parts.size < 3) return null
+        val sura = parts[0].toInt()
+        val range = parts[1].split("-")
+        val start = range[0].toInt()
+        val end = range[1].toInt()
+        val isFull = parts[2].toBoolean()
+        val label = if (parts.size > 3) parts[3] else ""
+        PlaylistSegment(
+          sura = sura,
+          startAyah = start,
+          endAyah = end,
+          isFullSurah = isFull,
+          customLabel = label
+        )
+      } catch (e: Exception) {
+        null
+      }
+    }
+  }
+}
+
+`
+
+---
+
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/CustomPlaylist.kt
+
+`kotlin
+package com.quran.labs.androidquran.common.audio.memorization
+
+import android.os.Parcelable
+import com.quran.data.model.SuraAyah
+import kotlinx.parcelize.Parcelize
+import java.util.UUID
+
+/**
+ * Represents a user-defined playlist of Quran segments across one or more Surahs.
+ *
+ * @param id Unique identifier (UUID).
+ * @param name User-assigned name for the playlist (e.g. "Daily Recitation").
+ * @param segments Ordered list of [PlaylistSegment] instances forming this playlist.
+ * @param createdAt Creation epoch millisecond timestamp.
+ * @param lastPlayedAt Epoch timestamp when this playlist was last played or memorized.
+ */
+@Parcelize
+data class CustomPlaylist(
+  val id: String = UUID.randomUUID().toString(),
+  val name: String,
+  val segments: List<PlaylistSegment> = emptyList(),
+  val createdAt: Long = System.currentTimeMillis(),
+  val lastPlayedAt: Long = 0L
+) : Parcelable {
+
+  /**
+   * Flattens all segments into an ordered sequence of [SuraAyah]s.
+   */
+  fun toFlattenedAyahs(): List<SuraAyah> {
+    return segments.flatMap { it.toAyahs() }
+  }
+
+  /**
+   * Total count of individual Ayahs across all segments.
+   */
+  val totalAyahsCount: Int
+    get() = segments.sumOf { (it.endAyah - it.startAyah + 1).coerceAtLeast(0) }
+
+  /**
+   * Display summary string (e.g. "7 segments • 35 Ayahs").
+   */
+  val summary: String
+    get() = "${segments.size} segment${if (segments.size == 1) "" else "s"} • $totalAyahsCount Ayahs"
+
+  /**
+   * Serializes playlist to delimiter string format.
+   */
+  fun serialize(): String {
+    val safeName = name.replace("##", " ").replace("\n", " ").replace(";;", " ")
+    val segs = segments.joinToString(",") { it.serialize() }
+    return "$id##$safeName##$createdAt##$lastPlayedAt##$segs"
+  }
+
+  companion object {
+    fun deserialize(value: String): CustomPlaylist? {
+      return try {
+        val parts = value.split("##")
+        if (parts.size < 4) return null
+        val id = parts[0]
+        val name = parts[1]
+        val createdAt = parts[2].toLong()
+        val lastPlayedAt = parts[3].toLong()
+        val segs = if (parts.size > 4 && parts[4].isNotBlank()) {
+          parts[4].split(",").mapNotNull { PlaylistSegment.deserialize(it) }
+        } else {
+          emptyList()
+        }
+        CustomPlaylist(
+          id = id,
+          name = name,
+          segments = segs,
+          createdAt = createdAt,
+          lastPlayedAt = lastPlayedAt
+        )
+      } catch (e: Exception) {
+        null
+      }
+    }
+  }
+}
+
+`
+
+---
+
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/PlaylistRepository.kt
+
+`kotlin
+package com.quran.labs.androidquran.common.audio.memorization
+
+import android.content.Context
+import android.content.SharedPreferences
+import com.quran.data.di.AppScope
+import com.quran.mobile.di.qualifier.ApplicationContext
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+
+/**
+ * Repository managing persistent storage, retrieval, and updating of [CustomPlaylist]s.
+ */
+@SingleIn(AppScope::class)
+class PlaylistRepository(
+  private val prefs: SharedPreferences
+) {
+
+  @Inject
+  constructor(@ApplicationContext context: Context) : this(
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+  )
+
+  /**
+   * Retrieves all saved playlists in descending order of last played (or created).
+   */
+  fun getAllPlaylists(): List<CustomPlaylist> {
+    val raw = prefs.getString(KEY_ALL_PLAYLISTS, null) ?: return emptyList()
+    if (raw.isBlank()) return emptyList()
+    return raw.split(DELIMITER_PLAYLIST)
+      .mapNotNull { CustomPlaylist.deserialize(it) }
+      .sortedWith(compareByDescending<CustomPlaylist> { it.lastPlayedAt }.thenByDescending { it.createdAt })
+  }
+
+  /**
+   * Finds a playlist by its unique [id].
+   */
+  fun getPlaylistById(id: String): CustomPlaylist? {
+    return getAllPlaylists().firstOrNull { it.id == id }
+  }
+
+  /**
+   * Saves or updates a [playlist].
+   */
+  fun savePlaylist(playlist: CustomPlaylist) {
+    val existing = getAllPlaylists().toMutableList()
+    val index = existing.indexOfFirst { it.id == playlist.id }
+    if (index >= 0) {
+      existing[index] = playlist
+    } else {
+      existing.add(0, playlist)
+    }
+    persistPlaylists(existing)
+  }
+
+  /**
+   * Deletes a playlist by its [id].
+   */
+  fun deletePlaylist(id: String) {
+    val existing = getAllPlaylists().toMutableList()
+    existing.removeAll { it.id == id }
+    persistPlaylists(existing)
+  }
+
+  /**
+   * Updates the `lastPlayedAt` timestamp of a playlist when it is started.
+   */
+  fun updateLastPlayed(id: String, timestamp: Long = System.currentTimeMillis()) {
+    val playlist = getPlaylistById(id) ?: return
+    savePlaylist(playlist.copy(lastPlayedAt = timestamp))
+  }
+
+  /**
+   * Clears all playlists from storage.
+   */
+  fun clearAllPlaylists() {
+    prefs.edit().remove(KEY_ALL_PLAYLISTS).apply()
+  }
+
+  private fun persistPlaylists(playlists: List<CustomPlaylist>) {
+    val serialized = playlists.joinToString(DELIMITER_PLAYLIST) { it.serialize() }
+    prefs.edit().putString(KEY_ALL_PLAYLISTS, serialized).apply()
+  }
+
+  companion object {
+    private const val PREFS_NAME = "quran_custom_playlists_prefs"
+    private const val KEY_ALL_PLAYLISTS = "custom_playlists_data"
+    private const val DELIMITER_PLAYLIST = ";;;"
+  }
+}
+
+`
+
+---
+
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPreferences.kt
+
+`kotlin
+package com.quran.labs.androidquran.common.audio.memorization
+
+import android.content.Context
+import android.content.SharedPreferences
+import com.quran.data.di.AppScope
+import com.quran.data.model.SuraAyah
+import com.quran.mobile.di.qualifier.ApplicationContext
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+
+/**
+ * Handles persistent storage of memorization session progress, configuration,
+ * custom playlist sessions, and mastered ranges history.
+ */
+@SingleIn(AppScope::class)
+class MemorizationPreferences(
+  private val prefs: SharedPreferences
+) {
+
+  @Inject
+  constructor(@ApplicationContext context: Context) : this(
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+  )
+
+  /**
+   * Saves active memorization configuration and progress step.
+   */
+  fun saveSession(config: MemorizationConfig, currentStepIndex: Int, currentRepeatIteration: Int) {
+    val editor = prefs.edit()
+      .putInt(KEY_START_SURA, config.startAyah.sura)
+      .putInt(KEY_START_AYAH, config.startAyah.ayah)
+      .putInt(KEY_END_SURA, config.endAyah.sura)
+      .putInt(KEY_END_AYAH, config.endAyah.ayah)
+      .putInt(KEY_WINDOW_SIZE, config.windowSize)
+      .putInt(KEY_SINGLE_REPEAT, config.singleRepeat)
+      .putInt(KEY_CONNECT_REPEAT, config.connectRepeat)
+      .putBoolean(KEY_MEMORY_TEST, config.memoryTestMode)
+      .putString(KEY_MASKING_LEVEL, config.maskingLevel.name)
+      .putBoolean(KEY_RECORD_RECITATION, config.recordRecitation)
+      .putBoolean(KEY_ENABLE_BRIDGE, config.enableBridge)
+      .putInt(KEY_SAVED_STEP_INDEX, currentStepIndex)
+      .putInt(KEY_SAVED_REPEAT, currentRepeatIteration)
+      .putBoolean(KEY_HAS_ACTIVE_SESSION, true)
+
+    if (config.segments.isNotEmpty()) {
+      editor.putString(KEY_SEGMENTS, config.segments.joinToString(",") { it.serialize() })
+      editor.putString(KEY_PLAYLIST_ID, config.playlistId)
+      editor.putString(KEY_PLAYLIST_NAME, config.playlistName)
+    } else {
+      editor.remove(KEY_SEGMENTS)
+      editor.remove(KEY_PLAYLIST_ID)
+      editor.remove(KEY_PLAYLIST_NAME)
+    }
+
+    when (val mode = config.delayMode) {
+      is MemorizationDelayMode.None -> {
+        editor.putString(KEY_DELAY_MODE, VALUE_DELAY_NONE)
+      }
+      is MemorizationDelayMode.FixedSeconds -> {
+        editor.putString(KEY_DELAY_MODE, VALUE_DELAY_FIXED)
+        editor.putInt(KEY_DELAY_SECONDS, mode.seconds)
+      }
+      is MemorizationDelayMode.MatchAyahDuration -> {
+        editor.putString(KEY_DELAY_MODE, VALUE_DELAY_MATCH)
+      }
+    }
+
+    editor.apply()
+  }
+
+  /**
+   * Clears saved session on completion or manual termination.
+   */
+  fun clearSession() {
+    prefs.edit().putBoolean(KEY_HAS_ACTIVE_SESSION, false).apply()
+  }
+
+  /**
+   * Returns true if there is an unfinished memorization session saved.
+   */
+  fun hasSavedSession(): Boolean = prefs.getBoolean(KEY_HAS_ACTIVE_SESSION, false)
+
+  /**
+   * Retrieves the saved session's [MemorizationConfig], or null if none exists.
+   */
+  fun getSavedConfig(): MemorizationConfig? {
+    if (!hasSavedSession()) return null
+    val startSura = prefs.getInt(KEY_START_SURA, 1)
+    val startAyah = prefs.getInt(KEY_START_AYAH, 1)
+    val endSura = prefs.getInt(KEY_END_SURA, 1)
+    val endAyah = prefs.getInt(KEY_END_AYAH, 1)
+
+    val delayModeStr = prefs.getString(KEY_DELAY_MODE, VALUE_DELAY_NONE)
+    val delayMode = when (delayModeStr) {
+      VALUE_DELAY_FIXED -> MemorizationDelayMode.FixedSeconds(prefs.getInt(KEY_DELAY_SECONDS, 3))
+      VALUE_DELAY_MATCH -> MemorizationDelayMode.MatchAyahDuration
+      else -> MemorizationDelayMode.None
+    }
+
+    val memoryTest = prefs.getBoolean(KEY_MEMORY_TEST, false)
+    val maskingLevelStr = prefs.getString(KEY_MASKING_LEVEL, null)
+    val maskingLevel = if (maskingLevelStr != null) {
+      try {
+        MaskingLevel.valueOf(maskingLevelStr)
+      } catch (e: Exception) {
+        if (memoryTest) MaskingLevel.MASK_ON_CONNECT else MaskingLevel.OFF
+      }
+    } else {
+      if (memoryTest) MaskingLevel.MASK_ON_CONNECT else MaskingLevel.OFF
+    }
+
+    val recordRecitation = prefs.getBoolean(KEY_RECORD_RECITATION, false)
+
+    val segmentsStr = prefs.getString(KEY_SEGMENTS, null)
+    val segments = if (!segmentsStr.isNullOrBlank()) {
+      segmentsStr.split(",").mapNotNull { PlaylistSegment.deserialize(it) }
+    } else {
+      emptyList()
+    }
+    val playlistId = prefs.getString(KEY_PLAYLIST_ID, null)
+    val playlistName = prefs.getString(KEY_PLAYLIST_NAME, null)
+
+    return MemorizationConfig(
+      startAyah = SuraAyah(startSura, startAyah),
+      endAyah = SuraAyah(endSura, endAyah),
+      windowSize = prefs.getInt(KEY_WINDOW_SIZE, 4),
+      singleRepeat = prefs.getInt(KEY_SINGLE_REPEAT, 3),
+      connectRepeat = prefs.getInt(KEY_CONNECT_REPEAT, 2),
+      delayMode = delayMode,
+      memoryTestMode = memoryTest,
+      maskingLevel = maskingLevel,
+      recordRecitation = recordRecitation,
+      enableBridge = prefs.getBoolean(KEY_ENABLE_BRIDGE, true),
+      segments = segments,
+      playlistId = playlistId,
+      playlistName = playlistName
+    )
+  }
+
+  fun getSavedStepIndex(): Int = prefs.getInt(KEY_SAVED_STEP_INDEX, 0)
+
+  fun getSavedRepeatIteration(): Int = prefs.getInt(KEY_SAVED_REPEAT, 1)
+
+  /**
+   * Logs a completed memorization range into mastery history.
+   * Keeps most recent ranges first, limited to [MAX_MASTERED_RANGES].
+   */
+  fun saveMasteredRange(range: MasteredRange) {
+    val existing = getMasteredRanges().toMutableList()
+    existing.removeAll { it.startAyah == range.startAyah && it.endAyah == range.endAyah }
+    existing.add(0, range)
+    val limited = existing.take(MAX_MASTERED_RANGES)
+    val serialized = limited.joinToString(DELIMITER_ITEM) { it.serialize() }
+    prefs.edit().putString(KEY_MASTERED_RANGES, serialized).apply()
+  }
+
+  /**
+   * Returns list of mastered ranges in descending order of completion.
+   */
+  fun getMasteredRanges(): List<MasteredRange> {
+    val raw = prefs.getString(KEY_MASTERED_RANGES, null) ?: return emptyList()
+    if (raw.isBlank()) return emptyList()
+    return raw.split(DELIMITER_ITEM).mapNotNull { MasteredRange.deserialize(it) }
+  }
+
+  /**
+   * Clears the mastered ranges history.
+   */
+  fun clearMasteredRanges() {
+    prefs.edit().remove(KEY_MASTERED_RANGES).apply()
+  }
+
+  companion object {
+    private const val PREFS_NAME = "quran_intelligent_memorizer_prefs"
+    private const val KEY_START_SURA = "mem_start_sura"
+    private const val KEY_START_AYAH = "mem_start_ayah"
+    private const val KEY_END_SURA = "mem_end_sura"
+    private const val KEY_END_AYAH = "mem_end_ayah"
+    private const val KEY_WINDOW_SIZE = "mem_window_size"
+    private const val KEY_SINGLE_REPEAT = "mem_single_repeat"
+    private const val KEY_CONNECT_REPEAT = "mem_connect_repeat"
+    private const val KEY_MEMORY_TEST = "mem_test_mode"
+    private const val KEY_MASKING_LEVEL = "mem_masking_level"
+    private const val KEY_RECORD_RECITATION = "mem_record_recitation"
+    private const val KEY_DELAY_MODE = "mem_delay_mode"
+    private const val KEY_DELAY_SECONDS = "mem_delay_seconds"
+    private const val KEY_ENABLE_BRIDGE = "mem_enable_bridge"
+    private const val KEY_SAVED_STEP_INDEX = "mem_step_idx"
+    private const val KEY_SAVED_REPEAT = "mem_repeat_iter"
+    private const val KEY_HAS_ACTIVE_SESSION = "mem_has_session"
+    private const val KEY_MASTERED_RANGES = "mem_mastered_ranges"
+    private const val KEY_SEGMENTS = "mem_segments"
+    private const val KEY_PLAYLIST_ID = "mem_playlist_id"
+    private const val KEY_PLAYLIST_NAME = "mem_playlist_name"
+
+    private const val VALUE_DELAY_NONE = "NONE"
+    private const val VALUE_DELAY_FIXED = "FIXED"
+    private const val VALUE_DELAY_MATCH = "MATCH"
+
+    private const val DELIMITER_ITEM = "|"
+    private const val MAX_MASTERED_RANGES = 30
+  }
+}
+
+`
+
+---
+
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPlanBuilder.kt
 
 `kotlin
 package com.quran.labs.androidquran.common.audio.memorization
@@ -467,7 +1083,8 @@ import com.quran.data.model.SuraAyah
 
 /**
  * Builds a deterministic, progressive sliding-window plan of steps
- * for Quran memorization according to the algorithm specification.
+ * for Quran memorization according to the algorithm specification,
+ * supporting both single contiguous ranges and custom cross-Surah playlists.
  */
 object MemorizationPlanBuilder {
 
@@ -488,9 +1105,14 @@ object MemorizationPlanBuilder {
 
   /**
    * Constructs the full sequence of [MemorizationStep]s for the provided [config].
+   * If [config.segments] is populated, flattens all segments across Surahs.
    */
   fun buildPlan(config: MemorizationConfig, quranInfo: QuranInfo): List<MemorizationStep> {
-    val allAyahs = getAyahsInRange(config.startAyah, config.endAyah, quranInfo)
+    val allAyahs = if (config.segments.isNotEmpty()) {
+      config.segments.flatMap { it.toAyahs() }
+    } else {
+      getAyahsInRange(config.startAyah, config.endAyah, quranInfo)
+    }
     if (allAyahs.isEmpty()) return emptyList()
 
     val windows = allAyahs.chunked(config.windowSize)
@@ -503,6 +1125,7 @@ object MemorizationPlanBuilder {
 
       for (j in windowAyahs.indices) {
         val currentAyah = windowAyahs[j]
+        val ayahLabel = "Surah ${currentAyah.sura}:${currentAyah.ayah}"
 
         // 1. Solo Step for current Ayah
         steps.add(
@@ -515,7 +1138,7 @@ object MemorizationPlanBuilder {
             targetRepeatCount = config.singleRepeat,
             delayMode = config.delayMode,
             isMaskedByDefault = false,
-            description = "Ayah ${currentAyah.ayah} Solo"
+            description = "$ayahLabel Solo"
           )
         )
 
@@ -531,14 +1154,22 @@ object MemorizationPlanBuilder {
               targetRepeatCount = 1,
               delayMode = config.delayMode,
               isMaskedByDefault = config.memoryTestMode,
-              description = "Recitation Pause (Ayah ${currentAyah.ayah})"
+              description = "Recitation Pause ($ayahLabel)"
             )
           )
         }
 
         // 2. Connect Step if 2 or more Ayahs accumulated in current window
-        if (j > 0) {
+        if (j > 0 && config.connectRepeat > 0) {
           val connectedAyahs = windowAyahs.subList(0, j + 1)
+          val first = connectedAyahs.first()
+          val last = connectedAyahs.last()
+          val connectLabel = if (first.sura == last.sura) {
+            "Connecting Ayah ${first.ayah}–${last.ayah} (Surah ${first.sura})"
+          } else {
+            "Connecting ${first.sura}:${first.ayah} ➔ ${last.sura}:${last.ayah}"
+          }
+
           steps.add(
             MemorizationStep(
               stepIndex = stepIndex++,
@@ -549,7 +1180,7 @@ object MemorizationPlanBuilder {
               targetRepeatCount = config.connectRepeat,
               delayMode = config.delayMode,
               isMaskedByDefault = config.memoryTestMode,
-              description = "Connecting Ayah ${connectedAyahs.first().ayah}–${connectedAyahs.last().ayah}"
+              description = connectLabel
             )
           )
 
@@ -565,7 +1196,7 @@ object MemorizationPlanBuilder {
                 targetRepeatCount = 1,
                 delayMode = config.delayMode,
                 isMaskedByDefault = config.memoryTestMode,
-                description = "Recitation Pause (Connecting ${connectedAyahs.first().ayah}–${connectedAyahs.last().ayah})"
+                description = "Recitation Pause ($connectLabel)"
               )
             )
           }
@@ -576,6 +1207,14 @@ object MemorizationPlanBuilder {
       if (config.enableBridge && wIdx < totalWindows - 1) {
         val nextWindow = windows[wIdx + 1]
         val bridgeAyahs = listOf(windowAyahs.last(), nextWindow.first())
+        val bFirst = bridgeAyahs[0]
+        val bSecond = bridgeAyahs[1]
+        val bridgeLabel = if (bFirst.sura == bSecond.sura) {
+          "Bridge Ayah ${bFirst.ayah} ➔ ${bSecond.ayah}"
+        } else {
+          "Bridge ${bFirst.sura}:${bFirst.ayah} ➔ ${bSecond.sura}:${bSecond.ayah}"
+        }
+
         steps.add(
           MemorizationStep(
             stepIndex = stepIndex++,
@@ -586,7 +1225,7 @@ object MemorizationPlanBuilder {
             targetRepeatCount = 1,
             delayMode = MemorizationDelayMode.None,
             isMaskedByDefault = config.memoryTestMode,
-            description = "Bridge Window ${wIdx + 1} ➔ ${wIdx + 2}"
+            description = bridgeLabel
           )
         )
       }
@@ -600,7 +1239,7 @@ object MemorizationPlanBuilder {
 
 ---
 
-### File: common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationEngine.kt
+### common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationEngine.kt
 
 `kotlin
 package com.quran.labs.androidquran.common.audio.memorization
@@ -908,185 +1547,248 @@ class MemorizationEngine @Inject constructor(
 
 ---
 
-### File: common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPreferences.kt
+### common/audio/src/test/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPlanBuilderTest.kt
 
 `kotlin
 package com.quran.labs.androidquran.common.audio.memorization
 
-import android.content.Context
-import android.content.SharedPreferences
-import com.quran.data.di.AppScope
+import com.google.common.truth.Truth.assertThat
+import com.quran.data.core.QuranInfo
 import com.quran.data.model.SuraAyah
-import com.quran.mobile.di.qualifier.ApplicationContext
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
+import com.quran.labs.androidquran.pages.data.madani.MadaniDataSource
+import org.junit.Before
+import org.junit.Test
 
-/**
- * Handles persistent storage of memorization session progress, configuration,
- * and mastered ranges history.
- */
-@SingleIn(AppScope::class)
-class MemorizationPreferences(
-  private val prefs: SharedPreferences
-) {
+class MemorizationPlanBuilderTest {
 
-  @Inject
-  constructor(@ApplicationContext context: Context) : this(
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-  )
+  private lateinit var quranInfo: QuranInfo
 
-  /**
-   * Saves active memorization configuration and progress step.
-   */
-  fun saveSession(config: MemorizationConfig, currentStepIndex: Int, currentRepeatIteration: Int) {
-    val editor = prefs.edit()
-      .putInt(KEY_START_SURA, config.startAyah.sura)
-      .putInt(KEY_START_AYAH, config.startAyah.ayah)
-      .putInt(KEY_END_SURA, config.endAyah.sura)
-      .putInt(KEY_END_AYAH, config.endAyah.ayah)
-      .putInt(KEY_WINDOW_SIZE, config.windowSize)
-      .putInt(KEY_SINGLE_REPEAT, config.singleRepeat)
-      .putInt(KEY_CONNECT_REPEAT, config.connectRepeat)
-      .putBoolean(KEY_MEMORY_TEST, config.memoryTestMode)
-      .putString(KEY_MASKING_LEVEL, config.maskingLevel.name)
-      .putBoolean(KEY_RECORD_RECITATION, config.recordRecitation)
-      .putBoolean(KEY_ENABLE_BRIDGE, config.enableBridge)
-      .putInt(KEY_SAVED_STEP_INDEX, currentStepIndex)
-      .putInt(KEY_SAVED_REPEAT, currentRepeatIteration)
-      .putBoolean(KEY_HAS_ACTIVE_SESSION, true)
-
-    when (val mode = config.delayMode) {
-      is MemorizationDelayMode.None -> {
-        editor.putString(KEY_DELAY_MODE, VALUE_DELAY_NONE)
-      }
-      is MemorizationDelayMode.FixedSeconds -> {
-        editor.putString(KEY_DELAY_MODE, VALUE_DELAY_FIXED)
-        editor.putInt(KEY_DELAY_SECONDS, mode.seconds)
-      }
-      is MemorizationDelayMode.MatchAyahDuration -> {
-        editor.putString(KEY_DELAY_MODE, VALUE_DELAY_MATCH)
-      }
-    }
-
-    editor.apply()
+  @Before
+  fun setup() {
+    quranInfo = QuranInfo(MadaniDataSource())
   }
 
-  /**
-   * Clears saved session on completion or manual termination.
-   */
-  fun clearSession() {
-    prefs.edit().putBoolean(KEY_HAS_ACTIVE_SESSION, false).apply()
+  @Test
+  fun `getAyahsInRange returns exact sequence within single sura`() {
+    val start = SuraAyah(1, 1)
+    val end = SuraAyah(1, 7)
+
+    val ayahs = MemorizationPlanBuilder.getAyahsInRange(start, end, quranInfo)
+
+    assertThat(ayahs).hasSize(7)
+    assertThat(ayahs.first()).isEqualTo(SuraAyah(1, 1))
+    assertThat(ayahs.last()).isEqualTo(SuraAyah(1, 7))
   }
 
-  /**
-   * Returns true if there is an unfinished memorization session saved.
-   */
-  fun hasSavedSession(): Boolean = prefs.getBoolean(KEY_HAS_ACTIVE_SESSION, false)
+  @Test
+  fun `getAyahsInRange crosses sura boundary correctly`() {
+    val start = SuraAyah(113, 4)
+    val end = SuraAyah(114, 2)
 
-  /**
-   * Retrieves the saved session's [MemorizationConfig], or null if none exists.
-   */
-  fun getSavedConfig(): MemorizationConfig? {
-    if (!hasSavedSession()) return null
-    val startSura = prefs.getInt(KEY_START_SURA, 1)
-    val startAyah = prefs.getInt(KEY_START_AYAH, 1)
-    val endSura = prefs.getInt(KEY_END_SURA, 1)
-    val endAyah = prefs.getInt(KEY_END_AYAH, 1)
+    val ayahs = MemorizationPlanBuilder.getAyahsInRange(start, end, quranInfo)
 
-    val delayModeStr = prefs.getString(KEY_DELAY_MODE, VALUE_DELAY_NONE)
-    val delayMode = when (delayModeStr) {
-      VALUE_DELAY_FIXED -> MemorizationDelayMode.FixedSeconds(prefs.getInt(KEY_DELAY_SECONDS, 3))
-      VALUE_DELAY_MATCH -> MemorizationDelayMode.MatchAyahDuration
-      else -> MemorizationDelayMode.None
-    }
+    // Sura 113 has 5 ayahs (4, 5) -> 2 ayahs
+    // Sura 114 has 6 ayahs (1, 2) -> 2 ayahs
+    // Total 4 ayahs
+    assertThat(ayahs).containsExactly(
+      SuraAyah(113, 4),
+      SuraAyah(113, 5),
+      SuraAyah(114, 1),
+      SuraAyah(114, 2)
+    ).inOrder()
+  }
 
-    val memoryTest = prefs.getBoolean(KEY_MEMORY_TEST, false)
-    val maskingLevelStr = prefs.getString(KEY_MASKING_LEVEL, null)
-    val maskingLevel = if (maskingLevelStr != null) {
-      try {
-        MaskingLevel.valueOf(maskingLevelStr)
-      } catch (e: Exception) {
-        if (memoryTest) MaskingLevel.MASK_ON_CONNECT else MaskingLevel.OFF
-      }
-    } else {
-      if (memoryTest) MaskingLevel.MASK_ON_CONNECT else MaskingLevel.OFF
-    }
-
-    val recordRecitation = prefs.getBoolean(KEY_RECORD_RECITATION, false)
-
-    return MemorizationConfig(
-      startAyah = SuraAyah(startSura, startAyah),
-      endAyah = SuraAyah(endSura, endAyah),
-      windowSize = prefs.getInt(KEY_WINDOW_SIZE, 4),
-      singleRepeat = prefs.getInt(KEY_SINGLE_REPEAT, 3),
-      connectRepeat = prefs.getInt(KEY_CONNECT_REPEAT, 2),
-      delayMode = delayMode,
-      memoryTestMode = memoryTest,
-      maskingLevel = maskingLevel,
-      recordRecitation = recordRecitation,
-      enableBridge = prefs.getBoolean(KEY_ENABLE_BRIDGE, true)
+  @Test
+  fun `buildPlan produces correct sequence for window size 4 without delay`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 4),
+      windowSize = 4,
+      singleRepeat = 3,
+      connectRepeat = 2,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
     )
+
+    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
+
+    // Window [A1, A2, A3, A4]:
+    // 1. A1 Solo (Rs = 3)
+    // 2. A2 Solo (Rs = 3)
+    // 3. Connect A1..A2 (Rc = 2)
+    // 4. A3 Solo (Rs = 3)
+    // 5. Connect A1..A3 (Rc = 2)
+    // 6. A4 Solo (Rs = 3)
+    // 7. Connect A1..A4 (Rc = 2)
+    assertThat(plan).hasSize(7)
+
+    // Step 0: A1 Solo
+    assertThat(plan[0].stepType).isEqualTo(StepType.SOLO)
+    assertThat(plan[0].ayahs).containsExactly(SuraAyah(1, 1))
+    assertThat(plan[0].targetRepeatCount).isEqualTo(3)
+
+    // Step 1: A2 Solo
+    assertThat(plan[1].stepType).isEqualTo(StepType.SOLO)
+    assertThat(plan[1].ayahs).containsExactly(SuraAyah(1, 2))
+    assertThat(plan[1].targetRepeatCount).isEqualTo(3)
+
+    // Step 2: Connect A1..A2
+    assertThat(plan[2].stepType).isEqualTo(StepType.CONNECT)
+    assertThat(plan[2].ayahs).containsExactly(SuraAyah(1, 1), SuraAyah(1, 2)).inOrder()
+    assertThat(plan[2].targetRepeatCount).isEqualTo(2)
+
+    // Step 3: A3 Solo
+    assertThat(plan[3].stepType).isEqualTo(StepType.SOLO)
+    assertThat(plan[3].ayahs).containsExactly(SuraAyah(1, 3))
+    assertThat(plan[3].targetRepeatCount).isEqualTo(3)
+
+    // Step 4: Connect A1..A3
+    assertThat(plan[4].stepType).isEqualTo(StepType.CONNECT)
+    assertThat(plan[4].ayahs).containsExactly(SuraAyah(1, 1), SuraAyah(1, 2), SuraAyah(1, 3)).inOrder()
+    assertThat(plan[4].targetRepeatCount).isEqualTo(2)
+
+    // Step 5: A4 Solo
+    assertThat(plan[5].stepType).isEqualTo(StepType.SOLO)
+    assertThat(plan[5].ayahs).containsExactly(SuraAyah(1, 4))
+    assertThat(plan[5].targetRepeatCount).isEqualTo(3)
+
+    // Step 6: Connect A1..A4
+    assertThat(plan[6].stepType).isEqualTo(StepType.CONNECT)
+    assertThat(plan[6].ayahs).containsExactly(
+      SuraAyah(1, 1), SuraAyah(1, 2), SuraAyah(1, 3), SuraAyah(1, 4)
+    ).inOrder()
+    assertThat(plan[6].targetRepeatCount).isEqualTo(2)
   }
 
-  fun getSavedStepIndex(): Int = prefs.getInt(KEY_SAVED_STEP_INDEX, 0)
+  @Test
+  fun `buildPlan includes recitation pauses when delayMode is active`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 2,
+      connectRepeat = 2,
+      delayMode = MemorizationDelayMode.FixedSeconds(5),
+      memoryTestMode = true,
+      enableBridge = false
+    )
 
-  fun getSavedRepeatIteration(): Int = prefs.getInt(KEY_SAVED_REPEAT, 1)
+    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
 
-  /**
-   * Logs a completed memorization range into mastery history.
-   * Keeps most recent ranges first, limited to [MAX_MASTERED_RANGES].
-   */
-  fun saveMasteredRange(range: MasteredRange) {
-    val existing = getMasteredRanges().toMutableList()
-    existing.removeAll { it.startAyah == range.startAyah && it.endAyah == range.endAyah }
-    existing.add(0, range)
-    val limited = existing.take(MAX_MASTERED_RANGES)
-    val serialized = limited.joinToString(DELIMITER_ITEM) { it.serialize() }
-    prefs.edit().putString(KEY_MASTERED_RANGES, serialized).apply()
+    // Expected for 2 ayahs with delay:
+    // 0: A1 Solo
+    // 1: Recitation Pause (A1)
+    // 2: A2 Solo
+    // 3: Recitation Pause (A2)
+    // 4: Connect A1..A2
+    // 5: Recitation Pause (A1..A2)
+    assertThat(plan).hasSize(6)
+    assertThat(plan[0].stepType).isEqualTo(StepType.SOLO)
+    assertThat(plan[1].stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
+    assertThat(plan[1].isMaskedByDefault).isTrue()
+    assertThat(plan[2].stepType).isEqualTo(StepType.SOLO)
+    assertThat(plan[3].stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
+    assertThat(plan[4].stepType).isEqualTo(StepType.CONNECT)
+    assertThat(plan[4].isMaskedByDefault).isTrue()
+    assertThat(plan[5].stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
   }
 
-  /**
-   * Returns list of mastered ranges in descending order of completion.
-   */
-  fun getMasteredRanges(): List<MasteredRange> {
-    val raw = prefs.getString(KEY_MASTERED_RANGES, null) ?: return emptyList()
-    if (raw.isBlank()) return emptyList()
-    return raw.split(DELIMITER_ITEM).mapNotNull { MasteredRange.deserialize(it) }
+  @Test
+  fun `buildPlan adds Bridge step between multiple windows`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 4),
+      windowSize = 2, // 2 windows: [1, 2] and [3, 4]
+      singleRepeat = 1,
+      connectRepeat = 1,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = true
+    )
+
+    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
+
+    // Window 0 has [A1, A2] -> Solo A1, Solo A2, Connect A1..A2
+    // Bridge step between Window 0 and Window 1: connects A2 and A3
+    // Window 1 has [A3, A4] -> Solo A3, Solo A4, Connect A3..A4
+    val bridgeSteps = plan.filter { it.stepType == StepType.BRIDGE }
+    assertThat(bridgeSteps).hasSize(1)
+    assertThat(bridgeSteps.first().ayahs).containsExactly(SuraAyah(1, 2), SuraAyah(1, 3)).inOrder()
+    assertThat(bridgeSteps.first().targetRepeatCount).isEqualTo(1)
   }
 
-  /**
-   * Clears the mastered ranges history.
-   */
-  fun clearMasteredRanges() {
-    prefs.edit().remove(KEY_MASTERED_RANGES).apply()
-  }
+  @Test
+  fun `buildPlan with custom cross-surah segments flattens across multiple surahs`() {
+    // User's exact example:
+    // 1: Al-Hamd (1:1-7)
+    // 2: Al-Baqarah (2:1-7)
+    // 3: Al-Ikhlas (112:1-4)
+    // 4: Al-Kafirun (109:1-6)
+    // 5: Al-Falaq (113:1-5)
+    // 6: An-Nas (114:1-6)
+    // 7: Al-Baqarah (2:270-286)
+    val segments = listOf(
+      PlaylistSegment.createFullSurah(1, quranInfo, "Al-Hamd"),
+      PlaylistSegment(sura = 2, startAyah = 1, endAyah = 7, isFullSurah = false, customLabel = "Al-Baqarah 1-7"),
+      PlaylistSegment.createFullSurah(112, quranInfo, "Al-Ikhlas"),
+      PlaylistSegment.createFullSurah(109, quranInfo, "Al-Kafirun"),
+      PlaylistSegment.createFullSurah(113, quranInfo, "Al-Falaq"),
+      PlaylistSegment.createFullSurah(114, quranInfo, "An-Nas"),
+      PlaylistSegment(sura = 2, startAyah = 270, endAyah = 286, isFullSurah = false, customLabel = "Al-Baqarah 270-286")
+    )
 
-  companion object {
-    private const val PREFS_NAME = "quran_intelligent_memorizer_prefs"
-    private const val KEY_START_SURA = "mem_start_sura"
-    private const val KEY_START_AYAH = "mem_start_ayah"
-    private const val KEY_END_SURA = "mem_end_sura"
-    private const val KEY_END_AYAH = "mem_end_ayah"
-    private const val KEY_WINDOW_SIZE = "mem_window_size"
-    private const val KEY_SINGLE_REPEAT = "mem_single_repeat"
-    private const val KEY_CONNECT_REPEAT = "mem_connect_repeat"
-    private const val KEY_MEMORY_TEST = "mem_test_mode"
-    private const val KEY_MASKING_LEVEL = "mem_masking_level"
-    private const val KEY_RECORD_RECITATION = "mem_record_recitation"
-    private const val KEY_DELAY_MODE = "mem_delay_mode"
-    private const val KEY_DELAY_SECONDS = "mem_delay_seconds"
-    private const val KEY_ENABLE_BRIDGE = "mem_enable_bridge"
-    private const val KEY_SAVED_STEP_INDEX = "mem_step_idx"
-    private const val KEY_SAVED_REPEAT = "mem_repeat_iter"
-    private const val KEY_HAS_ACTIVE_SESSION = "mem_has_session"
-    private const val KEY_MASTERED_RANGES = "mem_mastered_ranges"
+    val playlist = CustomPlaylist(
+      id = "daily-adhkar",
+      name = "Daily Recitation",
+      segments = segments
+    )
 
-    private const val VALUE_DELAY_NONE = "NONE"
-    private const val VALUE_DELAY_FIXED = "FIXED"
-    private const val VALUE_DELAY_MATCH = "MATCH"
+    // Expected total ayahs: 7 + 7 + 4 + 6 + 5 + 6 + 17 = 52
+    assertThat(playlist.totalAyahsCount).isEqualTo(52)
+    val flattened = playlist.toFlattenedAyahs()
+    assertThat(flattened).hasSize(52)
+    assertThat(flattened.first()).isEqualTo(SuraAyah(1, 1))
+    assertThat(flattened[7]).isEqualTo(SuraAyah(2, 1)) // Transition from Hamd to Baqarah
+    assertThat(flattened.last()).isEqualTo(SuraAyah(2, 286))
 
-    private const val DELIMITER_ITEM = "|"
-    private const val MAX_MASTERED_RANGES = 30
+    val config = MemorizationConfig(
+      windowSize = 4,
+      singleRepeat = 2,
+      connectRepeat = 1,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = true,
+      segments = segments,
+      playlistId = playlist.id,
+      playlistName = playlist.name
+    )
+
+    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
+    assertThat(plan).isNotEmpty()
+
+    // 52 ayahs with window size 4 -> 13 windows
+    val soloSteps = plan.filter { it.stepType == StepType.SOLO }
+    assertThat(soloSteps).hasSize(52)
+
+    // First solo step is 1:1, 8th solo step is 2:1
+    assertThat(soloSteps[0].ayahs.first()).isEqualTo(SuraAyah(1, 1))
+    assertThat(soloSteps[7].ayahs.first()).isEqualTo(SuraAyah(2, 1))
+
+    // Bridge steps connect consecutive windows (13 windows -> 12 bridges)
+    val bridgeSteps = plan.filter { it.stepType == StepType.BRIDGE }
+    assertThat(bridgeSteps).hasSize(12)
+
+    // Window 0 is ayahs [1:1, 1:2, 1:3, 1:4]
+    // Window 1 is ayahs [1:5, 1:6, 1:7, 2:1]
+    // Window 1 contains cross-surah transition between 1:7 and 2:1!
+    // Connect step in Window 1 connects 1:5, 1:6, 1:7, 2:1 across surah boundary!
+    val window1Connects = plan.filter { it.windowIndex == 1 && it.stepType == StepType.CONNECT }
+    assertThat(window1Connects).isNotEmpty()
+    val fullWindow1Connect = window1Connects.last()
+    assertThat(fullWindow1Connect.ayahs).containsExactly(
+      SuraAyah(1, 5),
+      SuraAyah(1, 6),
+      SuraAyah(1, 7),
+      SuraAyah(2, 1)
+    ).inOrder()
   }
 }
 
@@ -1094,70 +1796,401 @@ class MemorizationPreferences(
 
 ---
 
-### File: common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/MasteredRange.kt
+### common/audio/src/test/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationEngineTest.kt
 
 `kotlin
 package com.quran.labs.androidquran.common.audio.memorization
 
-import android.os.Parcelable
+import app.cash.turbine.test
+import com.google.common.truth.Truth.assertThat
+import com.quran.data.core.QuranInfo
 import com.quran.data.model.SuraAyah
-import kotlinx.parcelize.Parcelize
+import com.quran.labs.androidquran.pages.data.madani.MadaniDataSource
+import kotlinx.coroutines.test.runTest
+import org.junit.Before
+import org.junit.Test
 
-/**
- * Represents a completed memorization range logged in mastery history.
- *
- * @param startAyah The first Ayah in the mastered range.
- * @param endAyah The last Ayah in the mastered range.
- * @param timestamp Epoch milliseconds when the range was completed.
- * @param repetitions Total repetitions completed across the session.
- */
-@Parcelize
-data class MasteredRange(
-  val startAyah: SuraAyah,
-  val endAyah: SuraAyah,
-  val timestamp: Long,
-  val repetitions: Int
-) : Parcelable {
+class MemorizationEngineTest {
 
-  /**
-   * Serializes this range to a compact string format:
-   * "startSura:startAyah-endSura:endAyah@timestamp#repetitions"
-   */
-  fun serialize(): String =
-    "${startAyah.sura}:${startAyah.ayah}-${endAyah.sura}:${endAyah.ayah}@$timestamp#$repetitions"
+  private lateinit var quranInfo: QuranInfo
+  private lateinit var engine: MemorizationEngine
 
-  companion object {
-    /**
-     * Parses a serialized string into a [MasteredRange], or returns null if invalid.
-     */
-    fun deserialize(value: String): MasteredRange? {
-      return try {
-        val atParts = value.split("@")
-        if (atParts.size != 2) return null
-        val rangePart = atParts[0]
-        val metaPart = atParts[1]
+  @Before
+  fun setup() {
+    quranInfo = QuranInfo(MadaniDataSource())
+    engine = MemorizationEngine(quranInfo)
+  }
 
-        val rangeParts = rangePart.split("-")
-        if (rangeParts.size != 2) return null
+  @Test
+  fun `initial state is inactive`() {
+    val state = engine.state.value
+    assertThat(state.isActive).isFalse()
+    assertThat(state.currentStep).isNull()
+    assertThat(state.isSessionCompleted).isFalse()
+  }
 
-        val startParts = rangeParts[0].split(":")
-        val endParts = rangeParts[1].split(":")
-        if (startParts.size != 2 || endParts.size != 2) return null
+  @Test
+  fun `startMemorization transitions to active state at first step`() = runTest {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 2,
+      connectRepeat = 2,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
+    )
 
-        val metaParts = metaPart.split("#")
-        val timestamp = metaParts[0].toLong()
-        val reps = if (metaParts.size > 1) metaParts[1].toInt() else 1
+    engine.state.test {
+      val initial = awaitItem()
+      assertThat(initial.isActive).isFalse()
 
-        MasteredRange(
-          startAyah = SuraAyah(startParts[0].toInt(), startParts[1].toInt()),
-          endAyah = SuraAyah(endParts[0].toInt(), endParts[1].toInt()),
-          timestamp = timestamp,
-          repetitions = reps
-        )
-      } catch (e: Exception) {
-        null
-      }
+      engine.startMemorization(config)
+
+      val activeState = awaitItem()
+      assertThat(activeState.isActive).isTrue()
+      assertThat(activeState.currentWindowIndex).isEqualTo(0)
+      assertThat(activeState.currentStepIndex).isEqualTo(0)
+      assertThat(activeState.stepType).isEqualTo(StepType.SOLO)
+      assertThat(activeState.currentPlayingAyah).isEqualTo(SuraAyah(1, 1))
+      assertThat(activeState.currentRepeatIteration).isEqualTo(1)
+      assertThat(activeState.totalRepeatIterations).isEqualTo(2)
+
+      cancelAndIgnoreRemainingEvents()
     }
+  }
+
+  @Test
+  fun `onAyahPlaybackCompleted iterates repeats before advancing step`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 2,
+      connectRepeat = 1,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
+    )
+
+    engine.startMemorization(config)
+
+    // Step 0 is A1 Solo (repeat 2 times). Current iteration is 1.
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(0)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
+
+    // Complete play 1 of Step 0 -> should repeat A1 (iteration 2)
+    val nextAfterPlay1 = engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(nextAfterPlay1).isEqualTo(SuraAyah(1, 1))
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(0)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
+
+    // Complete play 2 of Step 0 -> Step 0 finished! Advance to Step 1 (A2 Solo)
+    val nextAfterPlay2 = engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(nextAfterPlay2).isEqualTo(SuraAyah(1, 2))
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
+    assertThat(engine.state.value.stepType).isEqualTo(StepType.SOLO)
+  }
+
+  @Test
+  fun `CONNECT step sequences through sub-ayahs then repeats`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 1,
+      connectRepeat = 2,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
+    )
+
+    engine.startMemorization(config)
+
+    // Complete Step 0 (A1 Solo x 1)
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    // Complete Step 1 (A2 Solo x 1)
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+
+    // Now at Step 2 (Connect A1..A2, repeat 2 times)
+    val state = engine.state.value
+    assertThat(state.currentStepIndex).isEqualTo(2)
+    assertThat(state.stepType).isEqualTo(StepType.CONNECT)
+    assertThat(state.activeAyahsInStep).containsExactly(SuraAyah(1, 1), SuraAyah(1, 2)).inOrder()
+    assertThat(state.currentPlayingAyah).isEqualTo(SuraAyah(1, 1))
+    assertThat(state.currentRepeatIteration).isEqualTo(1)
+
+    // Ayah 1 of Connect finishes -> should advance to Ayah 2 (same repeat iteration 1)
+    val nextSubAyah = engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(nextSubAyah).isEqualTo(SuraAyah(1, 2))
+    assertThat(engine.state.value.currentSubAyahIndex).isEqualTo(1)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
+
+    // Ayah 2 of Connect finishes -> Repeat 1 complete! Start Repeat 2 at Ayah 1
+    val nextRepeatAyah = engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+    assertThat(nextRepeatAyah).isEqualTo(SuraAyah(1, 1))
+    assertThat(engine.state.value.currentSubAyahIndex).isEqualTo(0)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
+  }
+
+  @Test
+  fun `skipCurrentStep and previousStep navigate plan cleanly`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 3),
+      windowSize = 3,
+      singleRepeat = 3,
+      connectRepeat = 2,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
+    )
+
+    engine.startMemorization(config)
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(0)
+
+    // Skip to Step 1
+    engine.skipCurrentStep()
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
+    assertThat(engine.state.value.currentPlayingAyah).isEqualTo(SuraAyah(1, 2))
+
+    // Skip to Step 2
+    engine.skipCurrentStep()
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(2)
+
+    // Previous step back to Step 1
+    engine.previousStep()
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
+    assertThat(engine.state.value.currentPlayingAyah).isEqualTo(SuraAyah(1, 2))
+  }
+
+  @Test
+  fun `pause and resume update state accordingly`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 1,
+      connectRepeat = 1
+    )
+
+    engine.startMemorization(config)
+    assertThat(engine.state.value.isPaused).isFalse()
+
+    engine.pause()
+    assertThat(engine.state.value.isPaused).isTrue()
+
+    // When paused, onAyahPlaybackCompleted returns null and does not advance
+    val resultWhilePaused = engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(resultWhilePaused).isNull()
+
+    engine.resume()
+    assertThat(engine.state.value.isPaused).isFalse()
+  }
+
+  @Test
+  fun `memoryTestMode enables text masking during connect steps with tap-to-peek`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 1,
+      connectRepeat = 1,
+      memoryTestMode = true
+    )
+
+    engine.startMemorization(config)
+    // Step 0: Solo -> text not masked
+    assertThat(engine.state.value.isTextMasked).isFalse()
+
+    // Complete Step 0 -> Step 1 (Solo A2)
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(engine.state.value.isTextMasked).isFalse()
+
+    // Complete Step 1 -> Step 2 (Connect A1..A2)
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+    assertThat(engine.state.value.stepType).isEqualTo(StepType.CONNECT)
+    // In Memory Test Mode, Connect step has isTextMasked = true
+    assertThat(engine.state.value.isTextMasked).isTrue()
+
+    // Tap to peek (toggle mask)
+    engine.toggleTextMask()
+    assertThat(engine.state.value.isTextMasked).isFalse()
+
+    // Tap to re-mask
+    engine.toggleTextMask()
+    assertThat(engine.state.value.isTextMasked).isTrue()
+  }
+
+  @Test
+  fun `completing all steps marks session completed`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 1,
+      connectRepeat = 1,
+      enableBridge = false
+    )
+
+    engine.startMemorization(config)
+
+    // Complete Step 0 (Solo A1)
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    // Complete Step 1 (Solo A2)
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+    // Step 2 (Connect A1..A2) -> Play A1
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    // Step 2 -> Play A2 -> FINAL STEP COMPLETE!
+    val finalResult = engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+
+    assertThat(finalResult).isNull()
+    assertThat(engine.state.value.isSessionCompleted).isTrue()
+    assertThat(engine.state.value.isActive).isFalse()
+  }
+
+  @Test
+  fun `stopMemorization resets engine cleanly`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 5)
+    )
+
+    engine.startMemorization(config)
+    assertThat(engine.state.value.isActive).isTrue()
+
+    engine.stopMemorization()
+    assertThat(engine.state.value.isActive).isFalse()
+    assertThat(engine.state.value.currentStep).isNull()
+  }
+
+  @Test
+  fun `progressive masking keeps text visible on solo repeat 1 and masks on repeat 2 and connect`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 2),
+      windowSize = 2,
+      singleRepeat = 2,
+      connectRepeat = 1,
+      maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
+    )
+
+    engine.startMemorization(config)
+
+    // Step 0 (Solo A1), Repeat 1: visible
+    assertThat(engine.state.value.stepType).isEqualTo(StepType.SOLO)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
+    assertThat(engine.state.value.isTextMasked).isFalse()
+
+    // Repeat 1 completes -> advances to Repeat 2: masked!
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
+    assertThat(engine.state.value.isTextMasked).isTrue()
+
+    // Solo A1 completes -> Step 1 (Solo A2), Repeat 1: visible
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
+    assertThat(engine.state.value.isTextMasked).isFalse()
+
+    // Repeat 1 completes -> Repeat 2: masked!
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
+    assertThat(engine.state.value.isTextMasked).isTrue()
+
+    // Solo A2 completes -> Step 2 (Connect A1..A2): always masked!
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
+    assertThat(engine.state.value.stepType).isEqualTo(StepType.CONNECT)
+    assertThat(engine.state.value.isTextMasked).isTrue()
+  }
+
+  @Test
+  fun `recitation recording state and pause remaining update correctly`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 1),
+      singleRepeat = 1,
+      delayMode = MemorizationDelayMode.FixedSeconds(5)
+    )
+
+    engine.startMemorization(config)
+    assertThat(engine.state.value.isRecordingRecitation).isFalse()
+    assertThat(engine.state.value.lastRecitationAudioPath).isNull()
+
+    // Solo A1 completes -> advances to PAUSE_FOR_RECITATION step
+    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(engine.state.value.stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
+
+    engine.setRecordingRecitation(true)
+    assertThat(engine.state.value.isRecordingRecitation).isTrue()
+
+    engine.updatePauseRemaining(5)
+    assertThat(engine.state.value.pauseRemainingSeconds).isEqualTo(5)
+    assertThat(engine.state.value.hudSummary).contains("5s")
+    assertThat(engine.state.value.hudSummary).contains("Recording Recitation")
+
+    engine.updateLastRecitationPath("/cache/test.m4a")
+    assertThat(engine.state.value.lastRecitationAudioPath).isEqualTo("/cache/test.m4a")
+  }
+
+  @Test
+  fun `session completion logs mastered range to preferences`() {
+    val prefs = MemorizationPreferences(FakeTestSharedPreferences())
+    val engineWithPrefs = MemorizationEngine(quranInfo, prefs)
+
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 1),
+      windowSize = 1,
+      singleRepeat = 1,
+      connectRepeat = 1,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = false
+    )
+
+    engineWithPrefs.startMemorization(config)
+    assertThat(prefs.getMasteredRanges()).isEmpty()
+
+    // Solo A1 finishes -> session completes!
+    val next = engineWithPrefs.onAyahPlaybackCompleted(SuraAyah(1, 1))
+    assertThat(next).isNull()
+    assertThat(engineWithPrefs.state.value.isSessionCompleted).isTrue()
+
+    val mastered = prefs.getMasteredRanges()
+    assertThat(mastered).hasSize(1)
+    assertThat(mastered[0].startAyah).isEqualTo(SuraAyah(1, 1))
+    assertThat(mastered[0].endAyah).isEqualTo(SuraAyah(1, 1))
+    assertThat(mastered[0].repetitions).isEqualTo(2)
+  }
+
+  private class FakeTestSharedPreferences : android.content.SharedPreferences {
+    private val values = mutableMapOf<String, Any>()
+    override fun getAll(): MutableMap<String, *> = values
+    override fun getString(key: String?, defValue: String?): String? = values[key] as? String ?: defValue
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
+      @Suppress("UNCHECKED_CAST") (values[key] as? MutableSet<String> ?: defValues)
+    override fun getInt(key: String?, defValue: Int): Int = values[key] as? Int ?: defValue
+    override fun getLong(key: String?, defValue: Long): Long = values[key] as? Long ?: defValue
+    override fun getFloat(key: String?, defValue: Float): Float = values[key] as? Float ?: defValue
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean = values[key] as? Boolean ?: defValue
+    override fun contains(key: String?): Boolean = values.containsKey(key)
+    override fun edit(): android.content.SharedPreferences.Editor = object : android.content.SharedPreferences.Editor {
+      private val pending = mutableMapOf<String, Any>()
+      private val removed = mutableSetOf<String>()
+      private var clear = false
+      override fun putString(k: String?, v: String?) = apply { if (k != null && v != null) { pending[k] = v; removed.remove(k) } }
+      override fun putStringSet(k: String?, v: MutableSet<String>?) = apply { if (k != null && v != null) { pending[k] = v; removed.remove(k) } }
+      override fun putInt(k: String?, v: Int) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putLong(k: String?, v: Long) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putFloat(k: String?, v: Float) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putBoolean(k: String?, v: Boolean) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun remove(k: String?) = apply { if (k != null) { pending.remove(k); removed.add(k) } }
+      override fun clear() = apply { clear = true }
+      override fun commit(): Boolean { apply(); return true }
+      override fun apply() { if (clear) values.clear(); for (k in removed) values.remove(k); values.putAll(pending) }
+    }
+    override fun registerOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
+    override fun unregisterOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
   }
 }
 
@@ -1165,162 +2198,257 @@ data class MasteredRange(
 
 ---
 
-### File: app/src/main/java/com/quran/labs/androidquran/service/memorization/RecitationRecorder.kt
+### common/audio/src/test/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPreferencesTest.kt
 
 `kotlin
-package com.quran.labs.androidquran.service.memorization
+package com.quran.labs.androidquran.common.audio.memorization
 
-import android.content.Context
-import android.media.MediaPlayer
-import android.media.MediaRecorder
-import android.os.Build
-import timber.log.Timber
-import java.io.File
+import android.content.SharedPreferences
+import com.google.common.truth.Truth.assertThat
+import com.quran.data.model.SuraAyah
+import org.junit.Before
+import org.junit.Test
 
-/**
- * Handles recording the user's voice recitation during silent recitation pauses
- * and optional self-check playback against the Qari.
- */
-class RecitationRecorder(private val context: Context) {
+class MemorizationPreferencesTest {
 
-  private var mediaRecorder: MediaRecorder? = null
-  private var currentOutputFile: File? = null
-  private var isRecording = false
-  private var activePlayer: MediaPlayer? = null
+  private lateinit var fakePrefs: FakeSharedPreferences
+  private lateinit var memorizationPreferences: MemorizationPreferences
 
-  /**
-   * Starts recording user recitation into the specified output file.
-   */
-  fun startRecording(outputFile: File): Boolean {
-    stopRecording()
-    stopPlayback()
+  @Before
+  fun setUp() {
+    fakePrefs = FakeSharedPreferences()
+    memorizationPreferences = MemorizationPreferences(fakePrefs)
+  }
 
-    return try {
-      if (outputFile.exists()) {
-        outputFile.delete()
-      }
+  @Test
+  fun `initial state has no active session and empty history`() {
+    assertThat(memorizationPreferences.hasSavedSession()).isFalse()
+    assertThat(memorizationPreferences.getSavedConfig()).isNull()
+    assertThat(memorizationPreferences.getMasteredRanges()).isEmpty()
+  }
 
-      val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        MediaRecorder(context)
-      } else {
-        @Suppress("DEPRECATION")
-        MediaRecorder()
-      }
+  @Test
+  fun `saveSession persists configuration and progress`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(2, 255),
+      endAyah = SuraAyah(2, 257),
+      windowSize = 3,
+      singleRepeat = 5,
+      connectRepeat = 4,
+      delayMode = MemorizationDelayMode.FixedSeconds(3),
+      memoryTestMode = true,
+      maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
+      recordRecitation = true,
+      enableBridge = false
+    )
 
-      recorder.apply {
-        setAudioSource(MediaRecorder.AudioSource.MIC)
-        setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        setAudioEncodingBitRate(128000)
-        setAudioSamplingRate(44100)
-        setOutputFile(outputFile.absolutePath)
-        prepare()
-        start()
-      }
+    memorizationPreferences.saveSession(config, currentStepIndex = 4, currentRepeatIteration = 2)
 
-      mediaRecorder = recorder
-      currentOutputFile = outputFile
-      isRecording = true
-      Timber.d("RecitationRecorder: recording started to ${outputFile.absolutePath}")
-      true
-    } catch (e: Exception) {
-      Timber.e(e, "RecitationRecorder: failed to start recording")
-      cleanup()
-      false
-    }
+    assertThat(memorizationPreferences.hasSavedSession()).isTrue()
+    val savedConfig = memorizationPreferences.getSavedConfig()
+    assertThat(savedConfig).isNotNull()
+    assertThat(savedConfig?.startAyah).isEqualTo(SuraAyah(2, 255))
+    assertThat(savedConfig?.endAyah).isEqualTo(SuraAyah(2, 257))
+    assertThat(savedConfig?.windowSize).isEqualTo(3)
+    assertThat(savedConfig?.singleRepeat).isEqualTo(5)
+    assertThat(savedConfig?.connectRepeat).isEqualTo(4)
+    assertThat(savedConfig?.delayMode).isEqualTo(MemorizationDelayMode.FixedSeconds(3))
+    assertThat(savedConfig?.memoryTestMode).isTrue()
+    assertThat(savedConfig?.maskingLevel).isEqualTo(MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT)
+    assertThat(savedConfig?.recordRecitation).isTrue()
+    assertThat(savedConfig?.enableBridge).isFalse()
+
+    assertThat(memorizationPreferences.getSavedStepIndex()).isEqualTo(4)
+    assertThat(memorizationPreferences.getSavedRepeatIteration()).isEqualTo(2)
+  }
+
+  @Test
+  fun `saveSession persists match duration delay mode correctly`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 7),
+      delayMode = MemorizationDelayMode.MatchAyahDuration
+    )
+
+    memorizationPreferences.saveSession(config, 0, 1)
+    val saved = memorizationPreferences.getSavedConfig()
+    assertThat(saved?.delayMode).isEqualTo(MemorizationDelayMode.MatchAyahDuration)
+  }
+
+  @Test
+  fun `clearSession removes active session flag`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 7)
+    )
+    memorizationPreferences.saveSession(config, 0, 1)
+    assertThat(memorizationPreferences.hasSavedSession()).isTrue()
+
+    memorizationPreferences.clearSession()
+
+    assertThat(memorizationPreferences.hasSavedSession()).isFalse()
+    assertThat(memorizationPreferences.getSavedConfig()).isNull()
+  }
+
+  @Test
+  fun `mastered range serialization and deserialization works`() {
+    val range = MasteredRange(
+      startAyah = SuraAyah(2, 255),
+      endAyah = SuraAyah(2, 257),
+      timestamp = 1729000000000L,
+      repetitions = 7
+    )
+
+    val serialized = range.serialize()
+    assertThat(serialized).isEqualTo("2:255-2:257@1729000000000#7")
+
+    val deserialized = MasteredRange.deserialize(serialized)
+    assertThat(deserialized).isEqualTo(range)
+  }
+
+  @Test
+  fun `saveMasteredRange adds to history in descending order with deduplication`() {
+    val r1 = MasteredRange(SuraAyah(1, 1), SuraAyah(1, 7), 1000L, 5)
+    val r2 = MasteredRange(SuraAyah(2, 1), SuraAyah(2, 5), 2000L, 6)
+    val r3 = MasteredRange(SuraAyah(1, 1), SuraAyah(1, 7), 3000L, 8) // Re-memorized range 1
+
+    memorizationPreferences.saveMasteredRange(r1)
+    memorizationPreferences.saveMasteredRange(r2)
+
+    val history = memorizationPreferences.getMasteredRanges()
+    assertThat(history).hasSize(2)
+    assertThat(history[0]).isEqualTo(r2)
+    assertThat(history[1]).isEqualTo(r1)
+
+    // Re-memorizing r1 brings it to the top and updates repetitions/timestamp
+    memorizationPreferences.saveMasteredRange(r3)
+    val updatedHistory = memorizationPreferences.getMasteredRanges()
+    assertThat(updatedHistory).hasSize(2)
+    assertThat(updatedHistory[0]).isEqualTo(r3)
+    assertThat(updatedHistory[1]).isEqualTo(r2)
+  }
+
+  @Test
+  fun `clearMasteredRanges empties history`() {
+    val r1 = MasteredRange(SuraAyah(1, 1), SuraAyah(1, 7), 1000L, 5)
+    memorizationPreferences.saveMasteredRange(r1)
+    assertThat(memorizationPreferences.getMasteredRanges()).isNotEmpty()
+
+    memorizationPreferences.clearMasteredRanges()
+    assertThat(memorizationPreferences.getMasteredRanges()).isEmpty()
   }
 
   /**
-   * Stops the active recording and returns the file path if successful.
+   * Lightweight in-memory implementation of [SharedPreferences] for unit tests.
    */
-  fun stopRecording(): String? {
-    if (!isRecording) return null
-    val file = currentOutputFile
-    try {
-      mediaRecorder?.stop()
-      mediaRecorder?.release()
-    } catch (e: Exception) {
-      Timber.e(e, "RecitationRecorder: error stopping recorder")
-    } finally {
-      mediaRecorder = null
-      isRecording = false
-    }
+  private class FakeSharedPreferences : SharedPreferences {
+    private val values = mutableMapOf<String, Any>()
 
-    return if (file != null && file.exists() && file.length() > 0) {
-      Timber.d("RecitationRecorder: recording stopped successfully, size = ${file.length()} bytes")
-      file.absolutePath
-    } else {
-      null
-    }
-  }
+    override fun getAll(): MutableMap<String, *> = values
 
-  /**
-   * Cancels recording and deletes any partial output file.
-   */
-  fun cancelRecording() {
-    stopRecording()
-    cleanupFile()
-  }
+    override fun getString(key: String?, defValue: String?): String? =
+      values[key] as? String ?: defValue
 
-  /**
-   * Plays back the recorded recitation.
-   */
-  fun playRecording(audioPath: String, onCompletion: () -> Unit): Boolean {
-    stopPlayback()
-    val file = File(audioPath)
-    if (!file.exists() || file.length() == 0L) return false
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
+      @Suppress("UNCHECKED_CAST") (values[key] as? MutableSet<String> ?: defValues)
 
-    return try {
-      val player = MediaPlayer().apply {
-        setDataSource(file.absolutePath)
-        setOnCompletionListener {
-          it.release()
-          if (activePlayer == it) activePlayer = null
-          onCompletion()
+    override fun getInt(key: String?, defValue: Int): Int =
+      values[key] as? Int ?: defValue
+
+    override fun getLong(key: String?, defValue: Long): Long =
+      values[key] as? Long ?: defValue
+
+    override fun getFloat(key: String?, defValue: Float): Float =
+      values[key] as? Float ?: defValue
+
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean =
+      values[key] as? Boolean ?: defValue
+
+    override fun contains(key: String?): Boolean = values.containsKey(key)
+
+    override fun edit(): SharedPreferences.Editor = FakeEditor(values)
+
+    override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+
+    override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+
+    private class FakeEditor(private val target: MutableMap<String, Any>) : SharedPreferences.Editor {
+      private val pending = mutableMapOf<String, Any>()
+      private val removed = mutableSetOf<String>()
+      private var clear = false
+
+      override fun putString(key: String?, value: String?): SharedPreferences.Editor {
+        if (key != null && value != null) {
+          pending[key] = value
+          removed.remove(key)
         }
-        prepare()
-        start()
+        return this
       }
-      activePlayer = player
-      true
-    } catch (e: Exception) {
-      Timber.e(e, "RecitationRecorder: playback error")
-      false
+
+      override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor {
+        if (key != null && values != null) {
+          pending[key] = values
+          removed.remove(key)
+        }
+        return this
+      }
+
+      override fun putInt(key: String?, value: Int): SharedPreferences.Editor {
+        if (key != null) {
+          pending[key] = value
+          removed.remove(key)
+        }
+        return this
+      }
+
+      override fun putLong(key: String?, value: Long): SharedPreferences.Editor {
+        if (key != null) {
+          pending[key] = value
+          removed.remove(key)
+        }
+        return this
+      }
+
+      override fun putFloat(key: String?, value: Float): SharedPreferences.Editor {
+        if (key != null) {
+          pending[key] = value
+          removed.remove(key)
+        }
+        return this
+      }
+
+      override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor {
+        if (key != null) {
+          pending[key] = value
+          removed.remove(key)
+        }
+        return this
+      }
+
+      override fun remove(key: String?): SharedPreferences.Editor {
+        if (key != null) {
+          pending.remove(key)
+          removed.add(key)
+        }
+        return this
+      }
+
+      override fun clear(): SharedPreferences.Editor {
+        clear = true
+        return this
+      }
+
+      override fun commit(): Boolean {
+        apply()
+        return true
+      }
+
+      override fun apply() {
+        if (clear) target.clear()
+        for (k in removed) target.remove(k)
+        target.putAll(pending)
+      }
     }
-  }
-
-  /**
-   * Stops active playback.
-   */
-  fun stopPlayback() {
-    try {
-      activePlayer?.stop()
-      activePlayer?.release()
-    } catch (e: Exception) {
-      Timber.e(e, "RecitationRecorder: error stopping playback")
-    } finally {
-      activePlayer = null
-    }
-  }
-
-  fun isCurrentlyRecording(): Boolean = isRecording
-
-  fun isCurrentlyPlaying(): Boolean = activePlayer?.isPlaying == true
-
-  private fun cleanup() {
-    try {
-      mediaRecorder?.release()
-    } catch (ignored: Exception) {}
-    mediaRecorder = null
-    isRecording = false
-    cleanupFile()
-  }
-
-  private fun cleanupFile() {
-    try {
-      currentOutputFile?.delete()
-    } catch (ignored: Exception) {}
-    currentOutputFile = null
   }
 }
 
@@ -1328,7 +2456,855 @@ class RecitationRecorder(private val context: Context) {
 
 ---
 
-### File: feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationHud.kt
+### common/audio/src/test/java/com/quran/labs/androidquran/common/audio/memorization/PlaylistRepositoryTest.kt
+
+`kotlin
+package com.quran.labs.androidquran.common.audio.memorization
+
+import android.content.SharedPreferences
+import com.google.common.truth.Truth.assertThat
+import com.quran.data.core.QuranInfo
+import com.quran.labs.androidquran.pages.data.madani.MadaniDataSource
+import org.junit.Before
+import org.junit.Test
+
+class PlaylistRepositoryTest {
+
+  private lateinit var fakePrefs: FakeSharedPreferences
+  private lateinit var repository: PlaylistRepository
+  private lateinit var quranInfo: QuranInfo
+
+  @Before
+  fun setUp() {
+    fakePrefs = FakeSharedPreferences()
+    repository = PlaylistRepository(fakePrefs)
+    quranInfo = QuranInfo(MadaniDataSource())
+  }
+
+  @Test
+  fun `initial state has no playlists`() {
+    assertThat(repository.getAllPlaylists()).isEmpty()
+  }
+
+  @Test
+  fun `save and retrieve single playlist`() {
+    val seg1 = PlaylistSegment.createFullSurah(1, quranInfo, "Al-Hamd")
+    val seg2 = PlaylistSegment(sura = 2, startAyah = 1, endAyah = 7, isFullSurah = false, customLabel = "Al-Baqarah 1-7")
+    val playlist = CustomPlaylist(
+      id = "test-pl-1",
+      name = "Daily Recitation",
+      segments = listOf(seg1, seg2),
+      createdAt = 1000L,
+      lastPlayedAt = 2000L
+    )
+
+    repository.savePlaylist(playlist)
+
+    val all = repository.getAllPlaylists()
+    assertThat(all).hasSize(1)
+    val retrieved = all[0]
+    assertThat(retrieved.id).isEqualTo("test-pl-1")
+    assertThat(retrieved.name).isEqualTo("Daily Recitation")
+    assertThat(retrieved.segments).hasSize(2)
+    assertThat(retrieved.segments[0].sura).isEqualTo(1)
+    assertThat(retrieved.segments[0].startAyah).isEqualTo(1)
+    assertThat(retrieved.segments[0].endAyah).isEqualTo(7)
+    assertThat(retrieved.segments[0].isFullSurah).isTrue()
+    assertThat(retrieved.segments[1].sura).isEqualTo(2)
+    assertThat(retrieved.segments[1].startAyah).isEqualTo(1)
+    assertThat(retrieved.segments[1].endAyah).isEqualTo(7)
+    assertThat(retrieved.segments[1].isFullSurah).isFalse()
+
+    val byId = repository.getPlaylistById("test-pl-1")
+    assertThat(byId).isNotNull()
+    assertThat(byId?.name).isEqualTo("Daily Recitation")
+  }
+
+  @Test
+  fun `update existing playlist`() {
+    val playlist = CustomPlaylist(
+      id = "test-pl-1",
+      name = "Original Name",
+      segments = listOf(PlaylistSegment.createFullSurah(1, quranInfo))
+    )
+    repository.savePlaylist(playlist)
+
+    val updated = playlist.copy(name = "Updated Name")
+    repository.savePlaylist(updated)
+
+    val all = repository.getAllPlaylists()
+    assertThat(all).hasSize(1)
+    assertThat(all[0].name).isEqualTo("Updated Name")
+  }
+
+  @Test
+  fun `delete playlist`() {
+    val pl1 = CustomPlaylist(id = "1", name = "First")
+    val pl2 = CustomPlaylist(id = "2", name = "Second")
+    repository.savePlaylist(pl1)
+    repository.savePlaylist(pl2)
+
+    assertThat(repository.getAllPlaylists()).hasSize(2)
+
+    repository.deletePlaylist("1")
+    val remaining = repository.getAllPlaylists()
+    assertThat(remaining).hasSize(1)
+    assertThat(remaining[0].id).isEqualTo("2")
+  }
+
+  @Test
+  fun `updateLastPlayed changes lastPlayedAt and ordering`() {
+    val pl1 = CustomPlaylist(id = "1", name = "First", createdAt = 100L, lastPlayedAt = 100L)
+    val pl2 = CustomPlaylist(id = "2", name = "Second", createdAt = 200L, lastPlayedAt = 200L)
+    repository.savePlaylist(pl1)
+    repository.savePlaylist(pl2)
+
+    // Initially pl2 has higher lastPlayedAt
+    assertThat(repository.getAllPlaylists()[0].id).isEqualTo("2")
+
+    // Update pl1 to higher lastPlayedAt
+    repository.updateLastPlayed("1", 500L)
+    assertThat(repository.getAllPlaylists()[0].id).isEqualTo("1")
+  }
+
+  @Test
+  fun `clearAllPlaylists empties repository`() {
+    repository.savePlaylist(CustomPlaylist(id = "1", name = "First"))
+    assertThat(repository.getAllPlaylists()).isNotEmpty()
+
+    repository.clearAllPlaylists()
+    assertThat(repository.getAllPlaylists()).isEmpty()
+  }
+
+  private class FakeSharedPreferences : SharedPreferences {
+    private val values = mutableMapOf<String, Any>()
+    override fun getAll(): MutableMap<String, *> = values
+    override fun getString(key: String?, defValue: String?): String? = values[key] as? String ?: defValue
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
+      @Suppress("UNCHECKED_CAST") (values[key] as? MutableSet<String> ?: defValues)
+    override fun getInt(key: String?, defValue: Int): Int = values[key] as? Int ?: defValue
+    override fun getLong(key: String?, defValue: Long): Long = values[key] as? Long ?: defValue
+    override fun getFloat(key: String?, defValue: Float): Float = values[key] as? Float ?: defValue
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean = values[key] as? Boolean ?: defValue
+    override fun contains(key: String?): Boolean = values.containsKey(key)
+    override fun edit(): SharedPreferences.Editor = object : SharedPreferences.Editor {
+      private val pending = mutableMapOf<String, Any>()
+      private val removed = mutableSetOf<String>()
+      private var clear = false
+      override fun putString(k: String?, v: String?) = apply { if (k != null && v != null) { pending[k] = v; removed.remove(k) } }
+      override fun putStringSet(k: String?, v: MutableSet<String>?) = apply { if (k != null && v != null) { pending[k] = v; removed.remove(k) } }
+      override fun putInt(k: String?, v: Int) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putLong(k: String?, v: Long) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putFloat(k: String?, v: Float) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun putBoolean(k: String?, v: Boolean) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
+      override fun remove(k: String?) = apply { if (k != null) { pending.remove(k); removed.add(k) } }
+      override fun clear() = apply { clear = true }
+      override fun commit(): Boolean { apply(); return true }
+      override fun apply() { if (clear) values.clear(); for (k in removed) values.remove(k); values.putAll(pending) }
+    }
+    override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+    override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+  }
+}
+
+`
+
+---
+
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationSetupSheet.kt
+
+`kotlin
+package com.quran.mobile.feature.audiobar.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
+import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
+import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
+
+/**
+ * Bottom sheet modal dialog for configuring and launching an Intelligent Quran Memorization session.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MemorizationSetupSheet(
+  initialStartAyah: SuraAyah,
+  initialEndAyah: SuraAyah,
+  onStartMemorization: (MemorizationConfig) -> Unit,
+  onDismissRequest: () -> Unit,
+  savedSessionConfig: MemorizationConfig? = null,
+  savedSessionStep: Int = 0,
+  onResumeSession: (() -> Unit)? = null,
+  masteredRanges: List<MasteredRange> = emptyList(),
+  onReviewRange: ((MasteredRange) -> Unit)? = null,
+  savedPlaylists: List<CustomPlaylist> = emptyList(),
+  initialPlaylist: CustomPlaylist? = null,
+  sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+) {
+  var selectedPlaylist by remember { mutableStateOf<CustomPlaylist?>(initialPlaylist) }
+  var startAyahNum by remember { mutableIntStateOf(initialStartAyah.ayah) }
+  var endAyahNum by remember { mutableIntStateOf(initialEndAyah.ayah.coerceAtLeast(initialStartAyah.ayah + 3)) }
+  var windowSize by remember { mutableIntStateOf(4) }
+  var singleRepeat by remember { mutableIntStateOf(3) }
+  var connectRepeat by remember { mutableIntStateOf(2) }
+  var selectedDelayOption by remember { mutableIntStateOf(0) } // 0: None, 1: 3s, 2: 5s, 3: Match Duration
+  var maskingLevel by remember { mutableStateOf(MaskingLevel.OFF) }
+  var recordRecitation by remember { mutableStateOf(false) }
+  var enableBridge by remember { mutableStateOf(true) }
+
+  ModalBottomSheet(
+    onDismissRequest = onDismissRequest,
+    sheetState = sheetState
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp)
+        .padding(bottom = 32.dp)
+        .verticalScroll(rememberScrollState())
+    ) {
+      Text(
+        text = "Intelligent Memorization",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold
+      )
+
+      Text(
+        text = "Surah ${initialStartAyah.sura} • Progressive Sliding Window Learning",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
+      if (savedSessionConfig != null && onResumeSession != null) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(
+          modifier = Modifier.fillMaxWidth(),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+          )
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "Resume Last Session",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+              )
+              Text(
+                text = "Surah ${savedSessionConfig.startAyah.sura}:${savedSessionConfig.startAyah.ayah}–${savedSessionConfig.endAyah.ayah} • Step ${savedSessionStep + 1}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+              )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+              onClick = onResumeSession,
+              colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+              )
+            ) {
+              Text("Resume")
+            }
+          }
+        }
+      }
+
+      if (masteredRanges.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+          text = "Recently Mastered & Quick Review",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          masteredRanges.take(3).forEach { range ->
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+              )
+            ) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = "Surah ${range.startAyah.sura}:${range.startAyah.ayah}–${range.endAyah.ayah}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                  )
+                  Text(
+                    text = "Mastered • ${range.repetitions}x repeats",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+
+                FilledTonalButton(
+                  onClick = {
+                    if (onReviewRange != null) {
+                      onReviewRange(range)
+                    } else {
+                      onStartMemorization(
+                        MemorizationConfig(
+                          startAyah = range.startAyah,
+                          endAyah = range.endAyah,
+                          windowSize = 4,
+                          singleRepeat = 1,
+                          connectRepeat = 2,
+                          delayMode = MemorizationDelayMode.None,
+                          memoryTestMode = true,
+                          maskingLevel = MaskingLevel.MASK_ON_CONNECT,
+                          recordRecitation = false,
+                          enableBridge = false
+                        )
+                      )
+                    }
+                  },
+                  contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                ) {
+                  Text("Review Now", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+              }
+            }
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(16.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      if (savedPlaylists.isNotEmpty() || selectedPlaylist != null) {
+        Text(
+          text = "Memorization Target",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          FilterChip(
+            selected = selectedPlaylist == null,
+            onClick = { selectedPlaylist = null },
+            label = { Text("Current Surah") }
+          )
+
+          savedPlaylists.forEach { pl ->
+            FilterChip(
+              selected = selectedPlaylist?.id == pl.id,
+              onClick = { selectedPlaylist = pl },
+              label = { Text(pl.name) }
+            )
+          }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+      }
+
+      val currentPl = selectedPlaylist
+      if (currentPl != null) {
+        Card(
+          modifier = Modifier.fillMaxWidth(),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+          )
+        ) {
+          Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+              text = "Playlist: ${currentPl.name}",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+              text = "${currentPl.summary} across Surahs",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+          }
+        }
+      } else {
+        // Ayah Range Selector
+        Text(
+          text = "Ayah Range",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold
+        )
+
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          NumberStepper(
+            label = "From Ayah",
+            value = startAyahNum,
+            onValueChange = {
+              startAyahNum = it.coerceAtLeast(1)
+              if (endAyahNum < startAyahNum) endAyahNum = startAyahNum
+            }
+          )
+
+          NumberStepper(
+            label = "To Ayah",
+            value = endAyahNum,
+            onValueChange = {
+              endAyahNum = it.coerceAtLeast(startAyahNum)
+            }
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Parameters: Window Size, Single Repeat, Connect Repeat
+      Text(
+        text = "Memorization Parameters",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold
+      )
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+      ) {
+        NumberStepper(
+          label = "Window Size",
+          value = windowSize,
+          onValueChange = { windowSize = it.coerceIn(1, 10) }
+        )
+
+        NumberStepper(
+          label = "Solo Repeat",
+          value = singleRepeat,
+          onValueChange = { singleRepeat = it.coerceIn(1, 10) }
+        )
+
+        NumberStepper(
+          label = "Connect Repeat",
+          value = connectRepeat,
+          onValueChange = { connectRepeat = it.coerceIn(1, 10) }
+        )
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Delay Mode (Recitation Pause)
+      Text(
+        text = "Pause Between Repetitions (Silent Recitation)",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold
+      )
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        FilterChip(
+          selected = selectedDelayOption == 0,
+          onClick = { selectedDelayOption = 0 },
+          label = { Text("None") }
+        )
+        FilterChip(
+          selected = selectedDelayOption == 1,
+          onClick = { selectedDelayOption = 1 },
+          label = { Text("3 sec") }
+        )
+        FilterChip(
+          selected = selectedDelayOption == 2,
+          onClick = { selectedDelayOption = 2 },
+          label = { Text("5 sec") }
+        )
+        FilterChip(
+          selected = selectedDelayOption == 3,
+          onClick = { selectedDelayOption = 3 },
+          label = { Text("Match Ayah") }
+        )
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Memory Test Masking Difficulty
+      Text(
+        text = "Memory Test Masking",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold
+      )
+
+      Spacer(modifier = Modifier.height(4.dp))
+
+      Text(
+        text = "Masks Ayah text so you can test your memory (tap Peek anytime to reveal)",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        FilterChip(
+          selected = maskingLevel == MaskingLevel.OFF,
+          onClick = { maskingLevel = MaskingLevel.OFF },
+          label = { Text("Off") }
+        )
+        FilterChip(
+          selected = maskingLevel == MaskingLevel.MASK_ON_CONNECT,
+          onClick = { maskingLevel = MaskingLevel.MASK_ON_CONNECT },
+          label = { Text("Connect Steps") }
+        )
+        FilterChip(
+          selected = maskingLevel == MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
+          onClick = { maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT },
+          label = { Text("Progressive") }
+        )
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Record & Replay My Recitation Toggle
+      val canRecord = selectedDelayOption != 0
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column(modifier = Modifier.weight(1f)) {
+          Text(
+            text = "Record & Replay My Recitation",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = if (canRecord) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+          )
+          Text(
+            text = if (canRecord) "Records your voice during pauses for instant self-check against the Qari"
+                   else "Requires a recitation pause duration (select 3s, 5s, or Match Ayah above)",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+        Switch(
+          checked = recordRecitation && canRecord,
+          enabled = canRecord,
+          onCheckedChange = { recordRecitation = it }
+        )
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Bridge Step Toggle
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column(modifier = Modifier.weight(1f)) {
+          Text(
+            text = "Connect Windows with Bridge Step",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium
+          )
+          Text(
+            text = "Recites transition between consecutive windows",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+        Switch(
+          checked = enableBridge,
+          onCheckedChange = { enableBridge = it }
+        )
+      }
+
+      Spacer(modifier = Modifier.height(20.dp))
+
+      // Action Buttons
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
+      ) {
+        TextButton(onClick = onDismissRequest) {
+          Text("Cancel")
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Button(
+          onClick = {
+            val delayMode = when (selectedDelayOption) {
+              1 -> MemorizationDelayMode.FixedSeconds(3)
+              2 -> MemorizationDelayMode.FixedSeconds(5)
+              3 -> MemorizationDelayMode.MatchAyahDuration
+              else -> MemorizationDelayMode.None
+            }
+
+            val pl = selectedPlaylist
+            val config = if (pl != null && pl.segments.isNotEmpty()) {
+              val firstAyah = SuraAyah(pl.segments.first().sura, pl.segments.first().startAyah)
+              val lastAyah = SuraAyah(pl.segments.last().sura, pl.segments.last().endAyah)
+              MemorizationConfig(
+                startAyah = firstAyah,
+                endAyah = lastAyah,
+                windowSize = windowSize,
+                singleRepeat = singleRepeat,
+                connectRepeat = connectRepeat,
+                delayMode = delayMode,
+                memoryTestMode = maskingLevel != MaskingLevel.OFF,
+                maskingLevel = maskingLevel,
+                recordRecitation = recordRecitation && canRecord,
+                enableBridge = enableBridge,
+                segments = pl.segments,
+                playlistId = pl.id,
+                playlistName = pl.name
+              )
+            } else {
+              MemorizationConfig(
+                startAyah = SuraAyah(initialStartAyah.sura, startAyahNum),
+                endAyah = SuraAyah(initialStartAyah.sura, endAyahNum),
+                windowSize = windowSize,
+                singleRepeat = singleRepeat,
+                connectRepeat = connectRepeat,
+                delayMode = delayMode,
+                memoryTestMode = maskingLevel != MaskingLevel.OFF,
+                maskingLevel = maskingLevel,
+                recordRecitation = recordRecitation && canRecord,
+                enableBridge = enableBridge
+              )
+            }
+
+            onStartMemorization(config)
+          }
+        ) {
+          Text("Start Memorizing", fontWeight = FontWeight.Bold)
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun NumberStepper(
+  label: String,
+  value: Int,
+  onValueChange: (Int) -> Unit,
+  modifier: Modifier = Modifier
+) {
+  Column(
+    horizontalAlignment = Alignment.CenterHorizontally,
+    modifier = modifier
+  ) {
+    Text(
+      text = label,
+      style = MaterialTheme.typography.labelSmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Spacer(modifier = Modifier.height(4.dp))
+
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.Center
+    ) {
+      FilledTonalButton(
+        onClick = { onValueChange(value - 1) },
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+      ) {
+        Text("-", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+      }
+
+      Text(
+        text = value.toString(),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 12.dp)
+      )
+
+      FilledTonalButton(
+        onClick = { onValueChange(value + 1) },
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+      ) {
+        Text("+", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+      }
+    }
+  }
+}
+
+`
+
+---
+
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationSetupSheetWrapper.kt
+
+`kotlin
+package com.quran.mobile.feature.audiobar.ui
+
+import android.content.Context
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.compose.ui.platform.ComposeView
+import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
+import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
+import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
+
+/**
+ * FrameLayout wrapper hosting the Compose [MemorizationSetupSheet]
+ * for display inside PagerActivity's overlay container.
+ */
+class MemorizationSetupSheetWrapper(
+  context: Context,
+  private val initialStartAyah: SuraAyah,
+  private val initialEndAyah: SuraAyah,
+  private val onStart: (MemorizationConfig) -> Unit,
+  private val onDismissed: () -> Unit,
+  private val savedSessionConfig: MemorizationConfig? = null,
+  private val savedSessionStep: Int = 0,
+  private val onResume: (() -> Unit)? = null,
+  private val masteredRanges: List<MasteredRange> = emptyList(),
+  private val onReview: ((MasteredRange) -> Unit)? = null,
+  private val savedPlaylists: List<CustomPlaylist> = emptyList(),
+  private val initialPlaylist: CustomPlaylist? = null
+) : FrameLayout(context) {
+
+  init {
+    val composeView = ComposeView(context).apply {
+      layoutParams = LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.MATCH_PARENT
+      )
+      setContent {
+        QuranTheme {
+          MemorizationSetupSheet(
+            initialStartAyah = initialStartAyah,
+            initialEndAyah = initialEndAyah,
+            savedSessionConfig = savedSessionConfig,
+            savedSessionStep = savedSessionStep,
+            masteredRanges = masteredRanges,
+            savedPlaylists = savedPlaylists,
+            initialPlaylist = initialPlaylist,
+            onResumeSession = {
+              onResume?.invoke()
+              onDismissed()
+            },
+            onReviewRange = { range ->
+              if (onReview != null) {
+                onReview.invoke(range)
+              } else {
+                val reviewConfig = MemorizationConfig(
+                  startAyah = range.startAyah,
+                  endAyah = range.endAyah,
+                  windowSize = 4,
+                  singleRepeat = 1,
+                  connectRepeat = 2,
+                  delayMode = MemorizationDelayMode.None,
+                  memoryTestMode = true,
+                  maskingLevel = MaskingLevel.MASK_ON_CONNECT,
+                  recordRecitation = false,
+                  enableBridge = false
+                )
+                onStart(reviewConfig)
+              }
+              onDismissed()
+            },
+            onStartMemorization = { config ->
+              onStart(config)
+              onDismissed()
+            },
+            onDismissRequest = onDismissed
+          )
+        }
+      }
+    }
+    addView(composeView)
+  }
+}
+
+`
+
+---
+
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationHud.kt
 
 `kotlin
 package com.quran.mobile.feature.audiobar.ui
@@ -1536,7 +3512,487 @@ fun MemorizationHud(
 
 ---
 
-### File: feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationSetupSheet.kt
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/PlaylistEditorSheet.kt
+
+`kotlin
+package com.quran.mobile.feature.audiobar.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.quran.data.core.QuranInfo
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
+import com.quran.labs.androidquran.common.audio.memorization.PlaylistSegment
+import com.quran.labs.androidquran.common.ui.core.QuranIcons
+import com.quran.mobile.common.ui.core.R as UiCoreR
+
+/**
+ * Bottom sheet modal for creating and editing a custom Quran playlist with multiple Surah segments.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaylistEditorSheet(
+  playlistToEdit: CustomPlaylist? = null,
+  quranInfo: QuranInfo,
+  onSavePlaylist: (CustomPlaylist) -> Unit,
+  onDismissRequest: () -> Unit,
+  sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+) {
+  val context = LocalContext.current
+  val suraNames = remember {
+    try {
+      context.resources.getStringArray(UiCoreR.array.sura_names)
+    } catch (e: Exception) {
+      Array(114) { "Surah ${it + 1}" }
+    }
+  }
+
+  fun getSuraTitle(sura: Int): String {
+    val name = if (sura - 1 in suraNames.indices) suraNames[sura - 1] else "Surah $sura"
+    return "$sura. $name"
+  }
+
+  var playlistName by remember { mutableStateOf(playlistToEdit?.name ?: "") }
+  var segments by remember { mutableStateOf(playlistToEdit?.segments?.toMutableList() ?: mutableListOf()) }
+
+  // New segment form state
+  var selectedSura by remember { mutableIntStateOf(1) }
+  var isFullSurah by remember { mutableStateOf(true) }
+  val maxAyahsForSelectedSura = remember(selectedSura) {
+    quranInfo.getNumberOfAyahs(selectedSura).coerceAtLeast(1)
+  }
+  var startAyah by remember { mutableIntStateOf(1) }
+  var endAyah by remember { mutableIntStateOf(quranInfo.getNumberOfAyahs(1).coerceAtLeast(1)) }
+
+  var suraDropdownExpanded by remember { mutableStateOf(false) }
+
+  ModalBottomSheet(
+    onDismissRequest = onDismissRequest,
+    sheetState = sheetState
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp)
+        .padding(bottom = 32.dp)
+        .verticalScroll(rememberScrollState())
+    ) {
+      Text(
+        text = if (playlistToEdit == null) "Create New Playlist" else "Edit Playlist",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold
+      )
+      Text(
+        text = "Combine Surahs or Ayah sequences into a continuous playlist",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
+      Spacer(modifier = Modifier.height(16.dp))
+
+      OutlinedTextField(
+        value = playlistName,
+        onValueChange = { playlistName = it },
+        label = { Text("Playlist Name") },
+        placeholder = { Text("e.g. Daily Recitation, Morning Adhkar") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true
+      )
+
+      Spacer(modifier = Modifier.height(16.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Current Segments List
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = "Playlist Segments (${segments.size})",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold
+        )
+        val totalAyahs = segments.sumOf { (it.endAyah - it.startAyah + 1).coerceAtLeast(0) }
+        Text(
+          text = "$totalAyahs Ayahs total",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.primary
+        )
+      }
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      if (segments.isEmpty()) {
+        Card(
+          modifier = Modifier.fillMaxWidth(),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+          )
+        ) {
+          Text(
+            text = "No segments added yet. Add your first Surah sequence below.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(16.dp)
+          )
+        }
+      } else {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          segments.forEachIndexed { index, segment ->
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+              )
+            ) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text(
+                  text = "#${index + 1}",
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.padding(end = 10.dp)
+                )
+
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = getSuraTitle(segment.sura),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                  )
+                  val rangeDesc = if (segment.isFullSurah) {
+                    "Full Surah (1–${segment.endAyah})"
+                  } else {
+                    "Ayah ${segment.startAyah} – ${segment.endAyah} (${segment.endAyah - segment.startAyah + 1} Ayahs)"
+                  }
+                  Text(
+                    text = rangeDesc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+
+                // Reorder up
+                if (index > 0) {
+                  IconButton(
+                    onClick = {
+                      val mutable = segments.toMutableList()
+                      val item = mutable.removeAt(index)
+                      mutable.add(index - 1, item)
+                      segments = mutable
+                    }
+                  ) {
+                    Icon(QuranIcons.KeyboardArrowUp, contentDescription = "Move up")
+                  }
+                }
+
+                // Reorder down
+                if (index < segments.size - 1) {
+                  IconButton(
+                    onClick = {
+                      val mutable = segments.toMutableList()
+                      val item = mutable.removeAt(index)
+                      mutable.add(index + 1, item)
+                      segments = mutable
+                    }
+                  ) {
+                    Icon(QuranIcons.KeyboardArrowDown, contentDescription = "Move down")
+                  }
+                }
+
+                // Remove
+                IconButton(
+                  onClick = {
+                    val mutable = segments.toMutableList()
+                    mutable.removeAt(index)
+                    segments = mutable
+                  }
+                ) {
+                  Icon(
+                    QuranIcons.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(16.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Add New Segment Form
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        )
+      ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+          Text(
+            text = "Add Surah Sequence",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+          )
+
+          Spacer(modifier = Modifier.height(8.dp))
+
+          // Surah Selector Dropdown
+          Box {
+            OutlinedButton(
+              onClick = { suraDropdownExpanded = true },
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Text(
+                text = getSuraTitle(selectedSura),
+                modifier = Modifier.weight(1f)
+              )
+              Icon(QuranIcons.ExpandMore, contentDescription = null)
+            }
+
+            DropdownMenu(
+              expanded = suraDropdownExpanded,
+              onDismissRequest = { suraDropdownExpanded = false }
+            ) {
+              (1..114).forEach { suraNum ->
+                DropdownMenuItem(
+                  text = { Text(getSuraTitle(suraNum)) },
+                  onClick = {
+                    selectedSura = suraNum
+                    val count = quranInfo.getNumberOfAyahs(suraNum).coerceAtLeast(1)
+                    startAyah = 1
+                    endAyah = count
+                    suraDropdownExpanded = false
+                  }
+                )
+              }
+            }
+          }
+
+          Spacer(modifier = Modifier.height(10.dp))
+
+          // Full Surah vs Custom Range Toggle
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            FilterChip(
+              selected = isFullSurah,
+              onClick = {
+                isFullSurah = true
+                startAyah = 1
+                endAyah = maxAyahsForSelectedSura
+              },
+              label = { Text("Full Surah ($maxAyahsForSelectedSura Ayahs)") }
+            )
+
+            FilterChip(
+              selected = !isFullSurah,
+              onClick = {
+                isFullSurah = false
+              },
+              label = { Text("Custom Range") }
+            )
+          }
+
+          // Ayah Steppers when Custom Range is active
+          if (!isFullSurah) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              NumberStepperCompact(
+                label = "From Ayah",
+                value = startAyah,
+                minValue = 1,
+                maxValue = endAyah,
+                onValueChange = {
+                  startAyah = it.coerceIn(1, endAyah)
+                }
+              )
+
+              NumberStepperCompact(
+                label = "To Ayah",
+                value = endAyah,
+                minValue = startAyah,
+                maxValue = maxAyahsForSelectedSura,
+                onValueChange = {
+                  endAyah = it.coerceIn(startAyah, maxAyahsForSelectedSura)
+                }
+              )
+            }
+          }
+
+          Spacer(modifier = Modifier.height(12.dp))
+
+          FilledTonalButton(
+            onClick = {
+              val newSegment = PlaylistSegment(
+                sura = selectedSura,
+                startAyah = if (isFullSurah) 1 else startAyah,
+                endAyah = if (isFullSurah) maxAyahsForSelectedSura else endAyah,
+                isFullSurah = isFullSurah,
+                customLabel = getSuraTitle(selectedSura)
+              )
+              val mutable = segments.toMutableList()
+              mutable.add(newSegment)
+              segments = mutable
+
+              // Reset to default
+              isFullSurah = true
+              startAyah = 1
+              endAyah = maxAyahsForSelectedSura
+            },
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Icon(QuranIcons.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+            Text("Add to Playlist", fontWeight = FontWeight.SemiBold)
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(20.dp))
+
+      // Bottom Action Buttons
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+      ) {
+        OutlinedButton(
+          onClick = onDismissRequest,
+          modifier = Modifier.weight(1f)
+        ) {
+          Text("Cancel")
+        }
+
+        Button(
+          onClick = {
+            if (playlistName.isNotBlank() && segments.isNotEmpty()) {
+              val saved = CustomPlaylist(
+                id = playlistToEdit?.id ?: java.util.UUID.randomUUID().toString(),
+                name = playlistName.trim(),
+                segments = segments,
+                createdAt = playlistToEdit?.createdAt ?: System.currentTimeMillis(),
+                lastPlayedAt = playlistToEdit?.lastPlayedAt ?: 0L
+              )
+              onSavePlaylist(saved)
+            }
+          },
+          enabled = playlistName.isNotBlank() && segments.isNotEmpty(),
+          modifier = Modifier.weight(1f)
+        ) {
+          Text("Save Playlist", fontWeight = FontWeight.Bold)
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun NumberStepperCompact(
+  label: String,
+  value: Int,
+  minValue: Int,
+  maxValue: Int,
+  onValueChange: (Int) -> Unit
+) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Text(
+      text = label,
+      style = MaterialTheme.typography.labelSmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Spacer(modifier = Modifier.height(4.dp))
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      FilledTonalButton(
+        onClick = { if (value > minValue) onValueChange(value - 1) },
+        enabled = value > minValue,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+      ) {
+        Text("-", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+      }
+
+      Text(
+        text = value.toString(),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 10.dp)
+      )
+
+      FilledTonalButton(
+        onClick = { if (value < maxValue) onValueChange(value + 1) },
+        enabled = value < maxValue,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+      ) {
+        Text("+", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+      }
+    }
+  }
+}
+
+`
+
+---
+
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/PlaylistListSheet.kt
 
 `kotlin
 package com.quran.mobile.feature.audiobar.ui
@@ -1552,64 +4008,65 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.quran.data.model.SuraAyah
-import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
-import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
-import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
-import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
+import com.quran.data.core.QuranInfo
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
+import com.quran.labs.androidquran.common.audio.memorization.PlaylistRepository
+import com.quran.labs.androidquran.common.ui.core.QuranIcons
+import com.quran.mobile.common.ui.core.R as UiCoreR
 
 /**
- * Bottom sheet modal dialog for configuring and launching an Intelligent Quran Memorization session.
+ * Bottom sheet displaying all user-created Quran playlists with options to Play, Memorize, Edit, or Delete.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MemorizationSetupSheet(
-  initialStartAyah: SuraAyah,
-  initialEndAyah: SuraAyah,
-  onStartMemorization: (MemorizationConfig) -> Unit,
+fun PlaylistListSheet(
+  playlistRepository: PlaylistRepository,
+  quranInfo: QuranInfo,
+  onPlayPlaylist: (CustomPlaylist) -> Unit,
+  onMemorizePlaylist: (CustomPlaylist) -> Unit,
   onDismissRequest: () -> Unit,
-  savedSessionConfig: MemorizationConfig? = null,
-  savedSessionStep: Int = 0,
-  onResumeSession: (() -> Unit)? = null,
-  masteredRanges: List<MasteredRange> = emptyList(),
-  onReviewRange: ((MasteredRange) -> Unit)? = null,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
-  var startAyahNum by remember { mutableIntStateOf(initialStartAyah.ayah) }
-  var endAyahNum by remember { mutableIntStateOf(initialEndAyah.ayah.coerceAtLeast(initialStartAyah.ayah + 3)) }
-  var windowSize by remember { mutableIntStateOf(4) }
-  var singleRepeat by remember { mutableIntStateOf(3) }
-  var connectRepeat by remember { mutableIntStateOf(2) }
-  var selectedDelayOption by remember { mutableIntStateOf(0) } // 0: None, 1: 3s, 2: 5s, 3: Match Duration
-  var maskingLevel by remember { mutableStateOf(MaskingLevel.OFF) }
-  var recordRecitation by remember { mutableStateOf(false) }
-  var enableBridge by remember { mutableStateOf(true) }
+  val context = LocalContext.current
+  val suraNames = remember {
+    try {
+      context.resources.getStringArray(UiCoreR.array.sura_names)
+    } catch (e: Exception) {
+      Array(114) { "Surah ${it + 1}" }
+    }
+  }
+
+  fun getSuraShortName(sura: Int): String {
+    return if (sura - 1 in suraNames.indices) suraNames[sura - 1] else "Surah $sura"
+  }
+
+  var playlists by remember { mutableStateOf(playlistRepository.getAllPlaylists()) }
+  var playlistToEdit by remember { mutableStateOf<CustomPlaylist?>(null) }
+  var isEditorOpen by remember { mutableStateOf(false) }
 
   ModalBottomSheet(
     onDismissRequest = onDismissRequest,
@@ -1622,127 +4079,32 @@ fun MemorizationSetupSheet(
         .padding(bottom = 32.dp)
         .verticalScroll(rememberScrollState())
     ) {
-      Text(
-        text = "Intelligent Memorization",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold
-      )
-
-      Text(
-        text = "Surah ${initialStartAyah.sura} • Progressive Sliding Window Learning",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-
-      if (savedSessionConfig != null && onResumeSession != null) {
-        Spacer(modifier = Modifier.height(12.dp))
-        Card(
-          modifier = Modifier.fillMaxWidth(),
-          colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column {
+          Text(
+            text = "My Quran Playlists",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
           )
-        ) {
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = "Resume Last Session",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-              )
-              Text(
-                text = "Surah ${savedSessionConfig.startAyah.sura}:${savedSessionConfig.startAyah.ayah}–${savedSessionConfig.endAyah.ayah} • Step ${savedSessionStep + 1}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-              )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-              onClick = onResumeSession,
-              colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
-              )
-            ) {
-              Text("Resume")
-            }
-          }
+          Text(
+            text = "Custom sequences across Surahs",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
         }
-      }
 
-      if (masteredRanges.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(14.dp))
-        Text(
-          text = "Recently Mastered & Quick Review",
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Column(
-          modifier = Modifier.fillMaxWidth(),
-          verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          masteredRanges.take(3).forEach { range ->
-            Card(
-              modifier = Modifier.fillMaxWidth(),
-              colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-              )
-            ) {
-              Row(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-              ) {
-                Column(modifier = Modifier.weight(1f)) {
-                  Text(
-                    text = "Surah ${range.startAyah.sura}:${range.startAyah.ayah}–${range.endAyah.ayah}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                  )
-                  Text(
-                    text = "Mastered • ${range.repetitions}x repeats",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                  )
-                }
-
-                FilledTonalButton(
-                  onClick = {
-                    if (onReviewRange != null) {
-                      onReviewRange(range)
-                    } else {
-                      onStartMemorization(
-                        MemorizationConfig(
-                          startAyah = range.startAyah,
-                          endAyah = range.endAyah,
-                          windowSize = 4,
-                          singleRepeat = 1,
-                          connectRepeat = 2,
-                          delayMode = MemorizationDelayMode.None,
-                          memoryTestMode = true,
-                          maskingLevel = MaskingLevel.MASK_ON_CONNECT,
-                          recordRecitation = false,
-                          enableBridge = false
-                        )
-                      )
-                    }
-                  },
-                  contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-                ) {
-                  Text("Review Now", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-              }
-            }
+        FilledTonalButton(
+          onClick = {
+            playlistToEdit = null
+            isEditorOpen = true
           }
+        ) {
+          Icon(QuranIcons.Add, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+          Text("New")
         }
       }
 
@@ -1750,308 +4112,176 @@ fun MemorizationSetupSheet(
       HorizontalDivider()
       Spacer(modifier = Modifier.height(12.dp))
 
-      // Ayah Range Selector
-      Text(
-        text = "Ayah Range",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold
-      )
-
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        NumberStepper(
-          label = "From Ayah",
-          value = startAyahNum,
-          onValueChange = {
-            startAyahNum = it.coerceAtLeast(1)
-            if (endAyahNum < startAyahNum) endAyahNum = startAyahNum
-          }
-        )
-
-        NumberStepper(
-          label = "To Ayah",
-          value = endAyahNum,
-          onValueChange = {
-            endAyahNum = it.coerceAtLeast(startAyahNum)
-          }
-        )
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
-      HorizontalDivider()
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Parameters: Window Size, Single Repeat, Connect Repeat
-      Text(
-        text = "Memorization Parameters",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold
-      )
-
-      Spacer(modifier = Modifier.height(8.dp))
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-      ) {
-        NumberStepper(
-          label = "Window Size",
-          value = windowSize,
-          onValueChange = { windowSize = it.coerceIn(1, 10) }
-        )
-
-        NumberStepper(
-          label = "Solo Repeat",
-          value = singleRepeat,
-          onValueChange = { singleRepeat = it.coerceIn(1, 10) }
-        )
-
-        NumberStepper(
-          label = "Connect Repeat",
-          value = connectRepeat,
-          onValueChange = { connectRepeat = it.coerceIn(1, 10) }
-        )
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
-      HorizontalDivider()
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Delay Mode (Recitation Pause)
-      Text(
-        text = "Pause Between Repetitions (Silent Recitation)",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold
-      )
-
-      Spacer(modifier = Modifier.height(8.dp))
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
-        FilterChip(
-          selected = selectedDelayOption == 0,
-          onClick = { selectedDelayOption = 0 },
-          label = { Text("None") }
-        )
-        FilterChip(
-          selected = selectedDelayOption == 1,
-          onClick = { selectedDelayOption = 1 },
-          label = { Text("3 sec") }
-        )
-        FilterChip(
-          selected = selectedDelayOption == 2,
-          onClick = { selectedDelayOption = 2 },
-          label = { Text("5 sec") }
-        )
-        FilterChip(
-          selected = selectedDelayOption == 3,
-          onClick = { selectedDelayOption = 3 },
-          label = { Text("Match Ayah") }
-        )
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
-      HorizontalDivider()
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Memory Test Masking Difficulty
-      Text(
-        text = "Memory Test Masking",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold
-      )
-
-      Spacer(modifier = Modifier.height(4.dp))
-
-      Text(
-        text = "Masks Ayah text so you can test your memory (tap Peek anytime to reveal)",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-
-      Spacer(modifier = Modifier.height(8.dp))
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
-        FilterChip(
-          selected = maskingLevel == MaskingLevel.OFF,
-          onClick = { maskingLevel = MaskingLevel.OFF },
-          label = { Text("Off") }
-        )
-        FilterChip(
-          selected = maskingLevel == MaskingLevel.MASK_ON_CONNECT,
-          onClick = { maskingLevel = MaskingLevel.MASK_ON_CONNECT },
-          label = { Text("Connect Steps") }
-        )
-        FilterChip(
-          selected = maskingLevel == MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
-          onClick = { maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT },
-          label = { Text("Progressive") }
-        )
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
-      HorizontalDivider()
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Record & Replay My Recitation Toggle
-      val canRecord = selectedDelayOption != 0
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text(
-            text = "Record & Replay My Recitation",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = if (canRecord) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+      if (playlists.isEmpty()) {
+        Card(
+          modifier = Modifier.fillMaxWidth(),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
           )
-          Text(
-            text = if (canRecord) "Records your voice during pauses for instant self-check against the Qari"
-                   else "Requires a recitation pause duration (select 3s, 5s, or Match Ayah above)",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-        Switch(
-          checked = recordRecitation && canRecord,
-          enabled = canRecord,
-          onCheckedChange = { recordRecitation = it }
-        )
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
-      HorizontalDivider()
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Bridge Step Toggle
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text(
-            text = "Connect Windows with Bridge Step",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium
-          )
-          Text(
-            text = "Recites transition between consecutive windows",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-        Switch(
-          checked = enableBridge,
-          onCheckedChange = { enableBridge = it }
-        )
-      }
-
-      Spacer(modifier = Modifier.height(20.dp))
-
-      // Action Buttons
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End
-      ) {
-        TextButton(onClick = onDismissRequest) {
-          Text("Cancel")
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Button(
-          onClick = {
-            val delayMode = when (selectedDelayOption) {
-              1 -> MemorizationDelayMode.FixedSeconds(3)
-              2 -> MemorizationDelayMode.FixedSeconds(5)
-              3 -> MemorizationDelayMode.MatchAyahDuration
-              else -> MemorizationDelayMode.None
-            }
-
-            val config = MemorizationConfig(
-              startAyah = SuraAyah(initialStartAyah.sura, startAyahNum),
-              endAyah = SuraAyah(initialStartAyah.sura, endAyahNum),
-              windowSize = windowSize,
-              singleRepeat = singleRepeat,
-              connectRepeat = connectRepeat,
-              delayMode = delayMode,
-              memoryTestMode = maskingLevel != MaskingLevel.OFF,
-              maskingLevel = maskingLevel,
-              recordRecitation = recordRecitation && canRecord,
-              enableBridge = enableBridge
-            )
-
-            onStartMemorization(config)
-          }
         ) {
-          Text("Start Memorizing", fontWeight = FontWeight.Bold)
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+          ) {
+            Icon(
+              QuranIcons.MenuBook,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.height(40.dp).width(40.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+              text = "No playlists created yet",
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+              text = "Create custom sequences of full Surahs or specific Ayah ranges for continuous listening or memorization.",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+              onClick = {
+                playlistToEdit = null
+                isEditorOpen = true
+              }
+            ) {
+              Icon(QuranIcons.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+              Text("Create First Playlist")
+            }
+          }
+        }
+      } else {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+          playlists.forEach { playlist ->
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+              )
+            ) {
+              Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.Top
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                      text = playlist.name,
+                      style = MaterialTheme.typography.titleMedium,
+                      fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                      text = playlist.summary,
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.primary
+                    )
+                  }
+
+                  Row {
+                    IconButton(
+                      onClick = {
+                        playlistToEdit = playlist
+                        isEditorOpen = true
+                      }
+                    ) {
+                      Icon(QuranIcons.Edit, contentDescription = "Edit")
+                    }
+
+                    IconButton(
+                      onClick = {
+                        playlistRepository.deletePlaylist(playlist.id)
+                        playlists = playlistRepository.getAllPlaylists()
+                      }
+                    ) {
+                      Icon(
+                        QuranIcons.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                      )
+                    }
+                  }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Sequence summary preview
+                val previewText = playlist.segments.joinToString(" ➔ ") { seg ->
+                  if (seg.isFullSurah) {
+                    getSuraShortName(seg.sura)
+                  } else {
+                    "${getSuraShortName(seg.sura)} (${seg.startAyah}–${seg.endAyah})"
+                  }
+                }
+                Text(
+                  text = previewText,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 2
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Action buttons: Play & Memorize
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                  FilledTonalButton(
+                    onClick = {
+                      playlistRepository.updateLastPlayed(playlist.id)
+                      onPlayPlaylist(playlist)
+                      onDismissRequest()
+                    },
+                    modifier = Modifier.weight(1f)
+                  ) {
+                    Icon(QuranIcons.PlayArrow, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                    Text("Play All")
+                  }
+
+                  Button(
+                    onClick = {
+                      playlistRepository.updateLastPlayed(playlist.id)
+                      onMemorizePlaylist(playlist)
+                      onDismissRequest()
+                    },
+                    modifier = Modifier.weight(1f)
+                  ) {
+                    Icon(QuranIcons.MenuBook, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                    Text("Memorize", fontWeight = FontWeight.Bold)
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
   }
-}
 
-@Composable
-private fun NumberStepper(
-  label: String,
-  value: Int,
-  onValueChange: (Int) -> Unit,
-  modifier: Modifier = Modifier
-) {
-  Column(
-    horizontalAlignment = Alignment.CenterHorizontally,
-    modifier = modifier
-  ) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.labelSmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
+  // Nested Editor Sheet when creating/editing
+  if (isEditorOpen) {
+    PlaylistEditorSheet(
+      playlistToEdit = playlistToEdit,
+      quranInfo = quranInfo,
+      onSavePlaylist = { saved ->
+        playlistRepository.savePlaylist(saved)
+        playlists = playlistRepository.getAllPlaylists()
+        isEditorOpen = false
+      },
+      onDismissRequest = {
+        isEditorOpen = false
+      }
     )
-
-    Spacer(modifier = Modifier.height(4.dp))
-
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.Center
-    ) {
-      FilledTonalButton(
-        onClick = { onValueChange(value - 1) },
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-      ) {
-        Text("-", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-      }
-
-      Text(
-        text = value.toString(),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(horizontal = 12.dp)
-      )
-
-      FilledTonalButton(
-        onClick = { onValueChange(value + 1) },
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-      ) {
-        Text("+", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-      }
-    }
   }
 }
 
@@ -2059,7 +4289,7 @@ private fun NumberStepper(
 
 ---
 
-### File: feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/MemorizationSetupSheetWrapper.kt
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/PlaylistSheetWrapper.kt
 
 `kotlin
 package com.quran.mobile.feature.audiobar.ui
@@ -2068,28 +4298,21 @@ import android.content.Context
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
-import com.quran.data.model.SuraAyah
-import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
-import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
-import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
-import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
+import com.quran.data.core.QuranInfo
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
+import com.quran.labs.androidquran.common.audio.memorization.PlaylistRepository
 import com.quran.labs.androidquran.common.ui.core.QuranTheme
 
 /**
- * FrameLayout wrapper hosting the Compose [MemorizationSetupSheet]
- * for display inside PagerActivity's overlay container.
+ * FrameLayout wrapper hosting the Compose [PlaylistListSheet] for display inside PagerActivity's overlay container.
  */
-class MemorizationSetupSheetWrapper(
+class PlaylistSheetWrapper(
   context: Context,
-  private val initialStartAyah: SuraAyah,
-  private val initialEndAyah: SuraAyah,
-  private val onStart: (MemorizationConfig) -> Unit,
-  private val onDismissed: () -> Unit,
-  private val savedSessionConfig: MemorizationConfig? = null,
-  private val savedSessionStep: Int = 0,
-  private val onResume: (() -> Unit)? = null,
-  private val masteredRanges: List<MasteredRange> = emptyList(),
-  private val onReview: ((MasteredRange) -> Unit)? = null
+  private val playlistRepository: PlaylistRepository,
+  private val quranInfo: QuranInfo,
+  private val onPlayPlaylist: (CustomPlaylist) -> Unit,
+  private val onMemorizePlaylist: (CustomPlaylist) -> Unit,
+  private val onDismissed: () -> Unit
 ) : FrameLayout(context) {
 
   init {
@@ -2100,38 +4323,15 @@ class MemorizationSetupSheetWrapper(
       )
       setContent {
         QuranTheme {
-          MemorizationSetupSheet(
-            initialStartAyah = initialStartAyah,
-            initialEndAyah = initialEndAyah,
-            savedSessionConfig = savedSessionConfig,
-            savedSessionStep = savedSessionStep,
-            masteredRanges = masteredRanges,
-            onResumeSession = {
-              onResume?.invoke()
+          PlaylistListSheet(
+            playlistRepository = playlistRepository,
+            quranInfo = quranInfo,
+            onPlayPlaylist = { playlist ->
+              onPlayPlaylist(playlist)
               onDismissed()
             },
-            onReviewRange = { range ->
-              if (onReview != null) {
-                onReview.invoke(range)
-              } else {
-                val reviewConfig = MemorizationConfig(
-                  startAyah = range.startAyah,
-                  endAyah = range.endAyah,
-                  windowSize = 4,
-                  singleRepeat = 1,
-                  connectRepeat = 2,
-                  delayMode = MemorizationDelayMode.None,
-                  memoryTestMode = true,
-                  maskingLevel = MaskingLevel.MASK_ON_CONNECT,
-                  recordRecitation = false,
-                  enableBridge = false
-                )
-                onStart(reviewConfig)
-              }
-              onDismissed()
-            },
-            onStartMemorization = { config ->
-              onStart(config)
+            onMemorizePlaylist = { playlist ->
+              onMemorizePlaylist(playlist)
               onDismissed()
             },
             onDismissRequest = onDismissed
@@ -2147,159 +4347,7 @@ class MemorizationSetupSheetWrapper(
 
 ---
 
-### File: feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/AudioBarWrapper.kt
-
-`kotlin
-package com.quran.mobile.feature.audiobar
-
-import android.content.Context
-import android.util.AttributeSet
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.add
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CornerSize
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.platform.AbstractComposeView
-import androidx.compose.ui.res.dimensionResource
-import androidx.compose.ui.unit.dp
-import app.cash.molecule.RecompositionMode
-import app.cash.molecule.launchMolecule
-import com.quran.labs.androidquran.common.ui.core.QuranTheme
-import com.quran.mobile.feature.audiobar.presenter.AudioBarPresenter
-import com.quran.mobile.feature.audiobar.ui.AudioBar
-import dev.zacsweers.metro.Inject
-
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
-import com.quran.mobile.feature.audiobar.state.AudioBarUiEvent
-import com.quran.mobile.feature.audiobar.ui.MemorizationHud
-
-class AudioBarWrapper @JvmOverloads constructor(
-  context: Context,
-  attrs: AttributeSet? = null,
-  defStyleAttr: Int = 0
-) : AbstractComposeView(context, attrs, defStyleAttr) {
-
-  @Inject
-  lateinit var audioBarPresenter: AudioBarPresenter
-
-  @Inject
-  lateinit var memorizationEngine: MemorizationEngine
-
-  init {
-    (context as? AudioBarInjector)?.inject(this)
-  }
-
-  @Composable
-  override fun Content() {
-    QuranTheme {
-      val scope = rememberCoroutineScope()
-      val flow = remember {
-        scope.launchMolecule(mode = RecompositionMode.ContextClock) {
-          audioBarPresenter.audioBarPresenter()
-        }
-      }
-      val eventListeners = remember(audioBarPresenter) { audioBarPresenter.eventListeners() }
-      val memorizationState by memorizationEngine.state.collectAsState()
-
-      Card(
-        shape = CardDefaults.shape.topOnly(),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        if (memorizationState.isActive) {
-          MemorizationHud(
-            state = memorizationState,
-            onPreviousStep = { memorizationEngine.previousStep() },
-            onPlayPause = {
-              if (memorizationState.isPaused) {
-                memorizationEngine.resume()
-                eventListeners.pausedPlaybackEventSink(AudioBarUiEvent.PausedPlaybackEvent.Play)
-              } else {
-                memorizationEngine.pause()
-                eventListeners.playingPlaybackEventSink(AudioBarUiEvent.PlayingPlaybackEvent.Pause)
-              }
-            },
-            onSkipStep = { memorizationEngine.skipCurrentStep() },
-            onStop = {
-              memorizationEngine.stopMemorization()
-              eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
-            },
-            onToggleMask = { memorizationEngine.toggleTextMask() },
-            onReplayRecitation = {
-              val path = memorizationState.lastRecitationAudioPath
-              if (path != null) {
-                try {
-                  android.media.MediaPlayer().apply {
-                    setDataSource(path)
-                    setOnCompletionListener { it.release() }
-                    prepare()
-                    start()
-                  }
-                } catch (e: Exception) {
-                  android.util.Log.e("AudioBarWrapper", "Error playing recorded recitation", e)
-                }
-              }
-            },
-            modifier = Modifier
-              .padding(
-                WindowInsets.navigationBars.add(WindowInsets.displayCutout)
-                    .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
-                  .asPaddingValues()
-              )
-              .padding(top = 4.dp)
-              .padding(horizontal = 8.dp)
-          )
-        } else {
-          AudioBar(
-            flow,
-            eventListeners,
-            modifier = Modifier
-              .padding(
-                WindowInsets.navigationBars.add(WindowInsets.displayCutout)
-                    .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
-                  .asPaddingValues()
-              )
-              .padding(top = 8.dp)
-              .padding(horizontal = 16.dp)
-              .heightIn(min = dimensionResource(id = R.dimen.audiobar_height))
-          )
-        }
-      }
-    }
-  }
-
-  private fun Shape.topOnly(): Shape {
-    return if (this is RoundedCornerShape) {
-      this.copy(
-        bottomStart = CornerSize(0.dp),
-        bottomEnd = CornerSize(0.dp)
-      )
-    } else {
-      this
-    }
-  }
-}
-
-`
-
----
-
-### File: feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/StoppedAudioBar.kt
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/ui/StoppedAudioBar.kt
 
 `kotlin
 package com.quran.mobile.feature.audiobar.ui
@@ -2339,6 +4387,10 @@ internal fun StoppedAudioBar(
 
     IconButton(onClick = { eventSink(AudioBarUiEvent.StoppedPlaybackEvent.Memorize) }) {
       Icon(QuranIcons.MenuBook, contentDescription = "Memorization Mode")
+    }
+
+    IconButton(onClick = { eventSink(AudioBarUiEvent.StoppedPlaybackEvent.Playlists) }) {
+      Icon(QuranIcons.List, contentDescription = "Playlists")
     }
 
     TextButton(
@@ -2394,7 +4446,335 @@ private fun StoppedAudioBarWithRecordingPreview() {
 
 ---
 
-### File: app/src/main/java/com/quran/labs/androidquran/service/AudioService.kt
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/state/AudioBarEvent.kt
+
+`kotlin
+package com.quran.mobile.feature.audiobar.state
+
+sealed class AudioBarEvent {
+  data object ChangeQari : AudioBarEvent()
+  data object Memorize : AudioBarEvent()
+  data object Playlists : AudioBarEvent()
+  data object Cancel : AudioBarEvent()
+  data object CancelDownload : AudioBarEvent()
+  data object Acknowledge : AudioBarEvent()
+
+  // playback
+  data object Play : AudioBarEvent()
+  data object ResumePlayback : AudioBarEvent()
+  data object Pause : AudioBarEvent()
+  data object Stop : AudioBarEvent()
+  data object FastForward : AudioBarEvent()
+  data object Rewind : AudioBarEvent()
+  data object ShowSettings : AudioBarEvent()
+  data class SetRepeat(val repeat: Int) : AudioBarEvent()
+  data class SetSpeed(val speed: Float) : AudioBarEvent()
+
+  // recitation
+  data object Record : AudioBarEvent()
+  data object Recitation : AudioBarEvent()
+  data object RecitationLongPress : AudioBarEvent()
+  data object Transcript : AudioBarEvent()
+  data object HideVerses : AudioBarEvent()
+  data object EndSession : AudioBarEvent()
+  data object PlayRecitation : AudioBarEvent()
+  data object PauseRecitation : AudioBarEvent()
+}
+
+`
+
+---
+
+### feature/audiobar/src/main/kotlin/com/quran/mobile/feature/audiobar/state/AudioBarScreen.kt
+
+`kotlin
+package com.quran.mobile.feature.audiobar.state
+
+internal sealed class AudioBarState {
+  sealed class ActivePlayback : AudioBarState() {
+    abstract val repeat: Int
+    abstract val speed: Float
+  }
+
+  data class Playing(
+    override val repeat: Int,
+    override val speed: Float
+  ) : ActivePlayback()
+
+  data class Paused(
+    override val repeat: Int,
+    override val speed: Float
+  ) : ActivePlayback()
+
+  data class Stopped(
+    val qariNameResource: Int,
+    val enableRecording: Boolean
+  ) : AudioBarState()
+
+  data class Downloading(
+    val progress: Int,
+    val messageResource: Int
+  ) : AudioBarState()
+
+  data class Loading(
+    val progress: Int,
+    val messageResource: Int
+  ) : AudioBarState()
+
+  data class Error(
+    val messageResource: Int
+  ) : AudioBarState()
+
+  data class Prompt(
+    val messageResource: Int
+  ) : AudioBarState()
+
+  data object RecitationListening : AudioBarState()
+
+  data object RecitationPlaying : AudioBarState()
+
+  data object RecitationStopped : AudioBarState()
+}
+
+internal class AudioBarUiEvents(
+  val commonPlaybackEventSink: (AudioBarUiEvent.CommonPlaybackEvent) -> Unit = {},
+  val playingPlaybackEventSink: (AudioBarUiEvent.PlayingPlaybackEvent) -> Unit = {},
+  val pausedPlaybackEventSink: (AudioBarUiEvent.PausedPlaybackEvent) -> Unit = {},
+  val stoppedEventSink: (AudioBarUiEvent.StoppedPlaybackEvent) -> Unit = {},
+  val downloadingEventSink: (AudioBarUiEvent.DownloadingPlaybackEvent) -> Unit = {},
+  val cancelableEventSink: (AudioBarUiEvent.CancelablePlaybackEvent) -> Unit = {},
+  val promptEventSink: (AudioBarUiEvent.PromptEvent) -> Unit = {},
+  val commonRecordingEventSink: (AudioBarUiEvent.CommonRecordingEvent) -> Unit = {},
+  val recitationListeningEventSink: (AudioBarUiEvent.RecitationListeningEvent) -> Unit = {},
+  val recitationPlayingEventSink: (AudioBarUiEvent.RecitationPlayingEvent) -> Unit = {},
+  val recitationStoppedEventSink: (AudioBarUiEvent.RecitationStoppedEvent) -> Unit = {}
+)
+
+internal sealed class AudioBarUiEvent(val audioBarEvent: AudioBarEvent) {
+  sealed class CommonPlaybackEvent(audioBarEvent: AudioBarEvent) :
+    AudioBarUiEvent(audioBarEvent) {
+    data object Stop : CommonPlaybackEvent(AudioBarEvent.Stop)
+    data object Rewind : CommonPlaybackEvent(AudioBarEvent.Rewind)
+    data object FastForward : CommonPlaybackEvent(AudioBarEvent.FastForward)
+    data class SetSpeed(val speed: Float) : CommonPlaybackEvent(AudioBarEvent.SetSpeed(speed))
+    data class SetRepeat(val repeat: Int) : CommonPlaybackEvent(AudioBarEvent.SetRepeat(repeat))
+    data object ShowSettings : CommonPlaybackEvent(AudioBarEvent.ShowSettings)
+  }
+
+  sealed class PlayingPlaybackEvent(audioBarEvent: AudioBarEvent) :
+    AudioBarUiEvent(audioBarEvent) {
+    data object Pause : PlayingPlaybackEvent(AudioBarEvent.Pause)
+  }
+
+  sealed class PausedPlaybackEvent(audioBarEvent: AudioBarEvent) :
+    AudioBarUiEvent(audioBarEvent) {
+    data object Play : PausedPlaybackEvent(AudioBarEvent.ResumePlayback)
+  }
+
+  sealed class DownloadingPlaybackEvent(event: AudioBarEvent) : AudioBarUiEvent(event) {
+    data object Cancel : DownloadingPlaybackEvent(AudioBarEvent.CancelDownload)
+  }
+
+  sealed class CancelablePlaybackEvent(event: AudioBarEvent) : AudioBarUiEvent(event) {
+    data object Cancel : CancelablePlaybackEvent(AudioBarEvent.Cancel)
+  }
+
+  sealed class StoppedPlaybackEvent(audioBarEvent: AudioBarEvent) :
+    AudioBarUiEvent(audioBarEvent) {
+    data object ChangeQari : StoppedPlaybackEvent(AudioBarEvent.ChangeQari)
+    data object Memorize : StoppedPlaybackEvent(AudioBarEvent.Memorize)
+    data object Playlists : StoppedPlaybackEvent(AudioBarEvent.Playlists)
+    data object Play : StoppedPlaybackEvent(AudioBarEvent.Play)
+    data object Record : StoppedPlaybackEvent(AudioBarEvent.Record)
+  }
+
+  sealed class PromptEvent(audioBarEvent: AudioBarEvent) : AudioBarUiEvent(audioBarEvent) {
+    data object Cancel : PromptEvent(AudioBarEvent.Cancel)
+    data object Acknowledge : PromptEvent(AudioBarEvent.Acknowledge)
+  }
+
+  sealed class CommonRecordingEvent(audioBarEvent: AudioBarEvent) :
+    AudioBarUiEvent(audioBarEvent) {
+    data object Recitation : CommonRecordingEvent(AudioBarEvent.Recitation)
+    data object RecitationLongPress : CommonRecordingEvent(AudioBarEvent.RecitationLongPress)
+    data object Transcript : CommonRecordingEvent(AudioBarEvent.Transcript)
+  }
+
+  sealed class RecitationListeningEvent(event: AudioBarEvent) : AudioBarUiEvent(event) {
+    data object HideVerses : RecitationListeningEvent(AudioBarEvent.HideVerses)
+  }
+
+  sealed class RecitationPlayingEvent(event: AudioBarEvent) : AudioBarUiEvent(event) {
+    data object EndSession : RecitationPlayingEvent(AudioBarEvent.EndSession)
+    data object PauseRecitation : RecitationPlayingEvent(AudioBarEvent.PauseRecitation)
+  }
+
+  sealed class RecitationStoppedEvent(event: AudioBarEvent) : AudioBarUiEvent(event) {
+    data object EndSession : RecitationStoppedEvent(AudioBarEvent.EndSession)
+    data object PlayRecitation : RecitationStoppedEvent(AudioBarEvent.PlayRecitation)
+  }
+}
+
+`
+
+---
+
+### common/ui/core/src/main/java/com/quran/labs/androidquran/common/ui/core/Theme.kt
+
+`kotlin
+package com.quran.labs.androidquran.common.ui.core
+
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+
+private val LightColors = lightColorScheme(
+  primary = lightPrimary,
+  onPrimary = lightOnPrimary,
+  primaryContainer = lightPrimaryContainer,
+  onPrimaryContainer = lightOnPrimaryContainer,
+  secondary = lightSecondary,
+  onSecondary = lightOnSecondary,
+  secondaryContainer = lightSecondaryContainer,
+  onSecondaryContainer = lightOnSecondaryContainer,
+  tertiary = lightTertiary,
+  onTertiary = lightOnTertiary,
+  tertiaryContainer = lightTertiaryContainer,
+  onTertiaryContainer = lightOnTertiaryContainer,
+  error = lightError,
+  errorContainer = lightErrorContainer,
+  onError = lightOnError,
+  onErrorContainer = lightOnErrorContainer,
+  background = lightBackground,
+  onBackground = lightOnBackground,
+  surface = lightSurface,
+  onSurface = lightOnSurface,
+  surfaceVariant = lightSurfaceVariant,
+  onSurfaceVariant = lightOnSurfaceVariant,
+  outline = lightOutline,
+  inverseOnSurface = lightInverseOnSurface,
+  inverseSurface = lightInverseSurface,
+  inversePrimary = lightInversePrimary,
+  surfaceTint = lightSurfaceTint,
+  surfaceContainerHighest = lightSurfaceColorHighest
+)
+
+private val DarkColors = darkColorScheme(
+  primary = darkPrimary,
+  onPrimary = darkOnPrimary,
+  primaryContainer = darkPrimaryContainer,
+  onPrimaryContainer = darkOnPrimaryContainer,
+  secondary = darkSecondary,
+  onSecondary = darkOnSecondary,
+  secondaryContainer = darkSecondaryContainer,
+  onSecondaryContainer = darkOnSecondaryContainer,
+  tertiary = darkTertiary,
+  onTertiary = darkOnTertiary,
+  tertiaryContainer = darkTertiaryContainer,
+  onTertiaryContainer = darkOnTertiaryContainer,
+  error = darkError,
+  errorContainer = darkErrorContainer,
+  onError = darkOnError,
+  onErrorContainer = darkOnErrorContainer,
+  background = darkBackground,
+  onBackground = darkOnBackground,
+  surface = darkSurface,
+  onSurface = darkOnSurface,
+  surfaceVariant = darkSurfaceVariant,
+  onSurfaceVariant = darkOnSurfaceVariant,
+  outline = darkOutline,
+  inverseOnSurface = darkInverseOnSurface,
+  inverseSurface = darkInverseSurface,
+  inversePrimary = darkInversePrimary,
+  surfaceTint = darkSurfaceTint,
+  surfaceContainerHighest = darkSurfaceColorHighest
+)
+
+private val forceLtr = listOf("huawei", "lenovo", "tecno")
+
+object QuranIcons {
+  val ArrowBack: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.ArrowBack
+  val BookmarkBorder: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.BookmarkBorder
+  val Chat: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Chat
+  val Check: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Check
+  val ChevronRight: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.ChevronRight
+  val Close: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Close
+  val ExpandMore: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.ExpandMore
+  val FastForward: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.FastForward
+  val FastRewind: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.FastRewind
+  val Logout: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Logout
+  val MenuBook: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.MenuBook
+  val Mic: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Mic
+  val Pause: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Pause
+  val Person: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Person
+  val PlayArrow: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.PlayArrow
+  val Repeat: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Repeat
+  val Search: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Search
+  val Settings: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Settings
+  val Speed: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Speed
+  val Stop: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Stop
+  val Sync: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Sync
+  val Add: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Add
+  val Delete: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Delete
+  val Edit: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Edit
+  val List: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.List
+  val KeyboardArrowUp: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.KeyboardArrowUp
+  val KeyboardArrowDown: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.KeyboardArrowDown
+}
+
+@Composable
+fun QuranTheme(
+  useDarkTheme: Boolean = isSystemInDarkTheme(),
+  content: @Composable () -> Unit
+) {
+  val colors = if (!useDarkTheme) {
+    LightColors
+  } else {
+    DarkColors
+  }
+
+  val quranColors = if (useDarkTheme) {
+    darkQuranColors
+  } else {
+    lightQuranColors
+  }
+
+  // hack workaround for https://issuetracker.google.com/issues/266059178
+  // crashes on Lollipop / MR1, mostly on Huawei and Lenovo devices due to
+  // Compose in RTL. Force LTR for all Composables on Lollipop to attempt
+  // to work around this crash for now.
+  val locals =
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M &&
+      Build.MANUFACTURER.lowercase() in forceLtr
+    ) {
+      arrayOf(LocalLayoutDirection provides LayoutDirection.Ltr)
+    } else {
+      emptyArray()
+    }
+
+  CompositionLocalProvider(*locals) {
+    CompositionLocalProvider(LocalQuranColors provides quranColors) {
+      MaterialTheme(
+        colorScheme = colors,
+        typography = AppTypography,
+        content = content
+      )
+    }
+  }
+}
+
+`
+
+---
+
+### app/src/main/java/com/quran/labs/androidquran/service/AudioService.kt
 
 `kotlin
 package com.quran.labs.androidquran.service
@@ -3994,7 +6374,7 @@ class AudioService : Service(), Player.Listener {
 
 ---
 
-### File: app/src/main/java/com/quran/labs/androidquran/ui/PagerActivity.kt
+### app/src/main/java/com/quran/labs/androidquran/ui/PagerActivity.kt
 
 `kotlin
 package com.quran.labs.androidquran.ui
@@ -4132,9 +6512,15 @@ import com.quran.mobile.feature.audiobar.AudioBarWrapper
 import com.quran.mobile.feature.audiobar.presenter.AudioBarEventRepository
 import com.quran.mobile.feature.ayahbookmark.AyahBookmarkWrapper
 import com.quran.mobile.feature.ayahbookmark.di.AyahBookmarkWrapperInjector
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
+import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationPreferences
+import com.quran.labs.androidquran.common.audio.memorization.PlaylistRepository
 import com.quran.mobile.feature.audiobar.ui.MemorizationSetupSheetWrapper
+import com.quran.mobile.feature.audiobar.ui.PlaylistSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.ReadingBookmarkSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.di.ReadingBookmarkSheetWrapperInjector
 import com.quran.mobile.feature.qarilist.QariListWrapper
@@ -4247,6 +6633,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   @Inject lateinit var audioStatusRepository: AudioStatusRepository
   @Inject lateinit var memorizationEngine: MemorizationEngine
   @Inject lateinit var memorizationPreferences: MemorizationPreferences
+  @Inject lateinit var playlistRepository: PlaylistRepository
   @Inject lateinit var readingEventPresenter: ReadingEventPresenter
   @Inject lateinit var pageProviderFactoryProvider: PageViewFactoryProvider
   @Inject lateinit var additionalAyahPanels: Set<@JvmSuppressWildcards AyahActionFragmentProvider>
@@ -5727,6 +8114,58 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   }
 
   override fun onMemorizePressed() {
+    openMemorizationSetup(null)
+  }
+
+  override fun onPlaylistsPressed() {
+    val playlistWrapper = PlaylistSheetWrapper(
+      context = this,
+      playlistRepository = playlistRepository,
+      quranInfo = quranInfo,
+      onPlayPlaylist = { playlist ->
+        if (playlist.segments.isNotEmpty()) {
+          playlistRepository.updateLastPlayed(playlist.id)
+          val firstSeg = playlist.segments.first()
+          val lastSeg = playlist.segments.last()
+          val playConfig = MemorizationConfig(
+            startAyah = SuraAyah(firstSeg.sura, firstSeg.startAyah),
+            endAyah = SuraAyah(lastSeg.sura, lastSeg.endAyah),
+            windowSize = playlist.totalAyahsCount.coerceAtLeast(1),
+            singleRepeat = 1,
+            connectRepeat = 0,
+            delayMode = MemorizationDelayMode.None,
+            memoryTestMode = false,
+            maskingLevel = MaskingLevel.OFF,
+            recordRecitation = false,
+            enableBridge = false,
+            segments = playlist.segments,
+            playlistId = playlist.id,
+            playlistName = playlist.name
+          )
+          memorizationEngine.startMemorization(playConfig)
+          playFromAyah(firstSeg.sura, firstSeg.startAyah)
+        }
+      },
+      onMemorizePlaylist = { playlist ->
+        openMemorizationSetup(initialPlaylist = playlist)
+      },
+      onDismissed = {
+        overlay.removeAllViews()
+        overlay.visibility = View.GONE
+        toggleActionBarVisibility(true)
+      }
+    )
+    overlay.removeAllViews()
+    overlay.addView(
+      playlistWrapper,
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.MATCH_PARENT
+    )
+    overlay.visibility = View.VISIBLE
+    toggleActionBarVisibility(false)
+  }
+
+  private fun openMemorizationSetup(initialPlaylist: CustomPlaylist? = null) {
     val page = currentPage
     val start = selectionStart
     val end = selectionEnd
@@ -5739,6 +8178,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     val savedConfig = if (hasSaved) memorizationPreferences.getSavedConfig() else null
     val savedStep = if (hasSaved) memorizationPreferences.getSavedStepIndex() else 0
     val masteredRanges = memorizationPreferences.getMasteredRanges()
+    val savedPlaylists = playlistRepository.getAllPlaylists()
 
     val memorizationSetupSheetWrapper = MemorizationSetupSheetWrapper(
       context = this,
@@ -5747,6 +8187,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       savedSessionConfig = savedConfig,
       savedSessionStep = savedStep,
       masteredRanges = masteredRanges,
+      savedPlaylists = savedPlaylists,
+      initialPlaylist = initialPlaylist,
       onResume = {
         if (savedConfig != null) {
           memorizationEngine.resumeSavedSession()
@@ -5758,6 +8200,10 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         if (config.recordRecitation &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
           ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 101)
+        }
+        val playlistId = config.playlistId
+        if (playlistId != null) {
+          playlistRepository.updateLastPlayed(playlistId)
         }
         memorizationEngine.startMemorization(config)
         playFromAyah(config.startAyah.sura, config.startAyah.ayah)
@@ -6120,2570 +8566,110 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
 
 ---
 
-### File: app/src/main/java/com/quran/labs/androidquran/ui/helpers/HighlightTypes.kt
+### app/src/main/java/com/quran/labs/androidquran/ui/listener/AudioBarListener.kt
 
 `kotlin
-package com.quran.labs.androidquran.ui.helpers
+package com.quran.labs.androidquran.ui.listener
 
-import com.quran.data.model.bookmark.ReadingBookmarkType
-import com.quran.data.model.highlight.HighlightColor
-import com.quran.data.model.highlight.HighlightType
-import com.quran.data.model.highlight.HighlightType.Mode.HIGHLIGHT
-import com.quran.data.model.highlight.HighlightType.Mode.UNDERLAY
-import com.quran.data.model.highlight.HighlightType.Mode.UNDERLINE
-import com.quran.labs.androidquran.R
-import com.quran.labs.androidquran.common.ui.core.HighlightColors
-import com.quran.mobile.common.ui.core.R as UiCoreR
 
-object HighlightTypes {
-
-  @JvmField
-  val SELECTION = HighlightType(1,  R.color.selection_highlight, HIGHLIGHT, isSingle = true)
-  @JvmField
-  val AUDIO =     HighlightType(2,  R.color.audio_highlight,     HIGHLIGHT, isSingle = true, isTransitionAnimated = true)
-  val NOTE =      HighlightType(3,  R.color.note_highlight,      HIGHLIGHT)
-  @JvmField
-  val BOOKMARK =  HighlightType(4,  R.color.bookmark_highlight,  HIGHLIGHT)
-  @JvmField
-  val MEMORIZATION_MASK = HighlightType(
-    100L,
-    R.color.memorization_mask_color,
-    HIGHLIGHT,
-    isSingle = false,
-    nightColorResId = R.color.memorization_mask_color_night
-  )
-  @JvmField
-  val MEMORIZATION_WINDOW = HighlightType(
-    101L,
-    R.color.memorization_window_color,
-    HIGHLIGHT,
-    isSingle = false,
-    nightColorResId = R.color.memorization_window_color_night
-  )
-
-  private const val FIRST_HIGHLIGHT_ID = 5L
-
-  private val HIGHLIGHTS: Map<HighlightColor, HighlightType> =
-    HighlightColors.sorted.mapIndexed { index, spec ->
-      spec.highlightColor to
-          HighlightType(FIRST_HIGHLIGHT_ID + index, spec.colorResourceId, UNDERLAY)
-    }.toMap()
-
-  val highlights: Collection<HighlightType> = HIGHLIGHTS.values
-
-  operator fun get(highlightColor: HighlightColor): HighlightType = HIGHLIGHTS.getValue(highlightColor)
-
-  private val FIRST_READING_BOOKMARK_ID = FIRST_HIGHLIGHT_ID + HIGHLIGHTS.size
-
-  private val READING_BOOKMARKS: Map<ReadingBookmarkType, HighlightType> = mapOf(
-    ReadingBookmarkType.TEAL to HighlightType(
-      FIRST_READING_BOOKMARK_ID,
-      UiCoreR.color.reading_bookmark_page_teal,
-      UNDERLINE,
-      nightColorResId = UiCoreR.color.reading_bookmark_page_teal_night
-    ),
-    ReadingBookmarkType.ORANGE to HighlightType(
-      FIRST_READING_BOOKMARK_ID + 1,
-      UiCoreR.color.reading_bookmark_page_orange,
-      UNDERLINE,
-      nightColorResId = UiCoreR.color.reading_bookmark_page_orange_night
-    ),
-    ReadingBookmarkType.RED to HighlightType(
-      FIRST_READING_BOOKMARK_ID + 2,
-      UiCoreR.color.reading_bookmark_page_red,
-      UNDERLINE,
-      nightColorResId = UiCoreR.color.reading_bookmark_page_red_night
-    )
-  )
-
-  val readingBookmarks: Collection<HighlightType> = READING_BOOKMARKS.values
-
-  operator fun get(slot: ReadingBookmarkType): HighlightType = READING_BOOKMARKS.getValue(slot)
-
-  fun getAnimationConfig(type: HighlightType): HighlightAnimationConfig = when(type) {
-    AUDIO -> HighlightAnimationConfig.Audio
-    else -> HighlightAnimationConfig.None
-  }
+interface AudioBarListener {
+  fun onPlayPressed()
+  fun onContinuePlaybackPressed()
+  fun onPausePressed()
+  fun onNextPressed()
+  fun onPreviousPressed()
+  fun onStopPressed()
+  fun setPlaybackSpeed(speed: Float)
+  fun onCancelPressed(stopDownload: Boolean)
+  fun setRepeatCount(repeatCount: Int)
+  fun onAcceptPressed()
+  fun onAudioSettingsPressed()
+  fun onShowQariList()
+  fun onMemorizePressed()
+  fun onPlaylistsPressed()
 }
+
 
 `
 
 ---
 
-### File: feature/linebyline/src/main/java/com/quran/labs/androidquran/extra/feature/linebyline/model/HighlightType.kt
+### app/src/main/java/com/quran/labs/androidquran/feature/reading/bridge/AudioStatusRepositoryBridge.kt
 
 `kotlin
-package com.quran.labs.androidquran.extra.feature.linebyline.model
+package com.quran.labs.androidquran.feature.reading.bridge
 
-import com.quran.data.model.highlight.HighlightColor
-
-sealed interface HighlightType {
-  data object Selection : HighlightType
-  data object Audio : HighlightType
-  data object AudioWord : HighlightType
-  data object Bookmark : HighlightType
-  data object MemorizationMask : HighlightType
-  data object MemorizationWindow : HighlightType
-
-  data class Highlight(val color: HighlightColor) : HighlightType
-}
-
-`
-
----
-
-### File: app/src/main/java/com/quran/labs/androidquran/presenter/quran/ayahtracker/AyahTrackerPresenter.kt
-
-`kotlin
-package com.quran.labs.androidquran.presenter.quran.ayahtracker
-
-import android.app.Activity
-import android.graphics.RectF
-import android.view.MotionEvent
-import android.widget.ImageView
-import com.quran.data.core.QuranInfo
-import com.quran.data.dao.BookmarksDao
-import com.quran.data.dao.HighlightsDao
-import com.quran.data.dao.ReadingBookmarksDao
-import com.quran.data.di.QuranPageScope
-import com.quran.data.model.AyahGlyph.AyahEndGlyph
-import com.quran.data.model.AyahGlyph.WordGlyph
-import com.quran.data.model.AyahWord
 import com.quran.data.model.SuraAyah
-import com.quran.data.model.bookmark.AyahReadingBookmark
-import com.quran.data.model.bookmark.Bookmark
-import com.quran.data.model.bookmark.ReadingBookmark
-import com.quran.data.model.highlight.Highlight
-import com.quran.data.model.highlight.HighlightInfo
-import com.quran.data.model.highlight.HighlightType
-import com.quran.data.model.selection.AyahSelection
-import com.quran.data.model.selection.SelectionIndicator
-import com.quran.data.model.selection.startSuraAyah
-import com.quran.labs.androidquran.common.QuranAyahInfo
-import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
-import com.quran.labs.androidquran.common.audio.memorization.MemorizationState
-import com.quran.labs.androidquran.common.audio.model.playback.currentPlaybackAyah
+import com.quran.labs.androidquran.common.audio.model.playback.AudioRequest
+import com.quran.labs.androidquran.common.audio.model.playback.AudioStatus
 import com.quran.labs.androidquran.common.audio.repository.AudioStatusRepository
-import com.quran.labs.androidquran.data.QuranDisplayData
-import com.quran.labs.androidquran.data.SuraAyahIterator
-import com.quran.labs.androidquran.presenter.Presenter
-import com.quran.labs.androidquran.presenter.quran.ayahtracker.AyahTrackerPresenter.AyahInteractionHandler
-import com.quran.labs.androidquran.ui.PagerActivity
-import com.quran.labs.androidquran.ui.helpers.AyahSelectedListener.EventType
-import com.quran.labs.androidquran.ui.helpers.AyahSelectedListener.EventType.DOUBLE_TAP
-import com.quran.labs.androidquran.ui.helpers.AyahSelectedListener.EventType.LONG_PRESS
-import com.quran.labs.androidquran.ui.helpers.AyahSelectedListener.EventType.SINGLE_TAP
-import com.quran.labs.androidquran.ui.helpers.AyahTracker
-import com.quran.labs.androidquran.ui.helpers.HighlightTypes
-import com.quran.labs.androidquran.util.QuranFileUtils
-import com.quran.labs.androidquran.util.QuranSettings
-import com.quran.mobile.translation.model.LocalTranslation
-import com.quran.page.common.data.AyahCoordinates
-import com.quran.page.common.data.PageCoordinates
-import com.quran.reading.common.ReadingEventPresenter
-import com.quran.recitation.events.RecitationEventPresenter
-import com.quran.recitation.presenter.RecitationHighlightsPresenter
-import com.quran.recitation.presenter.RecitationHighlightsPresenter.HighlightAction
-import com.quran.recitation.presenter.RecitationHighlightsPresenter.RecitationPage
-import com.quran.recitation.presenter.RecitationPopupPresenter
-import com.quran.recitation.presenter.RecitationPopupPresenter.PopupContainer
-import com.quran.recitation.presenter.RecitationPresenter
-import dev.zacsweers.metro.Inject
-import kotlinx.coroutines.CoroutineScope
+import com.quran.labs.androidquran.ui.listener.AudioBarListener
+import com.quran.labs.androidquran.ui.listener.AudioBarRecitationListener
+import com.quran.mobile.feature.audiobar.presenter.AudioBarEventRepository
+import com.quran.mobile.feature.audiobar.state.AudioBarEvent
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
-@QuranPageScope
-class AyahTrackerPresenter @Inject constructor(
-  private val quranInfo: QuranInfo,
-  private val quranFileUtils: QuranFileUtils,
-  private val quranDisplayData: QuranDisplayData,
-  private val quranSettings: QuranSettings,
-  private val readingEventPresenter: ReadingEventPresenter,
-  private val bookmarksDao: BookmarksDao,
-  private val highlightsDao: HighlightsDao,
-  private val readingBookmarksDao: ReadingBookmarksDao,
-  private val audioStatusRepository: AudioStatusRepository,
-  private val memorizationEngine: MemorizationEngine,
-  recitationPresenter: RecitationPresenter,
-  private val recitationEventPresenter: RecitationEventPresenter,
-  private val recitationPopupPresenter: RecitationPopupPresenter,
-  private val recitationHighlightsPresenter: RecitationHighlightsPresenter,
-) : AyahTracker, Presenter<AyahInteractionHandler>, PopupContainer, RecitationPage {
-  // we may bind and unbind several times, and each time we unbind, we cancel
-  // the scope, which means we can't launch new coroutines in that same scope.
-  // thus, leave this as a var so we replace it every time.
-  private lateinit var scope: CoroutineScope
-
-  private var items: Array<AyahTrackerItem> = emptyArray()
-  private var pendingHighlightInfo: HighlightInfo? = null
-  private var lastHighlightedAyah: SuraAyah? = null
-  private var lastHighlightedAudioAyah: SuraAyah? = null
-
-  private val isRecitationEnabled = recitationPresenter.isRecitationEnabled()
-
-  private fun subscribe() {
-    readingEventPresenter.ayahSelectionFlow
-      .onEach { onAyahSelectionChanged(it) }
-      .launchIn(scope)
-
-    audioStatusRepository.audioPlaybackFlow
-      .onEach { onAudioSelectionChanged(it.currentPlaybackAyah()) }
-      .launchIn(scope)
-
-    items.forEach { trackerItem ->
-      bookmarksDao.bookmarksForPage(trackerItem.page)
-        .onEach { bookmarks -> onBookmarksChanged(bookmarks) }
-        .launchIn(scope)
-    }
-
-    highlightsDao.highlightsFlow()
-      .onEach { highlights -> onHighlightsChanged(highlights) }
-      .launchIn(scope)
-
-    readingBookmarksDao.readingBookmarksFlow()
-      .onEach { readingBookmarks -> onReadingBookmarksChanged(readingBookmarks) }
-      .launchIn(scope)
-
-    memorizationEngine.state
-      .onEach { onMemorizationStateChanged(it) }
-      .launchIn(scope)
-  }
-
-  fun setPageBounds(pageCoordinates: PageCoordinates) {
-    for (item in items) {
-      item.onSetPageBounds(pageCoordinates)
-    }
-  }
-
-  fun setAyahCoordinates(ayahCoordinates: AyahCoordinates) {
-    for (item in items) {
-      item.onSetAyahCoordinates(ayahCoordinates)
-    }
-
-    val pendingHighlightInfo = pendingHighlightInfo
-    if (pendingHighlightInfo != null && ayahCoordinates.ayahCoordinates.isNotEmpty()) {
-      highlightAyah(
-        pendingHighlightInfo.sura, pendingHighlightInfo.ayah, pendingHighlightInfo.word,
-        pendingHighlightInfo.highlightType, pendingHighlightInfo.scrollToAyah
-      )
-    }
-
-    if (isRecitationEnabled) {
-      recitationHighlightsPresenter.refresh()
-    }
-  }
-
-  private fun onAyahSelectionChanged(ayahSelection: AyahSelection) {
-    val startSuraAyah = ayahSelection.startSuraAyah()
-
-    // optimization - if the current ayah is still highlighted, don't issue a request
-    // to unhighlight.
-    if (startSuraAyah != lastHighlightedAyah) {
-      unHighlightAyahs(HighlightTypes.SELECTION)
-      lastHighlightedAyah = startSuraAyah
-    }
-
-    when (ayahSelection) {
-      is AyahSelection.Ayah -> {
-        val suraAyah = ayahSelection.suraAyah
-        val scrollToAyah = ayahSelection.selectionIndicator == SelectionIndicator.ScrollOnly
-        highlightAyah(suraAyah.sura, suraAyah.ayah, -1, HighlightTypes.SELECTION, scrollToAyah)
-      }
-      is AyahSelection.AyahRange -> {
-        val highlightAyatIterator =
-          SuraAyahIterator(quranInfo, ayahSelection.startSuraAyah, ayahSelection.endSuraAyah)
-        val highlightedAyat = highlightAyatIterator.asSet()
-        items.forEach {
-          val pageAyat = quranDisplayData.getAyahKeysOnPage(it.page)
-          val elements = pageAyat.intersect(highlightedAyat)
-          if (elements.isNotEmpty()) {
-            it.onHighlightAyat(it.page, elements, HighlightTypes.SELECTION)
-          }
-        }
-      }
-      else -> { /* nothing is selected, and we already cleared */ }
-    }
-  }
-
-  private fun onAudioSelectionChanged(suraAyah: SuraAyah?) {
-    val currentLastHighlightAudioAyah = lastHighlightedAudioAyah
-
-    // if there is no currently highlighted audio ayah, go ahead and clear all
-    if (currentLastHighlightAudioAyah == null) {
-      unHighlightAyahs(HighlightTypes.AUDIO)
-    }
-
-    // either way, whether we unhighlighted all or not, highlight the new ayah
-    if (suraAyah != null) {
-      highlightAyah(suraAyah.sura, suraAyah.ayah, -1, HighlightTypes.AUDIO, true)
-    }
-
-    // if we had a highlighted ayah before, unhighlight it now.
-    // we do this *after* highlighting the new ayah so that the animations continue working.
-    if (suraAyah != currentLastHighlightAudioAyah && currentLastHighlightAudioAyah != null) {
-      val sura = currentLastHighlightAudioAyah.sura
-      val ayah = currentLastHighlightAudioAyah.ayah
-      val page = quranInfo.getPageFromSuraAyah(sura, ayah)
-
-      items.filter { it.page == page }
-        .onEach {
-          it.onUnHighlightAyah(page, sura, ayah, -1, HighlightTypes.AUDIO)
-        }
-    }
-
-    // and keep track of the last highlighted audio ayah
-    lastHighlightedAudioAyah = suraAyah
-  }
-
-  private fun onBookmarksChanged(bookmarks: List<Bookmark>) {
-    unHighlightAyahs(HighlightTypes.BOOKMARK)
-    if (quranSettings.shouldHighlightBookmarks()) {
-      items.forEach { tracker ->
-        val elements = bookmarks
-          .filter { it.page == tracker.page }
-          .map { "${it.sura}:${it.ayah}" }
-          .toSet()
-        if (elements.isNotEmpty()) {
-          tracker.onHighlightAyat(tracker.page, elements, HighlightTypes.BOOKMARK)
-        }
-      }
-    }
-  }
-
-  private fun onHighlightsChanged(highlights: List<Highlight>) {
-    HighlightTypes.highlights.forEach { unHighlightAyahs(it) }
-
-    val highlightsByColor = highlights.groupBy { it.color }
-    items.forEach { tracker ->
-      highlightsByColor.forEach { (color, colorHighlights) ->
-        val elements = colorHighlights
-          .map { it.suraAyah }
-          .filter { quranInfo.getPageFromSuraAyah(it.sura, it.ayah) == tracker.page }
-          .map { "${it.sura}:${it.ayah}" }
-          .toSet()
-        if (elements.isNotEmpty()) {
-          tracker.onHighlightAyat(tracker.page, elements, HighlightTypes[color])
-        }
-      }
-    }
-  }
-
-  private fun onReadingBookmarksChanged(readingBookmarks: List<ReadingBookmark>) {
-    HighlightTypes.readingBookmarks.forEach { unHighlightAyahs(it) }
-
-    val ayahReadingBookmarks = readingBookmarks.filterIsInstance<AyahReadingBookmark>()
-    items.forEach { tracker ->
-      ayahReadingBookmarks
-        .filter { quranInfo.getPageFromSuraAyah(it.sura, it.ayah) == tracker.page }
-        .forEach {
-          tracker.onHighlightAyat(tracker.page, setOf("${it.sura}:${it.ayah}"), HighlightTypes[it.slot])
-        }
-    }
-  }
-
-  private fun onMemorizationStateChanged(memState: MemorizationState) {
-    unHighlightAyahs(HighlightTypes.MEMORIZATION_MASK)
-    unHighlightAyahs(HighlightTypes.MEMORIZATION_WINDOW)
-
-    if (!memState.isActive) {
-      return
-    }
-
-    // 1. Opaque text masking for active Ayahs during memory test mode
-    if (memState.isTextMasked && memState.activeAyahsInStep.isNotEmpty()) {
-      val maskedKeys = memState.activeAyahsInStep.map { "${it.sura}:${it.ayah}" }.toSet()
-      items.forEach { tracker ->
-        val pageAyat = quranDisplayData.getAyahKeysOnPage(tracker.page)
-        val elements = pageAyat.intersect(maskedKeys)
-        if (elements.isNotEmpty()) {
-          tracker.onHighlightAyat(tracker.page, elements, HighlightTypes.MEMORIZATION_MASK)
-        }
-      }
-    }
-
-    // 2. Sliding window boundary framing
-    val currentStep = memState.currentStep
-    if (currentStep != null && currentStep.ayahs.isNotEmpty()) {
-      val windowKeys = currentStep.ayahs.map { "${it.sura}:${it.ayah}" }.toSet()
-      items.forEach { tracker ->
-        val pageAyat = quranDisplayData.getAyahKeysOnPage(tracker.page)
-        val elements = pageAyat.intersect(windowKeys)
-        if (elements.isNotEmpty()) {
-          tracker.onHighlightAyat(tracker.page, elements, HighlightTypes.MEMORIZATION_WINDOW)
-        }
-      }
-    }
-  }
-
-  private fun highlightAyah(sura: Int, ayah: Int, word: Int, type: HighlightType, scrollToAyah: Boolean) {
-    val page = quranInfo.getPageFromSuraAyah(sura, ayah)
-    val handled = items.any {
-      it.page == page && it.onHighlightAyah(page, sura, ayah, word, type, scrollToAyah)
-    }
-
-    pendingHighlightInfo = if (!handled) {
-      HighlightInfo(sura, ayah, word, type, scrollToAyah)
-    } else {
-      null
-    }
-  }
-
-  private fun unHighlightAyahs(type: HighlightType) {
-    for (item in items) {
-      item.onUnHighlightAyahType(type)
-    }
-  }
-
-  override fun getToolBarPosition(sura: Int, ayah: Int): SelectionIndicator {
-    val page = quranInfo.getPageFromSuraAyah(sura, ayah)
-    for (item in items) {
-      val position = item.getToolBarPosition(page, sura, ayah)
-      if (position != SelectionIndicator.None && position != SelectionIndicator.ScrollOnly) {
-        return position
-      }
-    }
-    return SelectionIndicator.None
-  }
-
-  override fun getQuranAyahInfo(sura: Int, ayah: Int): QuranAyahInfo? {
-    for (item in items) {
-      val quranAyahInfo = item.getQuranAyahInfo(sura, ayah)
-      if (quranAyahInfo != null) {
-        return quranAyahInfo
-      }
-    }
-    return null
-  }
-
-  override fun getLocalTranslations(): Array<LocalTranslation>? {
-    for (item in items) {
-      val localTranslations = item.getLocalTranslations()
-      if (localTranslations != null) {
-        return localTranslations
-      }
-    }
-    return null
-  }
-
-  fun onPressIgnoringSelectionState() {
-    readingEventPresenter.onClick()
-  }
-
-  fun onLongPress(suraAyah: SuraAyah) {
-    handleLongPress(suraAyah)
-  }
-
-  fun endAyahMode() {
-    readingEventPresenter.onAyahSelection(AyahSelection.None)
-  }
-
-  fun handleTouchEvent(
-    activity: Activity,
-    event: MotionEvent,
-    eventType: EventType,
-    page: Int,
-    ayahCoordinatesError: Boolean
-  ): Boolean {
-    if (eventType === DOUBLE_TAP) {
-      readingEventPresenter.onAyahSelection(AyahSelection.None)
-    } else if (eventType == LONG_PRESS ||
-      readingEventPresenter.currentAyahSelection() != AyahSelection.None
-    ) {
-      // press or long press when an ayah is selected
-      if (ayahCoordinatesError) {
-        checkCoordinateData(activity)
-      } else {
-        // either a press or a long press, but we're in selection mode
-        handleAyahSelection(event, eventType, page)
-      }
-    } else if (eventType == SINGLE_TAP && recitationEventPresenter.hasRecitationSession()) {
-      handleTap(event, eventType, page)
-    } else {
-      // normal click
-      readingEventPresenter.onClick()
-    }
-    return true
-  }
-
-  private fun handleAyahSelection(
-    ev: MotionEvent,
-    eventType: EventType,
-    page: Int
-  ) {
-    val result = getAyahForPosition(page, ev.x, ev.y)
-    if (result != null) {
-      if (eventType == SINGLE_TAP) {
-        readingEventPresenter.onAyahSelection(
-          AyahSelection.Ayah(result, getToolBarPosition(result.sura, result.ayah))
-        )
-      } else if (eventType == LONG_PRESS) {
-        handleLongPress(result)
-      }
-    }
-  }
-
-  private fun handleTap(
-    ev: MotionEvent,
-    eventType: EventType,
-    page: Int
-  ) {
-    for (item in items) {
-      val glyph = item.getGlyphForPosition(page, ev.x, ev.y) ?: continue
-
-      val portion = when (glyph) {
-        is WordGlyph -> glyph.toAyahWord()
-        is AyahEndGlyph -> glyph.ayah
-        else -> glyph.ayah
-      }
-
-      readingEventPresenter.onClick(portion)
-    }
-  }
-
-  private fun handleLongPress(selectedSuraAyah: SuraAyah) {
-    val current = readingEventPresenter.currentAyahSelection()
-    val updatedAyahSelection = updateAyahRange(selectedSuraAyah, current)
-    readingEventPresenter.onAyahSelection(updatedAyahSelection)
-  }
-
-  private fun updateAyahRange(selectedAyah: SuraAyah, ayahSelection: AyahSelection): AyahSelection {
-    val (startAyah, endAyah) = when (ayahSelection) {
-      is AyahSelection.None -> selectedAyah to null
-      is AyahSelection.Ayah -> {
-        if (selectedAyah > ayahSelection.suraAyah) {
-          ayahSelection.suraAyah to selectedAyah
-        } else {
-          selectedAyah to ayahSelection.suraAyah
-        }
-      }
-      is AyahSelection.AyahRange -> {
-        if (selectedAyah > ayahSelection.startSuraAyah) {
-          ayahSelection.startSuraAyah to selectedAyah
-        } else {
-          selectedAyah to ayahSelection.startSuraAyah
-        }
-      }
-    }
-
-    val toolBarPosition = getToolBarPosition(selectedAyah.sura, selectedAyah.ayah)
-    return if (endAyah == null) {
-      AyahSelection.Ayah(startAyah, toolBarPosition)
-    } else {
-      AyahSelection.AyahRange(startAyah, endAyah, toolBarPosition)
-    }
-  }
-
-  private fun getAyahForPosition(page: Int, x: Float, y: Float): SuraAyah? {
-    for (item in items) {
-      val ayah = item.getAyahForPosition(page, x, y)
-      if (ayah != null) {
-        return ayah
-      }
-    }
-    return null
-  }
-
-  private fun checkCoordinateData(activity: Activity) {
-    if (activity is PagerActivity &&
-      (!quranFileUtils.haveAyaPositionFile() ||
-          !quranFileUtils.hasArabicSearchDatabase())
-    ) {
-      activity.showGetRequiredFilesDialog()
-    }
-  }
-
-  override fun bind(what: AyahInteractionHandler) {
-    items = what.getAyahTrackerItems()
-    scope = MainScope()
-    if (isRecitationEnabled) {
-      recitationPopupPresenter.bind(this)
-      recitationHighlightsPresenter.bind(this)
-    }
-    subscribe()
-  }
-
-  override fun unbind(what: AyahInteractionHandler) {
-    if (isRecitationEnabled) {
-      recitationHighlightsPresenter.unbind(this)
-      recitationPopupPresenter.unbind(this)
-    }
-    items = emptyArray()
-    scope.cancel()
-  }
-
-  interface AyahInteractionHandler {
-    fun getAyahTrackerItems(): Array<AyahTrackerItem>
-  }
-
-  // PopupContainer <--> AyahTrackerItem adapter
-
-  override fun getQuranPageImageView(page: Int): ImageView? {
-    val item = items.firstOrNull { it.page == page } ?: return null
-    val ayahView = item.getAyahView() ?: return null
-    return ayahView as? ImageView ?: return null
-  }
-
-  override fun getSelectionBoundsForWord(
-    page: Int,
-    word: AyahWord
-  ): SelectionIndicator.SelectedItemPosition? {
-    val item = items.firstOrNull { it.page == page } ?: return null
-    val selection = item.getToolBarPosition(item.page, word) as? SelectionIndicator.SelectedItemPosition ?: return null
-    return selection
-  }
-
-  override fun getBoundsForWord(word: AyahWord): List<RectF>? {
-    return (items[0] as? AyahImageTrackerItem)?.pageGlyphsCoords?.getBoundsForWord(word)
-  }
-
-  // RecitationPage <--> AyahTrackerItem adapter
-
-  override val pageNumbers: Set<Int>
-    get() = items.map { it.page }.toSet()
-
-  override fun applyHighlights(highlights: List<HighlightAction>) {
-    highlights.forEach {
-      when (it) {
-        is HighlightAction.Highlight -> highlight(it.highlightInfo)
-        is HighlightAction.Unhighlight -> unhighlight(it.highlightInfo)
-        is HighlightAction.UnhighlightAll -> unHighlightAyahs(it.highlightType, it.page)
-      }
-    }
-  }
-
-  private fun highlight(highlightInfo: HighlightInfo) {
-    val page = quranInfo.getPageFromSuraAyah(highlightInfo.sura, highlightInfo.ayah)
-    items.asSequence()
-      .filter { it.page == page }
-      .forEach { it.onHighlight(page, highlightInfo) }
-  }
-
-  private fun unhighlight(highlightInfo: HighlightInfo) {
-    val page = quranInfo.getPageFromSuraAyah(highlightInfo.sura, highlightInfo.ayah)
-    items.asSequence()
-      .filter { it.page == page }
-      .forEach { it.onUnhighlight(page, highlightInfo) }
-  }
-
-  private fun unHighlightAyahs(type: HighlightType, page: Int? = null) {
-    items.asSequence()
-      .filter { page == null || page == it.page }
-      .forEach { it.onUnHighlightAyahType(type) }
-  }
-
-}
-
-`
-
----
-
-### File: feature/linebyline/src/main/java/com/quran/labs/androidquran/extra/feature/linebyline/presenter/QuranLineByLinePresenter.kt
-
-`kotlin
-package com.quran.labs.androidquran.extra.feature.linebyline.presenter
-
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import androidx.compose.ui.graphics.asImageBitmap
-import com.quran.analytics.CrashReporter
-import com.quran.data.core.QuranFileManager
-import com.quran.data.core.QuranInfo
-import com.quran.data.core.QuranPageInfo
-import com.quran.data.dao.BookmarksDao
-import com.quran.data.dao.HighlightsDao
-import com.quran.data.dao.ReadingBookmarksDao
-import com.quran.data.dao.Settings
-import com.quran.data.model.SuraAyah
-import com.quran.data.model.bookmark.AyahReadingBookmark
-import com.quran.data.model.highlight.Highlight
-import com.quran.data.model.selection.AyahSelection
-import com.quran.data.model.selection.SelectionIndicator
-import com.quran.data.model.selection.SelectionRectangle
-import com.quran.data.model.selection.endSuraAyah
-import com.quran.data.model.selection.selectionIndicator
-import com.quran.data.model.selection.startSuraAyah
-import com.quran.data.model.selection.withSelectionIndicator
-import com.quran.data.model.selection.withYScroll
-import com.quran.data.source.PageProvider
-import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
-import com.quran.labs.androidquran.common.audio.model.playback.currentPlaybackAyah
-import com.quran.labs.androidquran.common.audio.model.playback.currentPlaybackWord
-import com.quran.labs.androidquran.common.audio.repository.AudioStatusRepository
-import com.quran.labs.androidquran.extra.feature.linebyline.model.DisplayText
-import com.quran.labs.androidquran.extra.feature.linebyline.model.EmptyPageInfo
-import com.quran.labs.androidquran.extra.feature.linebyline.model.HighlightAyah
-import com.quran.labs.androidquran.extra.feature.linebyline.model.HighlightType
-import com.quran.labs.androidquran.extra.feature.linebyline.model.LineModel
-import com.quran.labs.androidquran.extra.feature.linebyline.model.MissingLineByLineImagesException
-import com.quran.labs.androidquran.extra.feature.linebyline.model.PageInfo
-import com.quran.labs.androidquran.extra.feature.linebyline.model.ReadingBookmarkAyah
-import com.quran.labs.androidquran.extra.feature.linebyline.model.SidelineDirection
-import com.quran.labs.androidquran.extra.feature.linebyline.model.SidelineModel
-import com.quran.labs.androidquran.extra.feature.linebyline.presenter.selection.SelectionHelper
-import com.quran.labs.androidquran.extra.feature.linebyline.presenter.selection.mergeWith
-import com.quran.mobile.linebyline.data.dao.AyahHighlight
-import com.quran.mobile.linebyline.data.dao.AyahMarkerInfo
-import com.quran.mobile.linebyline.data.dao.SuraHeader
-import com.quran.mobile.linebyline.data.dao.WordHighlight
-import com.quran.mobile.linebyline.data.dao.asAyahHighlight
-import com.quran.mobile.linebyline.data.model.PageModel
-import com.quran.mobile.mapper.imlaei.data.ImlaeiUthmaniMapper
-import com.quran.mobile.mapper.imlaei.data.WordAlignment
-import com.quran.reading.common.ReadingEventPresenter
-import dev.zacsweers.metro.Inject
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
-import java.io.File
-
-class QuranLineByLinePresenter @Inject constructor(
-  private val quranFileManager: QuranFileManager,
-  private val pageModel: PageModel,
-  private val pageProvider: PageProvider,
-  private val bookmarksDao: BookmarksDao,
-  private val highlightsDao: HighlightsDao,
-  private val readingBookmarksDao: ReadingBookmarksDao,
-  private val readingEventPresenter: ReadingEventPresenter,
-  private val audioStatusRepository: AudioStatusRepository,
-  private val selectionHelper: SelectionHelper,
-  private val quranPageInfo: QuranPageInfo,
-  private val settings: Settings,
-  private val lineByLineSettings: QuranLineByLineSettingsPresenter,
-  private val crashReporter: CrashReporter,
-  private val quranInfo: QuranInfo,
-  private val imlaeiUthmaniMapper: ImlaeiUthmaniMapper,
-  private val memorizationEngine: MemorizationEngine,
-  pages: IntArray
+class AudioStatusRepositoryBridge(
+  audioStatusRepository: AudioStatusRepository,
+  audioBarEventRepository: AudioBarEventRepository,
+  onPlaybackAyahChanged: ((SuraAyah?) -> Unit),
+  audioBarListener: AudioBarListener,
+  audioBarRecitationListener: AudioBarRecitationListener
 ) {
-  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-  private val page = pages[0]
+  private val scope = MainScope()
+  private val audioPlaybackAyahFlow = audioStatusRepository.audioPlaybackFlow
 
-  private var lastXOffset: Float = 0f
-  private var lastYOffset: Float = 0f
-  private var selectionStartSuraAyah: SuraAyah? = null
+  init {
+    audioPlaybackAyahFlow
+      .filterIsInstance<AudioStatus.Playback>()
+      .onEach { status -> onPlaybackAyahChanged(status.currentAyah) }
+      .launchIn(scope)
 
-  private data class PageDetails(
-    val lines: ImmutableList<LineModel>,
-    val suraHeaders: ImmutableList<SuraHeader>,
-    val ayahMarkers: ImmutableList<AyahMarkerInfo>,
-    val ayahBounds: ImmutableList<AyahHighlight>,
-    val wordBounds: ImmutableList<WordHighlight>,
-    val imlaeiUthmaniMappings: List<WordAlignment>
-  )
-
-  private val pageDetailsFetcher: Deferred<PageDetails> by lazy {
-    scope.async {
-      withContext(Dispatchers.IO) {
-        val range = quranInfo.getVerseRangeForPage(page)
-        val startAyah = SuraAyah(range.startSura, range.startAyah)
-        val endAyah = SuraAyah(range.endingSura, range.endingAyah)
-
-        PageDetails(
-          lines = linesForPage(page),
-          suraHeaders = pageModel.suraHeaders(page),
-          ayahMarkers = pageModel.ayahMarkers(page),
-          ayahBounds = pageModel.ayahHighlight(page),
-          wordBounds = pageModel.wordHighlights(page),
-          imlaeiUthmaniMappings = imlaeiUthmaniMapper.mapWords(startAyah, endAyah)
-        )
-      }
-    }
-  }
-
-  fun loadPage(): Flow<PageInfo> {
-    return combine(
-      pageSelection(),
-      readingBookmarksForPage(),
-      lineByLineSettings.displaySettingsFlow
-    ) { highlights, readingBookmarks, displaySettings ->
-      val displayText = DisplayText(
-        quranPageInfo.suraName(page),
-        quranPageInfo.juz(page),
-        quranPageInfo.displayRub3(page),
-        manzilText = quranPageInfo.manzilForPage(page),
-        localizedPageText = quranPageInfo.localizedPage(page)
-      )
-
-      val showSidelines = displaySettings.showSidelines && pageProvider.getDataSource().haveSidelines
-      val sidelines = if (showSidelines) {
-        sidelinesForPage(page)
-      } else {
-        persistentListOf()
-      }
-
-      val scrollItem = highlights.firstOrNull { it.shouldScroll }
-      val targetScrollPosition = if (scrollItem != null) {
-        selectionHelper.yForLine(scrollItem.ayahHighlights.first().lineId)
-      } else {
-        -1
-      }
-
-      val pageDetails = pageDetailsFetcher.await()
-      PageInfo(
-        page,
-        pageProvider.pageType(),
-        displayText,
-        displaySettings,
-        pageDetails.lines,
-        pageDetails.suraHeaders,
-        pageDetails.ayahMarkers,
-        highlights,
-        readingBookmarks,
-        sidelines,
-        targetScrollPosition,
-        showSidelines,
-        quranPageInfo.skippedPagesCount()
-      )
-    }
-  }
-
-  fun emptyState(): PageInfo {
-    return EmptyPageInfo.copy(displaySettings = lineByLineSettings.latestDisplaySettings())
-  }
-
-  suspend fun fallbackToImageType(): Boolean {
-    val currentPageType = settings.pageType()
-    val fallbackType = pageProvider.getFallbackPageType()
-    return if (fallbackType != null && currentPageType != fallbackType) {
-      settings.setPageType(fallbackType)
-      crashReporter.log("Line-by-line fallback from $currentPageType to $fallbackType")
-      true
-    } else {
-      false
-    }
-  }
-
-  fun onClick() {
-    readingEventPresenter.onClick()
-    if (readingEventPresenter.ayahSelectionFlow.value !is AyahSelection.None) {
-      readingEventPresenter.onAyahSelection(AyahSelection.None)
-    }
-  }
-
-  suspend fun startSelection(x: Float, y: Float) {
-    selectionStartSuraAyah = null
-    selectionHelper.startSelection(x, y)
-    modifySelectionRange(0f, 0f)
-  }
-
-  fun onPagePositioned(x: Float, y: Float, width: Int, height: Int) {
-    selectionHelper.setPageDimensions(width, height)
-    val changeScrollY = y != lastYOffset
-    lastXOffset = x
-    lastYOffset = y
-
-    if (changeScrollY) {
-      applyUpdatedSelectionScrollY(y)
-    }
-  }
-
-  suspend fun modifySelectionRange(offsetX: Float, offsetY: Float) {
-    val previousSelection = readingEventPresenter.ayahSelectionFlow.value
-    val ayahHighlights = pageDetailsFetcher.await().ayahBounds
-    val selectedAyah = selectionHelper.modifySelectionRange(offsetX, offsetY, ayahHighlights)
-    if (selectedAyah != null) {
-      val selectionStart = selectionStartSuraAyah ?: selectedAyah
-      selectionStartSuraAyah = selectionStart
-
-      val updatedSelection =
-        previousSelection.mergeWith(AyahSelection.Ayah(selectedAyah), selectionStart)
-      if (updatedSelection != previousSelection) {
-        // clear the selection when the page changes for a selection range
-        val clearSelection = doesSpanMultiplePages(updatedSelection)
-        val selectionToUpdate =
-          if (clearSelection) { updatedSelection.withSelectionIndicator(SelectionIndicator.None) }
-          else { updatedSelection }
-        readingEventPresenter.onAyahSelection(selectionToUpdate)
-      }
-    }
-  }
-
-  private fun doesSpanMultiplePages(ayahSelection: AyahSelection): Boolean {
-    return if (ayahSelection is AyahSelection.AyahRange) {
-      val startSuraAyah = ayahSelection.startSuraAyah
-      val endSuraAyah = ayahSelection.endSuraAyah
-      val start = quranPageInfo.pageForSuraAyah(startSuraAyah.sura, startSuraAyah.ayah)
-      val end = quranPageInfo.pageForSuraAyah(endSuraAyah.sura, endSuraAyah.ayah)
-      start != end
-    } else {
-      false
-    }
-  }
-
-  suspend fun endSelection() {
-    selectionStartSuraAyah = null
-    selectionHelper.endSelection()
-    val currentSelection = readingEventPresenter.ayahSelectionFlow.value
-    if (currentSelection !is AyahSelection.None &&
-      (currentSelection.selectionIndicator() is SelectionIndicator.None ||
-          currentSelection.selectionIndicator() is SelectionIndicator.ScrollOnly)
-    ) {
-      val bounds = boundsFor(currentSelection)
-      if (bounds != null) {
-        val (firstBounds, lastBounds) = bounds
-        val updated = currentSelection.withSelectionIndicator(
-          SelectionIndicator.SelectedItemPosition(
-            firstBounds,
-            lastBounds,
-            yScroll = lastYOffset
-          )
-        )
-
-        if (updated != currentSelection) {
-          readingEventPresenter.onAyahSelection(updated)
+    audioBarEventRepository
+      .audioBarEventFlow
+      .onEach { event ->
+        when (event) {
+          AudioBarEvent.Acknowledge -> audioBarListener.onAcceptPressed()
+          AudioBarEvent.Cancel -> audioBarListener.onCancelPressed(false)
+          AudioBarEvent.CancelDownload -> audioBarListener.onCancelPressed(true)
+          AudioBarEvent.ChangeQari -> audioBarListener.onShowQariList()
+          AudioBarEvent.Memorize -> audioBarListener.onMemorizePressed()
+          AudioBarEvent.Playlists -> audioBarListener.onPlaylistsPressed()
+          AudioBarEvent.FastForward -> audioBarListener.onNextPressed()
+          AudioBarEvent.Pause -> audioBarListener.onPausePressed()
+          AudioBarEvent.Play -> audioBarListener.onPlayPressed()
+          AudioBarEvent.ResumePlayback -> audioBarListener.onContinuePlaybackPressed()
+          AudioBarEvent.Rewind -> audioBarListener.onPreviousPressed()
+          is AudioBarEvent.SetRepeat -> audioBarListener.setRepeatCount(event.repeat)
+          is AudioBarEvent.SetSpeed -> audioBarListener.setPlaybackSpeed(event.speed)
+          AudioBarEvent.ShowSettings -> audioBarListener.onAudioSettingsPressed()
+          AudioBarEvent.Stop -> audioBarListener.onStopPressed()
+          AudioBarEvent.EndSession -> audioBarRecitationListener.onEndRecitationSessionPressed()
+          AudioBarEvent.HideVerses -> audioBarRecitationListener.onHideVersesPressed()
+          AudioBarEvent.PauseRecitation -> audioBarRecitationListener.onPauseRecitationPressed()
+          AudioBarEvent.PlayRecitation -> audioBarRecitationListener.onPlayRecitationPressed()
+          AudioBarEvent.Recitation, AudioBarEvent.Record -> audioBarRecitationListener.onRecitationPressed()
+          AudioBarEvent.RecitationLongPress -> audioBarRecitationListener.onRecitationLongPressed()
+          AudioBarEvent.Transcript -> audioBarRecitationListener.onRecitationTranscriptPressed()
         }
       }
+      .launchIn(scope)
+  }
+
+  fun audioRequest(): AudioRequest? {
+    return when (val status = audioPlaybackAyahFlow.value) {
+      is AudioStatus.Playback -> status.audioRequest
+      AudioStatus.Stopped -> null
     }
   }
 
-  private fun applyUpdatedSelectionScrollY(y: Float) {
-    val currentSelection = readingEventPresenter.ayahSelectionFlow.value
-    val selectionIndicator = currentSelection.selectionIndicator()
-    if (selectionIndicator !is SelectionIndicator.None && selectionIndicator !is SelectionIndicator.ScrollOnly) {
-      val updatedSelectionIndicator = selectionIndicator.withYScroll(y)
-      val updatedSelection = currentSelection.withSelectionIndicator(updatedSelectionIndicator)
-      readingEventPresenter.onAyahSelection(updatedSelection)
-    }
-  }
-
-  private suspend fun boundsFor(selection: AyahSelection): Pair<SelectionRectangle, SelectionRectangle>? {
-    val startAyah = selection.startSuraAyah() ?: return null
-    val endAyah = selection.endSuraAyah() ?: return null
-
-    val highlights = pageDetailsFetcher.await().ayahBounds
-    val initialStartBounds = highlights.firstOrNull { it.sura == startAyah.sura && it.ayah == startAyah.ayah }
-    val initialEndBounds = highlights.lastOrNull { it.sura == endAyah.sura && it.ayah == endAyah.ayah }
-
-    // if the selection spans multiple pages, we might have either a start or
-    // an end - use the one we have for the other one in this case.
-    val startBounds = initialStartBounds ?: initialEndBounds
-    val endBounds = initialEndBounds ?: initialStartBounds
-
-    return if (startBounds != null && endBounds != null) {
-      val startRectangle = selectionHelper.selectionRectangle(startBounds)
-      val endRectangle = selectionHelper.selectionRectangle(endBounds)
-      if (startRectangle != null && endRectangle != null) {
-        // for now only offset by x, we'll use scrollY for y
-        // when tablet is implemented, we should reconsider
-        startRectangle.offset(lastXOffset, 0f) to
-            endRectangle.offset(lastXOffset, 0f)
-      } else {
-        null
-      }
-    } else {
-      null
-    }
-  }
-
-  private fun pageSelection(): Flow<ImmutableList<HighlightAyah>> {
-    return combine(
-      bookmarksDao.bookmarksForPage(page),
-      highlightsForPage(),
-      readingEventPresenter.ayahSelectionFlow,
-      audioStatusRepository.audioPlaybackFlow,
-      memorizationEngine.state
-    ) { bookmarks, highlights, selectedAyah, audioPlaybackStatus, memState ->
-      val pageDetails = pageDetailsFetcher.await()
-      val ayahHighlights = pageDetails.ayahBounds
-      val currentBookmarkHighlights = bookmarks.map {
-          bookmark -> ayahHighlights.filter { it.sura == bookmark.sura && it.ayah == bookmark.ayah }
-      }.map { HighlightAyah(HighlightType.Bookmark, it) }
-
-      val colorHighlights = highlights.map { highlight ->
-        val suraAyah = highlight.suraAyah
-        HighlightAyah(
-          HighlightType.Highlight(highlight.color),
-          ayahHighlights.filter { it.sura == suraAyah.sura && it.ayah == suraAyah.ayah }
-        )
-      }
-
-      val bookmarkHighlights =
-        if (currentBookmarkHighlights.isEmpty() || settings.shouldShowBookmarks()) {
-          currentBookmarkHighlights
-        }
-        else {
-          emptyList()
-        }
-
-      val selectedAyahHighlights =
-        when (selectedAyah) {
-          is AyahSelection.Ayah -> {
-            val suraAyah = selectedAyah.suraAyah
-            ayahHighlights.filter { it.sura == suraAyah.sura && it.ayah == suraAyah.ayah }
-          }
-          is AyahSelection.AyahRange -> {
-            val start = selectedAyah.startSuraAyah
-            val end = selectedAyah.endSuraAyah
-            ayahHighlights.filter { isAyahWithin(it.sura, it.ayah, start, end) }
-          }
-          AyahSelection.None -> emptyList()
-        }
-      val shouldScroll = selectedAyah is AyahSelection.Ayah &&
-          selectedAyah.selectionIndicator is SelectionIndicator.ScrollOnly
-      val selectedHighlights = HighlightAyah(HighlightType.Selection, selectedAyahHighlights, shouldScroll)
-
-      val audioPlaybackAyah = audioPlaybackStatus.currentPlaybackAyah()
-      val audioHighlight = if (audioPlaybackAyah == null) {
-        emptyList()
-      } else {
-        ayahHighlights.filter {
-          it.sura == audioPlaybackAyah.sura && it.ayah == audioPlaybackAyah.ayah
-        }
-      }
-
-      val audioPlaybackWord = audioPlaybackStatus.currentPlaybackWord()
-      val wordHighlights = if (audioPlaybackAyah == null || audioPlaybackWord == null) {
-        emptyList()
-      } else {
-        val ayahWords = pageDetails.wordBounds.filter { it.sura == audioPlaybackAyah.sura && it.ayah == audioPlaybackAyah.ayah }
-
-        // find the corresponding mapping from imlaei => uthmani, since audioWordNumber is imlaei
-        val targetWord = pageDetails.imlaeiUthmaniMappings.find {
-          it.sura == audioPlaybackAyah.sura && it.ayah == audioPlaybackAyah.ayah && it.audioWordNumber == audioPlaybackWord
-        }
-
-        // each word in imlaei might correspond to one or more words in uthmani
-        targetWord?.glyphWordNumbers.orEmpty()
-          .mapNotNull { ayahWords.getOrNull(it - 1) }
-          .map { it.asAyahHighlight() }
-      }
-
-      val audioAyahHighlights = HighlightAyah(HighlightType.Audio, audioHighlight, wordHighlights.isEmpty())
-      val audioWordHighlights = HighlightAyah(HighlightType.AudioWord, wordHighlights, true)
-
-      val memMaskHighlights = if (memState.isActive && memState.isTextMasked && memState.activeAyahsInStep.isNotEmpty()) {
-        val maskedAyahs = ayahHighlights.filter { ayah ->
-          memState.activeAyahsInStep.any { it.sura == ayah.sura && it.ayah == ayah.ayah }
-        }
-        HighlightAyah(HighlightType.MemorizationMask, maskedAyahs)
-      } else {
-        null
-      }
-
-      val memWindowHighlights = if (memState.isActive && memState.currentStep?.ayahs?.isNotEmpty() == true) {
-        val stepAyahs = memState.currentStep.ayahs
-        val windowAyahs = ayahHighlights.filter { ayah ->
-          stepAyahs.any { it.sura == ayah.sura && it.ayah == ayah.ayah }
-        }
-        HighlightAyah(HighlightType.MemorizationWindow, windowAyahs)
-      } else {
-        null
-      }
-
-      val extraHighlights = listOfNotNull(memWindowHighlights, memMaskHighlights)
-
-      (colorHighlights + bookmarkHighlights + selectedHighlights + audioAyahHighlights + audioWordHighlights + extraHighlights)
-        .filter { it.ayahHighlights.isNotEmpty() }
-        .toImmutableList()
-    }
-  }
-
-  private fun readingBookmarksForPage(): Flow<ImmutableList<ReadingBookmarkAyah>> {
-    return readingBookmarksDao.readingBookmarksFlow()
-      .map { readingBookmarks ->
-        val ayahBounds = pageDetailsFetcher.await().ayahBounds
-        readingBookmarks
-          .filterIsInstance<AyahReadingBookmark>()
-          .groupBy({ it.asSuraAyah() }, { it.slot })
-          .map { (suraAyah, slots) ->
-            ReadingBookmarkAyah(
-              slots.sorted().toImmutableList(),
-              ayahBounds.filter { it.sura == suraAyah.sura && it.ayah == suraAyah.ayah }
-            )
-          }
-          .filter { it.ayahHighlights.isNotEmpty() }
-          .toImmutableList()
-      }
-      .distinctUntilChanged()
-  }
-
-  private fun highlightsForPage(): Flow<List<Highlight>> {
-    val range = quranInfo.getVerseRangeForPage(page)
-    val startAyah = SuraAyah(range.startSura, range.startAyah)
-    val endAyah = SuraAyah(range.endingSura, range.endingAyah)
-    return highlightsDao.highlightsFlow()
-      .map { highlights -> highlights.filter { it.suraAyah in startAyah..endAyah } }
-      .distinctUntilChanged()
-  }
-
-  private fun isAyahWithin(sura: Int, ayah: Int, start: SuraAyah, end: SuraAyah): Boolean {
-    return SuraAyah(sura, ayah) in start..end
-  }
-
-  private suspend fun linesForPage(page: Int): ImmutableList<LineModel> {
-    return withContext(Dispatchers.IO) {
-      val lines = mutableListOf<LineModel>()
-      val whence = quranFileManager.quranImagesDirectory()
-      for (lineNumber in 1..15) {
-        val file = File(File(whence, page.toString()), "$lineNumber.png")
-
-        val fileName = file.toString()
-        val sourceBitmap = BitmapFactory.decodeFile(fileName, options)
-        if (sourceBitmap != null) {
-          val bitmap = sourceBitmap.extractAlpha()
-          sourceBitmap.recycle()
-          lines.add(LineModel(lineNumber - 1, bitmap.asImageBitmap()))
-        } else {
-          val status = if (file.exists()) {
-            "exists: ${file.name} with length ${file.length()}"
-          } else {
-            "missing"
-          }
-          throw MissingLineByLineImagesException("Failed to load line $lineNumber for page $page - file $status")
-        }
-      }
-      lines.toImmutableList()
-    }
-  }
-
-  private suspend fun sidelinesForPage(page: Int): ImmutableList<SidelineModel> {
-    return withContext(Dispatchers.IO) {
-      val whence = quranFileManager.quranImagesDirectory()
-      val direction = if (page % 2 == 0) SidelineDirection.DOWN else SidelineDirection.UP
-      val sidelinesDirectory = File(File(whence, page.toString()), "sidelines")
-      if (sidelinesDirectory.isDirectory) {
-        val files = sidelinesDirectory.listFiles()
-          ?.filter {
-            val filenameWithoutOverrides =
-              it.nameWithoutExtension.replace("_down", "").replace("_up", "")
-            it.extension == "png" &&
-                filenameWithoutOverrides.toIntOrNull() != null
-          } ?: emptyList()
-        files.mapNotNull {
-          val filenameWithoutOverrides =
-            it.nameWithoutExtension.replace("_down", "").replace("_up", "")
-          val number = filenameWithoutOverrides.toInt()
-
-          val actualDirection = if ("_up" in it.nameWithoutExtension) {
-            SidelineDirection.UP
-          } else if ("_down" in it.nameWithoutExtension) {
-            SidelineDirection.DOWN
-          } else {
-            direction
-          }
-
-          val sourceBitmap = BitmapFactory.decodeFile(it.toString(), options)
-          if (sourceBitmap != null) {
-            val bitmap = sourceBitmap.extractAlpha()
-            sourceBitmap.recycle()
-            SidelineModel(bitmap.asImageBitmap(), number, actualDirection)
-          } else {
-            crashReporter.log("failed to load sideline image [$it] on page [$page]")
-            null
-          }
-        }.toImmutableList()
-      } else {
-        persistentListOf()
-      }
-    }
-  }
-
-  companion object {
-    private val options = BitmapFactory.Options()
-      .apply {
-        inPreferredConfig = Bitmap.Config.ALPHA_8
-      }
-  }
-}
-
-`
-
----
-
-### File: app/src/main/java/com/quran/labs/androidquran/view/HighlightsDrawer.kt
-
-`kotlin
-package com.quran.labs.androidquran.view
-
-import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
-import android.graphics.RectF
-import android.graphics.Region
-import android.os.Build
-import android.util.TypedValue
-import android.util.TypedValue.COMPLEX_UNIT_DIP
-import android.widget.ImageView
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.ColorUtils
-import com.quran.data.model.highlight.HighlightType
-import com.quran.data.model.highlight.HighlightType.Mode.BACKGROUND
-import com.quran.data.model.highlight.HighlightType.Mode.COLOR
-import com.quran.data.model.highlight.HighlightType.Mode.HIDE
-import com.quran.data.model.highlight.HighlightType.Mode.HIGHLIGHT
-import com.quran.data.model.highlight.HighlightType.Mode.UNDERLAY
-import com.quran.data.model.highlight.HighlightType.Mode.UNDERLINE
-import com.quran.labs.androidquran.R
-import com.quran.labs.androidquran.ui.helpers.HighlightTypes
-import com.quran.labs.androidquran.ui.helpers.AyahHighlight
-import com.quran.labs.androidquran.ui.helpers.AyahHighlight.TransitionAyahHighlight
-import com.quran.page.common.data.AyahBounds
-import com.quran.page.common.data.AyahCoordinates
-import com.quran.page.common.data.PageCoordinates
-import com.quran.page.common.draw.ImageDrawHelper
-import java.util.SortedMap
-
-class HighlightsDrawer(
-  private val ayahCoordinates: () -> AyahCoordinates?,
-  private val highlightCoordinates: () -> Map<AyahHighlight, List<AyahBounds>>?,
-  private val currentHighlights: () -> SortedMap<HighlightType, Set<AyahHighlight>>?,
-  private val superOnDraw: (Canvas) -> Unit,
-  private val isNightMode: () -> Boolean = { false },
-  private vararg val highlightTypesFilter: HighlightType.Mode = HighlightType.Mode.entries.toTypedArray(),
-) : ImageDrawHelper {
-
-  // cached objects for onDraw
-  private val scaledRect = RectF()
-  private val alreadyHighlighted = mutableMapOf<HighlightType.Mode, MutableSet<AyahHighlight>>()
-
-  // Singleton object so we can share the cache across all pages
-  private object PaintCache {
-    private val cache =
-      mutableMapOf<Triple<HighlightType.Mode, /* @ColorRes */ Int, Boolean>, Paint>()
-
-    fun getPaintForHighlightType(
-      context: Context,
-      type: HighlightType,
-      isNightMode: Boolean
-    ): Paint {
-      val colorResId = if (isNightMode) type.nightColorResId else type.colorResId
-      return cache.getOrPut(Triple(type.mode, colorResId, isNightMode)) {
-        Paint().apply {
-          val color = ContextCompat.getColor(context, colorResId)
-          when (type.mode) {
-            COLOR -> this.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_ATOP)
-            UNDERLAY -> this.color = if (isNightMode) {
-              ColorUtils.setAlphaComponent(color, NIGHT_UNDERLAY_ALPHA)
-            } else {
-              color
-            }
-            else -> this.color = color
-          }
-        }
-      }
-    }
-
-    fun getMaskBorderPaint(context: Context, isNightMode: Boolean): Paint {
-      val colorRes = if (isNightMode) R.color.memorization_mask_border_night else R.color.memorization_mask_border
-      val color = ContextCompat.getColor(context, colorRes)
-      return Paint().apply {
-        this.color = color
-        this.style = Paint.Style.STROKE
-        this.strokeWidth = TypedValue.applyDimension(COMPLEX_UNIT_DIP, 1.5f, context.resources.displayMetrics)
-      }
-    }
-  }
-
-  private fun alreadyHighlightedContains(
-    highlightType: HighlightType,
-    highlight: AyahHighlight
-  ): Boolean {
-    val alreadyHighlighted = alreadyHighlighted.getOrElse(highlightType.mode) { emptySet() }
-    if (highlight in alreadyHighlighted) {
-      return true
-    }
-    if (highlight.isTransition()) {
-      val transitionHighlight = highlight as TransitionAyahHighlight
-      // if x -> y, either x or y is already highlighted, then we don't show the highlight
-      return transitionHighlight.source in alreadyHighlighted
-          || transitionHighlight.destination in alreadyHighlighted
-    }
-    return false
-  }
-
-  override fun draw(pageCoordinates: PageCoordinates, canvas: Canvas, image: ImageView) {
-    val highlightCoordinates = highlightCoordinates() ?: return
-    val glyphsCoords = ayahCoordinates()?.glyphCoordinates
-    val ayahLineCoords = ayahCoordinates()?.ayahLineCoordinates
-    val underlineRaiseRatio = ayahCoordinates()?.underlineRaiseRatio ?: 0f
-    val currentHighlights = currentHighlights() ?: return
-
-    alreadyHighlighted.clear()
-
-    val filteredHighlights = currentHighlights.filterKeys { it.mode in highlightTypesFilter }
-
-    for ((highlightType, highlights) in filteredHighlights) {
-      val paint = PaintCache.getPaintForHighlightType(image.context, highlightType, isNightMode())
-
-      for (highlight in highlights) {
-        if (alreadyHighlightedContains(highlightType, highlight)) continue
-
-        val isUnderline = highlightType.mode == UNDERLINE
-        val rangesToDraw = glyphsCoords?.takeIf { !highlightType.isTransitionAnimated }
-          ?.getBounds(highlight.key, !isUnderline, highlightType.mode == BACKGROUND)
-          ?: ayahLineCoords?.get(highlight.key)?.takeIf { isUnderline }?.map { it.bounds }
-          ?: highlightCoordinates[highlight]?.map { it.bounds }
-
-        if (rangesToDraw != null && rangesToDraw.isNotEmpty()) {
-          for (bounds in rangesToDraw) {
-            if (highlightType.mode == UNDERLINE) {
-              val underlineThickness = TypedValue.applyDimension(
-                COMPLEX_UNIT_DIP, UNDERLINE_THICKNESS_DIPS, image.resources.displayMetrics)
-              bounds.top = bounds.bottom - bounds.height() * underlineRaiseRatio
-              bounds.bottom = bounds.top + underlineThickness
-            }
-
-            image.imageMatrix.mapRect(scaledRect, bounds)
-            scaledRect.offset(image.paddingLeft.toFloat(), image.paddingTop.toFloat())
-
-            when (highlightType.mode) {
-              HIDE -> {
-                // Clip out the bounds to be hidden so they don't get drawn
-                clipOutRect(canvas, scaledRect)
-              }
-
-              COLOR -> {
-                // 1. save previously applied clips, and clip to just the bounds we want to colorize
-                canvas.save()
-                canvas.clipRect(scaledRect)
-                // 2. save previously applied color filter, and draw this clipped part with the color we want
-                val appliedFilter = image.colorFilter
-                image.colorFilter = paint.colorFilter
-                superOnDraw(canvas)
-                // 3. restore sate (previously applied color filter + previous canvas clips)
-                image.colorFilter = appliedFilter
-                canvas.restore()
-                // 4. clip out the bounds we just colorized so it doesn't get drawn again
-                clipOutRect(canvas, scaledRect)
-              }
-
-              UNDERLAY, HIGHLIGHT, BACKGROUND, UNDERLINE -> {
-                // Draw a rectangle with the specified paint
-                canvas.drawRect(scaledRect, paint)
-                if (highlightType == HighlightTypes.MEMORIZATION_MASK) {
-                  val borderPaint = PaintCache.getMaskBorderPaint(image.context, isNightMode())
-                  canvas.drawRect(scaledRect, borderPaint)
-                }
-              }
-            }
-          }
-
-          alreadyHighlighted.getOrPut(highlightType.mode, { mutableSetOf() }).add(highlight)
-        }
-      }
-    }
-  }
-
-  private fun clipOutRect(canvas: Canvas, rect: RectF) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      canvas.clipOutRect(rect)
-    } else {
-      canvas.clipRect(rect, Region.Op.DIFFERENCE)
-    }
-  }
-
-  companion object {
-    private const val UNDERLINE_THICKNESS_DIPS = 3f // dp
-    private const val NIGHT_UNDERLAY_ALPHA = 0x66
-  }
-}
-
-`
-
----
-
-### File: app/src/main/AndroidManifest.xml
-
-`xml
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          xmlns:tools="http://schemas.android.com/tools"
-  android:installLocation="auto">
-
-  <uses-permission android:name="android.permission.INTERNET"/>
-  <uses-permission
-      android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-      android:maxSdkVersion="29" />
-  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-  <uses-permission android:name="android.permission.WAKE_LOCK"/>
-  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-
-  <!-- foreground services need this when targeting Android 9+ (Api 28+) -->
-  <uses-permission-sdk-23 android:name="android.permission.FOREGROUND_SERVICE"/>
-
-  <!-- required for posting notifications on Android 13+ (Api 33+) -->
-  <uses-permission-sdk-23 android:name="android.permission.POST_NOTIFICATIONS"/>
-
-  <!-- required for foreground service types on Android 14+ (Api 34+) -->
-  <uses-permission-sdk-23 android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-  <uses-permission-sdk-23 android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-
-  <!-- support chromebooks without touch screen -->
-  <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-
-  <!-- support android tv -->
-  <uses-feature android:name="android.software.leanback" android:required="false" />
-
-  <application
-      android:banner="@mipmap/tv_banner"
-      android:icon="@mipmap/ic_launcher"
-      android:roundIcon="@mipmap/ic_launcher_round"
-      android:label="@string/app_name"
-      android:name=".QuranApplication"
-      android:allowBackup="true"
-      android:fullBackupContent="@xml/backup"
-      android:dataExtractionRules="@xml/data_extraction"
-      android:networkSecurityConfig="@xml/network_security_config"
-      android:supportsRtl="true"
-      android:theme="@style/Quran"
-      android:requestLegacyExternalStorage="true"
-      android:enableOnBackInvokedCallback="true"
-      android:localeConfig="@xml/locales_config"
-      tools:replace="android:fullBackupContent,android:dataExtractionRules"
-      tools:targetApi="tiramisu">
-
-    <activity
-        android:name=".QuranDataActivity"
-        android:configChanges="keyboardHidden|orientation|screenSize"
-        android:theme="@style/QuranToolBarDayNight"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN"/>
-        <category android:name="android.intent.category.LAUNCHER"/>
-        <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
-      </intent-filter>
-      <meta-data android:name="android.app.shortcuts"
-                 android:resource="@xml/shortcuts" />
-    </activity>
-
-    <activity android:name=".ShortcutsActivity"
-              android:exported="true" />
-    <activity
-        android:name=".ui.whatsnew.AnnouncementActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:exported="false"/>
-    <activity
-        android:name=".ui.QuranActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:exported="false"/>
-    <activity
-        android:name=".AboutUsActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:exported="false"/>
-    <activity android:name=".HelpActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:exported="false"/>
-    <activity
-        android:name=".ui.PagerActivity"
-        android:launchMode="singleTop"
-        android:theme="@style/QuranToolBar.Overlay"
-        android:exported="false"/>
-    <activity
-        android:name=".ui.TranslationManagerActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:configChanges="keyboardHidden|orientation|screenSize"
-        android:exported="false"/>
-    <activity
-        android:name=".QuranPreferenceActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:configChanges="keyboardHidden|orientation|screenSize"
-        android:exported="false"/>
-    <activity
-        android:name=".QuranAdvancedPreferenceActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:configChanges="keyboardHidden|orientation|screenSize"
-        android:exported="false"/>
-
-    <activity
-        android:name=".ui.BookmarkListActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:exported="false"/>
-
-    <activity
-        android:name=".SearchActivity"
-        android:launchMode="singleTop"
-        android:theme="@style/QuranToolBarDayNight"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.SEARCH"/>
-      </intent-filter>
-      <meta-data
-          android:name="android.app.searchable"
-          android:resource="@xml/searchable"/>
-    </activity>
-
-    <activity android:name=".QuranForwarderActivity"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW"/>
-        <category android:name="android.intent.category.DEFAULT"/>
-        <data android:scheme="quran"/>
-      </intent-filter>
-    </activity>
-
-    <!-- declare the default searchable Activity for the whole app -->
-    <meta-data
-        android:name="android.app.default_searchable"
-        android:value=".SearchActivity"/>
-    <!-- provides search suggestions for verses. -->
-    <provider
-        android:name=".data.QuranDataProvider"
-        android:exported="false"
-        android:authorities="@string/authority"/>
-
-    <provider
-        android:name="androidx.core.content.FileProvider"
-        android:authorities="@string/file_authority"
-        android:grantUriPermissions="true"
-        android:exported="false">
-      <meta-data
-          android:name="android.support.FILE_PROVIDER_PATHS"
-          android:resource="@xml/file_paths"/>
-    </provider>
-
-    <receiver android:name="androidx.media.session.MediaButtonReceiver"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.MEDIA_BUTTON"/>
-      </intent-filter>
-    </receiver>
-
-    <activity android:name=".QuranImportActivity"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.SEND"/>
-        <category android:name="android.intent.category.DEFAULT"/>
-        <data android:mimeType="application/json"/>
-      </intent-filter>
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW"/>
-
-        <category android:name="android.intent.category.DEFAULT"/>
-        <category android:name="android.intent.category.BROWSABLE"/>
-
-        <data android:scheme="file"/>
-        <data android:host="*"/>
-        <data android:mimeType="*/*"/>
-        <data android:pathPattern=".*\\.backup"/>
-        <data android:pathPattern=".*\\..*\\.backup"/>
-        <data android:pathPattern=".*\\..*\\..*\\.backup"/>
-        <data android:pathPattern=".*\\..*\\..*\\..*\\.backup"/>
-      </intent-filter>
-    </activity>
-
-    <activity android:name=".pageselect.PageSelectActivity"
-        android:theme="@style/QuranToolBarDayNight"
-        android:exported="false"/>
-
-    <service
-        android:exported="false"
-        android:name=".service.QuranDownloadService"
-        android:foregroundServiceType="dataSync"/>
-
-    <service
-        android:exported="false"
-        android:name=".service.AudioService"
-        android:foregroundServiceType="mediaPlayback">
-      <intent-filter>
-        <action android:name="android.intent.action.MEDIA_BUTTON"/>
-      </intent-filter>
-    </service>
-
-    <service
-        android:name=".widget.BookmarksWidgetService"
-        android:exported="false"
-        android:permission="android.permission.BIND_REMOTEVIEWS" />
-
-    <receiver android:name=".widget.BookmarksWidget"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-        <action android:name="com.quran.labs.androidquran.UPDATE_LIST" />
-      </intent-filter>
-
-      <meta-data
-          android:name="android.appwidget.provider"
-          android:resource="@xml/bookmarks_widget_info" />
-    </receiver>
-
-    <receiver android:name=".widget.SearchWidget"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-
-      <meta-data
-          android:name="android.appwidget.provider"
-          android:resource="@xml/search_widget_info" />
-    </receiver>
-
-    <activity
-        android:name=".widget.ShowJumpFragmentActivity"
-        android:launchMode="singleInstance"
-        android:exported="false"
-        android:excludeFromRecents="true"
-        android:theme="@style/QuranDialog" />
-
-    <!-- support for app specific locales on Android 12 (32) and lower -->
-    <service
-        android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
-        android:enabled="false"
-        android:exported="false">
-      <meta-data
-          android:name="autoStoreLocales"
-          android:value="true" />
-    </service>
-
-    <!-- override WorkManager initialization, but keep androidx.startup for others -->
-    <provider
-        android:name="androidx.startup.InitializationProvider"
-        android:authorities="${applicationId}.androidx-startup"
-        android:exported="false"
-        tools:node="merge">
-      <meta-data
-          android:name="androidx.work.WorkManagerInitializer"
-          android:value="androidx.startup"
-          tools:node="remove" />
-    </provider>
-  </application>
-</manifest>
-
-`
-
----
-
-### File: app/src/main/res/values/colors.xml
-
-`xml
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-  <color name="toolbar">@color/surface</color>
-  <color name="toolbar_text">#ff44464e</color>
-  <color name="toolbar_icon_tint">#ff44464e</color>
-  <color name="toolbar_secondary_text">#ff44464e</color>
-
-  <color name="surface">#fffaf8f7</color>
-  <color name="accent_color">#ff00838f</color>
-  <color name="accent_color_dark">@color/color_control_normal</color>
-  <color name="page_background">#FFF4CB</color>
-  <color name="memorization_mask_color">#FFF4CB</color>
-  <color name="memorization_mask_color_night">#FF181818</color>
-  <color name="memorization_mask_border">#55795548</color>
-  <color name="memorization_mask_border_night">#55FFFFFF</color>
-  <color name="memorization_window_color">#264DB6AC</color>
-  <color name="memorization_window_color_night">#334DB6AC</color>
-  <color name="secondary_dark_background">#ffffffff</color>
-  <color name="header_background">#dee2e6</color>
-  <color name="header_text_color">@color/sura_number_color</color>
-  <color name="ripple_dark">#1f000000</color>
-  <color name="title_color">#212529</color>
-  <color name="sura_number_color">#ff212529</color>
-  <color name="sura_details_color">#ff6c757d</color>
-  <color name="nav_status_bar_colors">#ff424242</color>
-  <color name="transparent_actionbar_color">#AA000000</color>
-  <color name="panel_background_color">@color/toolbar</color>
-  <color name="translation_hdr_color">#ff777777</color>
-  <color name="translation_sura_header">#fff1ecd8</color>
-  <color name="translation_sura_header_night">#ff424242</color>
-  <color name="translation_verse_text_color">#ff858383</color>
-  <color name="translation_verse_background_color">#fff2f2f2</color>
-  <color name="translation_verse_background_night_color">#ff333333</color>
-  <color name="translation_inline_ayah_highlight_color">#ff00838F</color>
-  <color name="translation_inline_ayah_highlight_night_color">#ff34d399</color>
-  <color name="translation_translator_color">#ff00838F</color>
-  <color name="translation_text_color">#ff444444</color>
-  <color name="translation_footnote_color">#ff999999</color>
-  <color name="translation_divider_color">#ffe8e8e8</color>
-
-  <color name="translation_ayah_selected_color">#ffe0f2f1</color>
-  <color name="translation_ayah_selected_color_night">#ff2d2d2d</color>
-  <color name="overlay_text_color">#ff505050</color>
-  <color name="inactive">#9e9e9e</color>
-  <color name="selection_highlight">#404694A6</color>
-  <color name="audio_highlight">#4046A646</color>
-  <color name="note_highlight">#40EBEB21</color>
-  <color name="bookmark_highlight">#40A4A4A4</color>
-  <color name="translation_highlight">#ff33b5e5</color>
-  <color name="panel_label">@color/accent_color</color>
-  <color name="notification_color">#ff112e44</color>
-  <color name="audio_notification_color">@color/download_button_background</color>
-  <color name="audio_notification_background_color">#ffd8d8d8</color>
-  <color name="ayah_bookmark_color">#ff2e7d32</color>
-  <color name="download_button_background">#ffe8f4f8</color>
-
-  <color name="icon_tint">#ff212529</color>
-  <color name="indicator_color">@color/accent_color</color>
-  <color name="color_control_activated">@color/accent_color</color>
-  <color name="color_control_normal">#4d00838f</color>
-  
-  
-  <color name="snackbar_background_color">@color/download_button_background</color>
-  <color name="overlay_panel">#dd000000</color>
-  <color name="navbar_night_color">#ff000000</color>
-  <color name="toast_background_color">#e6eeeeee</color>
-  <color name="toast_text_color">#ff000000</color>
-  <color name="toast_background_color_night">#ff2d2d2d</color>
-  <color name="toast_text_color_night">#ffffffff</color>
-
-  <!--
-    highlights as they appear in a list. the page itself uses the pale HighlightColors, which
-    are too weak to read as a colour against a light row, so lists use a darker ramp instead.
-  -->
-  <color name="highlight_list_yellow">#fff9a825</color>
-  <color name="highlight_list_green">#ff2e7d32</color>
-  <color name="highlight_list_blue">#ff1565c0</color>
-  <color name="highlight_list_pink">#ffad1457</color>
-  <color name="highlight_list_purple">#ff6a1b9a</color>
-  <!-- the outline of a collection name chip - the accent colour, held back so it reads as a label -->
-  <color name="tag_chip_border">#7300838f</color>
-  <!-- an ayah bookmark with no highlight on it - deliberately not one of the five above -->
-  <color name="unhighlighted_bookmark_color">#ff546e7a</color>
-  <!-- reading bookmarks -->
-
-  <color name="default_text">#ff000000</color>
-
-  <color name="text_primary">#ff212121</color>
-  <color name="disabled_color">#ffbdbdbd</color>
-  <color name="text_hint_color">#ff9e9e9e</color>
-</resources>
-
-`
-
----
-
-### File: common/audio/src/test/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPreferencesTest.kt
-
-`kotlin
-package com.quran.labs.androidquran.common.audio.memorization
-
-import android.content.SharedPreferences
-import com.google.common.truth.Truth.assertThat
-import com.quran.data.model.SuraAyah
-import org.junit.Before
-import org.junit.Test
-
-class MemorizationPreferencesTest {
-
-  private lateinit var fakePrefs: FakeSharedPreferences
-  private lateinit var memorizationPreferences: MemorizationPreferences
-
-  @Before
-  fun setUp() {
-    fakePrefs = FakeSharedPreferences()
-    memorizationPreferences = MemorizationPreferences(fakePrefs)
-  }
-
-  @Test
-  fun `initial state has no active session and empty history`() {
-    assertThat(memorizationPreferences.hasSavedSession()).isFalse()
-    assertThat(memorizationPreferences.getSavedConfig()).isNull()
-    assertThat(memorizationPreferences.getMasteredRanges()).isEmpty()
-  }
-
-  @Test
-  fun `saveSession persists configuration and progress`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(2, 255),
-      endAyah = SuraAyah(2, 257),
-      windowSize = 3,
-      singleRepeat = 5,
-      connectRepeat = 4,
-      delayMode = MemorizationDelayMode.FixedSeconds(3),
-      memoryTestMode = true,
-      maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
-      recordRecitation = true,
-      enableBridge = false
-    )
-
-    memorizationPreferences.saveSession(config, currentStepIndex = 4, currentRepeatIteration = 2)
-
-    assertThat(memorizationPreferences.hasSavedSession()).isTrue()
-    val savedConfig = memorizationPreferences.getSavedConfig()
-    assertThat(savedConfig).isNotNull()
-    assertThat(savedConfig?.startAyah).isEqualTo(SuraAyah(2, 255))
-    assertThat(savedConfig?.endAyah).isEqualTo(SuraAyah(2, 257))
-    assertThat(savedConfig?.windowSize).isEqualTo(3)
-    assertThat(savedConfig?.singleRepeat).isEqualTo(5)
-    assertThat(savedConfig?.connectRepeat).isEqualTo(4)
-    assertThat(savedConfig?.delayMode).isEqualTo(MemorizationDelayMode.FixedSeconds(3))
-    assertThat(savedConfig?.memoryTestMode).isTrue()
-    assertThat(savedConfig?.maskingLevel).isEqualTo(MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT)
-    assertThat(savedConfig?.recordRecitation).isTrue()
-    assertThat(savedConfig?.enableBridge).isFalse()
-
-    assertThat(memorizationPreferences.getSavedStepIndex()).isEqualTo(4)
-    assertThat(memorizationPreferences.getSavedRepeatIteration()).isEqualTo(2)
-  }
-
-  @Test
-  fun `saveSession persists match duration delay mode correctly`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 7),
-      delayMode = MemorizationDelayMode.MatchAyahDuration
-    )
-
-    memorizationPreferences.saveSession(config, 0, 1)
-    val saved = memorizationPreferences.getSavedConfig()
-    assertThat(saved?.delayMode).isEqualTo(MemorizationDelayMode.MatchAyahDuration)
-  }
-
-  @Test
-  fun `clearSession removes active session flag`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 7)
-    )
-    memorizationPreferences.saveSession(config, 0, 1)
-    assertThat(memorizationPreferences.hasSavedSession()).isTrue()
-
-    memorizationPreferences.clearSession()
-
-    assertThat(memorizationPreferences.hasSavedSession()).isFalse()
-    assertThat(memorizationPreferences.getSavedConfig()).isNull()
-  }
-
-  @Test
-  fun `mastered range serialization and deserialization works`() {
-    val range = MasteredRange(
-      startAyah = SuraAyah(2, 255),
-      endAyah = SuraAyah(2, 257),
-      timestamp = 1729000000000L,
-      repetitions = 7
-    )
-
-    val serialized = range.serialize()
-    assertThat(serialized).isEqualTo("2:255-2:257@1729000000000#7")
-
-    val deserialized = MasteredRange.deserialize(serialized)
-    assertThat(deserialized).isEqualTo(range)
-  }
-
-  @Test
-  fun `saveMasteredRange adds to history in descending order with deduplication`() {
-    val r1 = MasteredRange(SuraAyah(1, 1), SuraAyah(1, 7), 1000L, 5)
-    val r2 = MasteredRange(SuraAyah(2, 1), SuraAyah(2, 5), 2000L, 6)
-    val r3 = MasteredRange(SuraAyah(1, 1), SuraAyah(1, 7), 3000L, 8) // Re-memorized range 1
-
-    memorizationPreferences.saveMasteredRange(r1)
-    memorizationPreferences.saveMasteredRange(r2)
-
-    val history = memorizationPreferences.getMasteredRanges()
-    assertThat(history).hasSize(2)
-    assertThat(history[0]).isEqualTo(r2)
-    assertThat(history[1]).isEqualTo(r1)
-
-    // Re-memorizing r1 brings it to the top and updates repetitions/timestamp
-    memorizationPreferences.saveMasteredRange(r3)
-    val updatedHistory = memorizationPreferences.getMasteredRanges()
-    assertThat(updatedHistory).hasSize(2)
-    assertThat(updatedHistory[0]).isEqualTo(r3)
-    assertThat(updatedHistory[1]).isEqualTo(r2)
-  }
-
-  @Test
-  fun `clearMasteredRanges empties history`() {
-    val r1 = MasteredRange(SuraAyah(1, 1), SuraAyah(1, 7), 1000L, 5)
-    memorizationPreferences.saveMasteredRange(r1)
-    assertThat(memorizationPreferences.getMasteredRanges()).isNotEmpty()
-
-    memorizationPreferences.clearMasteredRanges()
-    assertThat(memorizationPreferences.getMasteredRanges()).isEmpty()
-  }
-
-  /**
-   * Lightweight in-memory implementation of [SharedPreferences] for unit tests.
-   */
-  private class FakeSharedPreferences : SharedPreferences {
-    private val values = mutableMapOf<String, Any>()
-
-    override fun getAll(): MutableMap<String, *> = values
-
-    override fun getString(key: String?, defValue: String?): String? =
-      values[key] as? String ?: defValue
-
-    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
-      @Suppress("UNCHECKED_CAST") (values[key] as? MutableSet<String> ?: defValues)
-
-    override fun getInt(key: String?, defValue: Int): Int =
-      values[key] as? Int ?: defValue
-
-    override fun getLong(key: String?, defValue: Long): Long =
-      values[key] as? Long ?: defValue
-
-    override fun getFloat(key: String?, defValue: Float): Float =
-      values[key] as? Float ?: defValue
-
-    override fun getBoolean(key: String?, defValue: Boolean): Boolean =
-      values[key] as? Boolean ?: defValue
-
-    override fun contains(key: String?): Boolean = values.containsKey(key)
-
-    override fun edit(): SharedPreferences.Editor = FakeEditor(values)
-
-    override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
-
-    override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
-
-    private class FakeEditor(private val target: MutableMap<String, Any>) : SharedPreferences.Editor {
-      private val pending = mutableMapOf<String, Any>()
-      private val removed = mutableSetOf<String>()
-      private var clear = false
-
-      override fun putString(key: String?, value: String?): SharedPreferences.Editor {
-        if (key != null && value != null) {
-          pending[key] = value
-          removed.remove(key)
-        }
-        return this
-      }
-
-      override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor {
-        if (key != null && values != null) {
-          pending[key] = values
-          removed.remove(key)
-        }
-        return this
-      }
-
-      override fun putInt(key: String?, value: Int): SharedPreferences.Editor {
-        if (key != null) {
-          pending[key] = value
-          removed.remove(key)
-        }
-        return this
-      }
-
-      override fun putLong(key: String?, value: Long): SharedPreferences.Editor {
-        if (key != null) {
-          pending[key] = value
-          removed.remove(key)
-        }
-        return this
-      }
-
-      override fun putFloat(key: String?, value: Float): SharedPreferences.Editor {
-        if (key != null) {
-          pending[key] = value
-          removed.remove(key)
-        }
-        return this
-      }
-
-      override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor {
-        if (key != null) {
-          pending[key] = value
-          removed.remove(key)
-        }
-        return this
-      }
-
-      override fun remove(key: String?): SharedPreferences.Editor {
-        if (key != null) {
-          pending.remove(key)
-          removed.add(key)
-        }
-        return this
-      }
-
-      override fun clear(): SharedPreferences.Editor {
-        clear = true
-        return this
-      }
-
-      override fun commit(): Boolean {
-        apply()
-        return true
-      }
-
-      override fun apply() {
-        if (clear) target.clear()
-        for (k in removed) target.remove(k)
-        target.putAll(pending)
-      }
-    }
-  }
-}
-
-`
-
----
-
-### File: common/audio/src/test/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationPlanBuilderTest.kt
-
-`kotlin
-package com.quran.labs.androidquran.common.audio.memorization
-
-import com.google.common.truth.Truth.assertThat
-import com.quran.data.core.QuranInfo
-import com.quran.data.model.SuraAyah
-import com.quran.labs.androidquran.pages.data.madani.MadaniDataSource
-import org.junit.Before
-import org.junit.Test
-
-class MemorizationPlanBuilderTest {
-
-  private lateinit var quranInfo: QuranInfo
-
-  @Before
-  fun setup() {
-    quranInfo = QuranInfo(MadaniDataSource())
-  }
-
-  @Test
-  fun `getAyahsInRange returns exact sequence within single sura`() {
-    val start = SuraAyah(1, 1)
-    val end = SuraAyah(1, 7)
-
-    val ayahs = MemorizationPlanBuilder.getAyahsInRange(start, end, quranInfo)
-
-    assertThat(ayahs).hasSize(7)
-    assertThat(ayahs.first()).isEqualTo(SuraAyah(1, 1))
-    assertThat(ayahs.last()).isEqualTo(SuraAyah(1, 7))
-  }
-
-  @Test
-  fun `getAyahsInRange crosses sura boundary correctly`() {
-    val start = SuraAyah(113, 4)
-    val end = SuraAyah(114, 2)
-
-    val ayahs = MemorizationPlanBuilder.getAyahsInRange(start, end, quranInfo)
-
-    // Sura 113 has 5 ayahs (4, 5) -> 2 ayahs
-    // Sura 114 has 6 ayahs (1, 2) -> 2 ayahs
-    // Total 4 ayahs
-    assertThat(ayahs).containsExactly(
-      SuraAyah(113, 4),
-      SuraAyah(113, 5),
-      SuraAyah(114, 1),
-      SuraAyah(114, 2)
-    ).inOrder()
-  }
-
-  @Test
-  fun `buildPlan produces correct sequence for window size 4 without delay`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 4),
-      windowSize = 4,
-      singleRepeat = 3,
-      connectRepeat = 2,
-      delayMode = MemorizationDelayMode.None,
-      enableBridge = false
-    )
-
-    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
-
-    // Window [A1, A2, A3, A4]:
-    // 1. A1 Solo (Rs = 3)
-    // 2. A2 Solo (Rs = 3)
-    // 3. Connect A1..A2 (Rc = 2)
-    // 4. A3 Solo (Rs = 3)
-    // 5. Connect A1..A3 (Rc = 2)
-    // 6. A4 Solo (Rs = 3)
-    // 7. Connect A1..A4 (Rc = 2)
-    assertThat(plan).hasSize(7)
-
-    // Step 0: A1 Solo
-    assertThat(plan[0].stepType).isEqualTo(StepType.SOLO)
-    assertThat(plan[0].ayahs).containsExactly(SuraAyah(1, 1))
-    assertThat(plan[0].targetRepeatCount).isEqualTo(3)
-
-    // Step 1: A2 Solo
-    assertThat(plan[1].stepType).isEqualTo(StepType.SOLO)
-    assertThat(plan[1].ayahs).containsExactly(SuraAyah(1, 2))
-    assertThat(plan[1].targetRepeatCount).isEqualTo(3)
-
-    // Step 2: Connect A1..A2
-    assertThat(plan[2].stepType).isEqualTo(StepType.CONNECT)
-    assertThat(plan[2].ayahs).containsExactly(SuraAyah(1, 1), SuraAyah(1, 2)).inOrder()
-    assertThat(plan[2].targetRepeatCount).isEqualTo(2)
-
-    // Step 3: A3 Solo
-    assertThat(plan[3].stepType).isEqualTo(StepType.SOLO)
-    assertThat(plan[3].ayahs).containsExactly(SuraAyah(1, 3))
-    assertThat(plan[3].targetRepeatCount).isEqualTo(3)
-
-    // Step 4: Connect A1..A3
-    assertThat(plan[4].stepType).isEqualTo(StepType.CONNECT)
-    assertThat(plan[4].ayahs).containsExactly(SuraAyah(1, 1), SuraAyah(1, 2), SuraAyah(1, 3)).inOrder()
-    assertThat(plan[4].targetRepeatCount).isEqualTo(2)
-
-    // Step 5: A4 Solo
-    assertThat(plan[5].stepType).isEqualTo(StepType.SOLO)
-    assertThat(plan[5].ayahs).containsExactly(SuraAyah(1, 4))
-    assertThat(plan[5].targetRepeatCount).isEqualTo(3)
-
-    // Step 6: Connect A1..A4
-    assertThat(plan[6].stepType).isEqualTo(StepType.CONNECT)
-    assertThat(plan[6].ayahs).containsExactly(
-      SuraAyah(1, 1), SuraAyah(1, 2), SuraAyah(1, 3), SuraAyah(1, 4)
-    ).inOrder()
-    assertThat(plan[6].targetRepeatCount).isEqualTo(2)
-  }
-
-  @Test
-  fun `buildPlan includes recitation pauses when delayMode is active`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 2),
-      windowSize = 2,
-      singleRepeat = 2,
-      connectRepeat = 2,
-      delayMode = MemorizationDelayMode.FixedSeconds(5),
-      memoryTestMode = true,
-      enableBridge = false
-    )
-
-    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
-
-    // Expected for 2 ayahs with delay:
-    // 0: A1 Solo
-    // 1: Recitation Pause (A1)
-    // 2: A2 Solo
-    // 3: Recitation Pause (A2)
-    // 4: Connect A1..A2
-    // 5: Recitation Pause (A1..A2)
-    assertThat(plan).hasSize(6)
-    assertThat(plan[0].stepType).isEqualTo(StepType.SOLO)
-    assertThat(plan[1].stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
-    assertThat(plan[1].isMaskedByDefault).isTrue()
-    assertThat(plan[2].stepType).isEqualTo(StepType.SOLO)
-    assertThat(plan[3].stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
-    assertThat(plan[4].stepType).isEqualTo(StepType.CONNECT)
-    assertThat(plan[4].isMaskedByDefault).isTrue()
-    assertThat(plan[5].stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
-  }
-
-  @Test
-  fun `buildPlan adds Bridge step between multiple windows`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 4),
-      windowSize = 2, // 2 windows: [1, 2] and [3, 4]
-      singleRepeat = 1,
-      connectRepeat = 1,
-      delayMode = MemorizationDelayMode.None,
-      enableBridge = true
-    )
-
-    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
-
-    // Window 0 has [A1, A2] -> Solo A1, Solo A2, Connect A1..A2
-    // Bridge step between Window 0 and Window 1: connects A2 and A3
-    // Window 1 has [A3, A4] -> Solo A3, Solo A4, Connect A3..A4
-    val bridgeSteps = plan.filter { it.stepType == StepType.BRIDGE }
-    assertThat(bridgeSteps).hasSize(1)
-    assertThat(bridgeSteps.first().ayahs).containsExactly(SuraAyah(1, 2), SuraAyah(1, 3)).inOrder()
-    assertThat(bridgeSteps.first().targetRepeatCount).isEqualTo(1)
-  }
-}
-
-`
-
----
-
-### File: common/audio/src/test/java/com/quran/labs/androidquran/common/audio/memorization/MemorizationEngineTest.kt
-
-`kotlin
-package com.quran.labs.androidquran.common.audio.memorization
-
-import app.cash.turbine.test
-import com.google.common.truth.Truth.assertThat
-import com.quran.data.core.QuranInfo
-import com.quran.data.model.SuraAyah
-import com.quran.labs.androidquran.pages.data.madani.MadaniDataSource
-import kotlinx.coroutines.test.runTest
-import org.junit.Before
-import org.junit.Test
-
-class MemorizationEngineTest {
-
-  private lateinit var quranInfo: QuranInfo
-  private lateinit var engine: MemorizationEngine
-
-  @Before
-  fun setup() {
-    quranInfo = QuranInfo(MadaniDataSource())
-    engine = MemorizationEngine(quranInfo)
-  }
-
-  @Test
-  fun `initial state is inactive`() {
-    val state = engine.state.value
-    assertThat(state.isActive).isFalse()
-    assertThat(state.currentStep).isNull()
-    assertThat(state.isSessionCompleted).isFalse()
-  }
-
-  @Test
-  fun `startMemorization transitions to active state at first step`() = runTest {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 2),
-      windowSize = 2,
-      singleRepeat = 2,
-      connectRepeat = 2,
-      delayMode = MemorizationDelayMode.None,
-      enableBridge = false
-    )
-
-    engine.state.test {
-      val initial = awaitItem()
-      assertThat(initial.isActive).isFalse()
-
-      engine.startMemorization(config)
-
-      val activeState = awaitItem()
-      assertThat(activeState.isActive).isTrue()
-      assertThat(activeState.currentWindowIndex).isEqualTo(0)
-      assertThat(activeState.currentStepIndex).isEqualTo(0)
-      assertThat(activeState.stepType).isEqualTo(StepType.SOLO)
-      assertThat(activeState.currentPlayingAyah).isEqualTo(SuraAyah(1, 1))
-      assertThat(activeState.currentRepeatIteration).isEqualTo(1)
-      assertThat(activeState.totalRepeatIterations).isEqualTo(2)
-
-      cancelAndIgnoreRemainingEvents()
-    }
-  }
-
-  @Test
-  fun `onAyahPlaybackCompleted iterates repeats before advancing step`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 2),
-      windowSize = 2,
-      singleRepeat = 2,
-      connectRepeat = 1,
-      delayMode = MemorizationDelayMode.None,
-      enableBridge = false
-    )
-
-    engine.startMemorization(config)
-
-    // Step 0 is A1 Solo (repeat 2 times). Current iteration is 1.
-    assertThat(engine.state.value.currentStepIndex).isEqualTo(0)
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
-
-    // Complete play 1 of Step 0 -> should repeat A1 (iteration 2)
-    val nextAfterPlay1 = engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(nextAfterPlay1).isEqualTo(SuraAyah(1, 1))
-    assertThat(engine.state.value.currentStepIndex).isEqualTo(0)
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
-
-    // Complete play 2 of Step 0 -> Step 0 finished! Advance to Step 1 (A2 Solo)
-    val nextAfterPlay2 = engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(nextAfterPlay2).isEqualTo(SuraAyah(1, 2))
-    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
-    assertThat(engine.state.value.stepType).isEqualTo(StepType.SOLO)
-  }
-
-  @Test
-  fun `CONNECT step sequences through sub-ayahs then repeats`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 2),
-      windowSize = 2,
-      singleRepeat = 1,
-      connectRepeat = 2,
-      delayMode = MemorizationDelayMode.None,
-      enableBridge = false
-    )
-
-    engine.startMemorization(config)
-
-    // Complete Step 0 (A1 Solo x 1)
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    // Complete Step 1 (A2 Solo x 1)
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
-
-    // Now at Step 2 (Connect A1..A2, repeat 2 times)
-    val state = engine.state.value
-    assertThat(state.currentStepIndex).isEqualTo(2)
-    assertThat(state.stepType).isEqualTo(StepType.CONNECT)
-    assertThat(state.activeAyahsInStep).containsExactly(SuraAyah(1, 1), SuraAyah(1, 2)).inOrder()
-    assertThat(state.currentPlayingAyah).isEqualTo(SuraAyah(1, 1))
-    assertThat(state.currentRepeatIteration).isEqualTo(1)
-
-    // Ayah 1 of Connect finishes -> should advance to Ayah 2 (same repeat iteration 1)
-    val nextSubAyah = engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(nextSubAyah).isEqualTo(SuraAyah(1, 2))
-    assertThat(engine.state.value.currentSubAyahIndex).isEqualTo(1)
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
-
-    // Ayah 2 of Connect finishes -> Repeat 1 complete! Start Repeat 2 at Ayah 1
-    val nextRepeatAyah = engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
-    assertThat(nextRepeatAyah).isEqualTo(SuraAyah(1, 1))
-    assertThat(engine.state.value.currentSubAyahIndex).isEqualTo(0)
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
-  }
-
-  @Test
-  fun `skipCurrentStep and previousStep navigate plan cleanly`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 3),
-      windowSize = 3,
-      singleRepeat = 3,
-      connectRepeat = 2,
-      delayMode = MemorizationDelayMode.None,
-      enableBridge = false
-    )
-
-    engine.startMemorization(config)
-    assertThat(engine.state.value.currentStepIndex).isEqualTo(0)
-
-    // Skip to Step 1
-    engine.skipCurrentStep()
-    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
-    assertThat(engine.state.value.currentPlayingAyah).isEqualTo(SuraAyah(1, 2))
-
-    // Skip to Step 2
-    engine.skipCurrentStep()
-    assertThat(engine.state.value.currentStepIndex).isEqualTo(2)
-
-    // Previous step back to Step 1
-    engine.previousStep()
-    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
-    assertThat(engine.state.value.currentPlayingAyah).isEqualTo(SuraAyah(1, 2))
-  }
-
-  @Test
-  fun `pause and resume update state accordingly`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 2),
-      windowSize = 2,
-      singleRepeat = 1,
-      connectRepeat = 1
-    )
-
-    engine.startMemorization(config)
-    assertThat(engine.state.value.isPaused).isFalse()
-
-    engine.pause()
-    assertThat(engine.state.value.isPaused).isTrue()
-
-    // When paused, onAyahPlaybackCompleted returns null and does not advance
-    val resultWhilePaused = engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(resultWhilePaused).isNull()
-
-    engine.resume()
-    assertThat(engine.state.value.isPaused).isFalse()
-  }
-
-  @Test
-  fun `memoryTestMode enables text masking during connect steps with tap-to-peek`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 2),
-      windowSize = 2,
-      singleRepeat = 1,
-      connectRepeat = 1,
-      memoryTestMode = true
-    )
-
-    engine.startMemorization(config)
-    // Step 0: Solo -> text not masked
-    assertThat(engine.state.value.isTextMasked).isFalse()
-
-    // Complete Step 0 -> Step 1 (Solo A2)
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(engine.state.value.isTextMasked).isFalse()
-
-    // Complete Step 1 -> Step 2 (Connect A1..A2)
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
-    assertThat(engine.state.value.stepType).isEqualTo(StepType.CONNECT)
-    // In Memory Test Mode, Connect step has isTextMasked = true
-    assertThat(engine.state.value.isTextMasked).isTrue()
-
-    // Tap to peek (toggle mask)
-    engine.toggleTextMask()
-    assertThat(engine.state.value.isTextMasked).isFalse()
-
-    // Tap to re-mask
-    engine.toggleTextMask()
-    assertThat(engine.state.value.isTextMasked).isTrue()
-  }
-
-  @Test
-  fun `completing all steps marks session completed`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 2),
-      windowSize = 2,
-      singleRepeat = 1,
-      connectRepeat = 1,
-      enableBridge = false
-    )
-
-    engine.startMemorization(config)
-
-    // Complete Step 0 (Solo A1)
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    // Complete Step 1 (Solo A2)
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
-    // Step 2 (Connect A1..A2) -> Play A1
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    // Step 2 -> Play A2 -> FINAL STEP COMPLETE!
-    val finalResult = engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
-
-    assertThat(finalResult).isNull()
-    assertThat(engine.state.value.isSessionCompleted).isTrue()
-    assertThat(engine.state.value.isActive).isFalse()
-  }
-
-  @Test
-  fun `stopMemorization resets engine cleanly`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 5)
-    )
-
-    engine.startMemorization(config)
-    assertThat(engine.state.value.isActive).isTrue()
-
-    engine.stopMemorization()
-    assertThat(engine.state.value.isActive).isFalse()
-    assertThat(engine.state.value.currentStep).isNull()
-  }
-
-  @Test
-  fun `progressive masking keeps text visible on solo repeat 1 and masks on repeat 2 and connect`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 2),
-      windowSize = 2,
-      singleRepeat = 2,
-      connectRepeat = 1,
-      maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
-      delayMode = MemorizationDelayMode.None,
-      enableBridge = false
-    )
-
-    engine.startMemorization(config)
-
-    // Step 0 (Solo A1), Repeat 1: visible
-    assertThat(engine.state.value.stepType).isEqualTo(StepType.SOLO)
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
-    assertThat(engine.state.value.isTextMasked).isFalse()
-
-    // Repeat 1 completes -> advances to Repeat 2: masked!
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
-    assertThat(engine.state.value.isTextMasked).isTrue()
-
-    // Solo A1 completes -> Step 1 (Solo A2), Repeat 1: visible
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(engine.state.value.currentStepIndex).isEqualTo(1)
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(1)
-    assertThat(engine.state.value.isTextMasked).isFalse()
-
-    // Repeat 1 completes -> Repeat 2: masked!
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
-    assertThat(engine.state.value.currentRepeatIteration).isEqualTo(2)
-    assertThat(engine.state.value.isTextMasked).isTrue()
-
-    // Solo A2 completes -> Step 2 (Connect A1..A2): always masked!
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 2))
-    assertThat(engine.state.value.stepType).isEqualTo(StepType.CONNECT)
-    assertThat(engine.state.value.isTextMasked).isTrue()
-  }
-
-  @Test
-  fun `recitation recording state and pause remaining update correctly`() {
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 1),
-      singleRepeat = 1,
-      delayMode = MemorizationDelayMode.FixedSeconds(5)
-    )
-
-    engine.startMemorization(config)
-    assertThat(engine.state.value.isRecordingRecitation).isFalse()
-    assertThat(engine.state.value.lastRecitationAudioPath).isNull()
-
-    // Solo A1 completes -> advances to PAUSE_FOR_RECITATION step
-    engine.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(engine.state.value.stepType).isEqualTo(StepType.PAUSE_FOR_RECITATION)
-
-    engine.setRecordingRecitation(true)
-    assertThat(engine.state.value.isRecordingRecitation).isTrue()
-
-    engine.updatePauseRemaining(5)
-    assertThat(engine.state.value.pauseRemainingSeconds).isEqualTo(5)
-    assertThat(engine.state.value.hudSummary).contains("5s")
-    assertThat(engine.state.value.hudSummary).contains("Recording Recitation")
-
-    engine.updateLastRecitationPath("/cache/test.m4a")
-    assertThat(engine.state.value.lastRecitationAudioPath).isEqualTo("/cache/test.m4a")
-  }
-
-  @Test
-  fun `session completion logs mastered range to preferences`() {
-    val prefs = MemorizationPreferences(FakeTestSharedPreferences())
-    val engineWithPrefs = MemorizationEngine(quranInfo, prefs)
-
-    val config = MemorizationConfig(
-      startAyah = SuraAyah(1, 1),
-      endAyah = SuraAyah(1, 1),
-      windowSize = 1,
-      singleRepeat = 1,
-      connectRepeat = 1,
-      delayMode = MemorizationDelayMode.None,
-      enableBridge = false
-    )
-
-    engineWithPrefs.startMemorization(config)
-    assertThat(prefs.getMasteredRanges()).isEmpty()
-
-    // Solo A1 finishes -> session completes!
-    val next = engineWithPrefs.onAyahPlaybackCompleted(SuraAyah(1, 1))
-    assertThat(next).isNull()
-    assertThat(engineWithPrefs.state.value.isSessionCompleted).isTrue()
-
-    val mastered = prefs.getMasteredRanges()
-    assertThat(mastered).hasSize(1)
-    assertThat(mastered[0].startAyah).isEqualTo(SuraAyah(1, 1))
-    assertThat(mastered[0].endAyah).isEqualTo(SuraAyah(1, 1))
-    assertThat(mastered[0].repetitions).isEqualTo(2)
-  }
-
-  private class FakeTestSharedPreferences : android.content.SharedPreferences {
-    private val values = mutableMapOf<String, Any>()
-    override fun getAll(): MutableMap<String, *> = values
-    override fun getString(key: String?, defValue: String?): String? = values[key] as? String ?: defValue
-    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
-      @Suppress("UNCHECKED_CAST") (values[key] as? MutableSet<String> ?: defValues)
-    override fun getInt(key: String?, defValue: Int): Int = values[key] as? Int ?: defValue
-    override fun getLong(key: String?, defValue: Long): Long = values[key] as? Long ?: defValue
-    override fun getFloat(key: String?, defValue: Float): Float = values[key] as? Float ?: defValue
-    override fun getBoolean(key: String?, defValue: Boolean): Boolean = values[key] as? Boolean ?: defValue
-    override fun contains(key: String?): Boolean = values.containsKey(key)
-    override fun edit(): android.content.SharedPreferences.Editor = object : android.content.SharedPreferences.Editor {
-      private val pending = mutableMapOf<String, Any>()
-      private val removed = mutableSetOf<String>()
-      private var clear = false
-      override fun putString(k: String?, v: String?) = apply { if (k != null && v != null) { pending[k] = v; removed.remove(k) } }
-      override fun putStringSet(k: String?, v: MutableSet<String>?) = apply { if (k != null && v != null) { pending[k] = v; removed.remove(k) } }
-      override fun putInt(k: String?, v: Int) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
-      override fun putLong(k: String?, v: Long) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
-      override fun putFloat(k: String?, v: Float) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
-      override fun putBoolean(k: String?, v: Boolean) = apply { if (k != null) { pending[k] = v; removed.remove(k) } }
-      override fun remove(k: String?) = apply { if (k != null) { pending.remove(k); removed.add(k) } }
-      override fun clear() = apply { clear = true }
-      override fun commit(): Boolean { apply(); return true }
-      override fun apply() { if (clear) values.clear(); for (k in removed) values.remove(k); values.putAll(pending) }
-    }
-    override fun registerOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
-    override fun unregisterOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
+  fun dispose() {
+    scope.cancel()
   }
 }
 

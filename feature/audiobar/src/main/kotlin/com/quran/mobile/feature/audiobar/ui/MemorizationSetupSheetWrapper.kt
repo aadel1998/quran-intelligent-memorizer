@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
 import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
 import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
 import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
@@ -25,7 +26,9 @@ class MemorizationSetupSheetWrapper(
   private val savedSessionStep: Int = 0,
   private val onResume: (() -> Unit)? = null,
   private val masteredRanges: List<MasteredRange> = emptyList(),
-  private val onReview: ((MasteredRange) -> Unit)? = null
+  private val onReview: ((MasteredRange) -> Unit)? = null,
+  private val savedPlaylists: List<CustomPlaylist> = emptyList(),
+  private val initialPlaylist: CustomPlaylist? = null
 ) : FrameLayout(context) {
 
   init {
@@ -42,6 +45,8 @@ class MemorizationSetupSheetWrapper(
             savedSessionConfig = savedSessionConfig,
             savedSessionStep = savedSessionStep,
             masteredRanges = masteredRanges,
+            savedPlaylists = savedPlaylists,
+            initialPlaylist = initialPlaylist,
             onResumeSession = {
               onResume?.invoke()
               onDismissed()

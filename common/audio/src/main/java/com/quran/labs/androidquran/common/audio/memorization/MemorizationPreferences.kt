@@ -10,7 +10,7 @@ import dev.zacsweers.metro.SingleIn
 
 /**
  * Handles persistent storage of memorization session progress, configuration,
- * and mastered ranges history.
+ * custom playlist sessions, and mastered ranges history.
  */
 @SingleIn(AppScope::class)
 class MemorizationPreferences(
@@ -41,6 +41,16 @@ class MemorizationPreferences(
       .putInt(KEY_SAVED_STEP_INDEX, currentStepIndex)
       .putInt(KEY_SAVED_REPEAT, currentRepeatIteration)
       .putBoolean(KEY_HAS_ACTIVE_SESSION, true)
+
+    if (config.segments.isNotEmpty()) {
+      editor.putString(KEY_SEGMENTS, config.segments.joinToString(",") { it.serialize() })
+      editor.putString(KEY_PLAYLIST_ID, config.playlistId)
+      editor.putString(KEY_PLAYLIST_NAME, config.playlistName)
+    } else {
+      editor.remove(KEY_SEGMENTS)
+      editor.remove(KEY_PLAYLIST_ID)
+      editor.remove(KEY_PLAYLIST_NAME)
+    }
 
     when (val mode = config.delayMode) {
       is MemorizationDelayMode.None -> {
@@ -101,6 +111,15 @@ class MemorizationPreferences(
 
     val recordRecitation = prefs.getBoolean(KEY_RECORD_RECITATION, false)
 
+    val segmentsStr = prefs.getString(KEY_SEGMENTS, null)
+    val segments = if (!segmentsStr.isNullOrBlank()) {
+      segmentsStr.split(",").mapNotNull { PlaylistSegment.deserialize(it) }
+    } else {
+      emptyList()
+    }
+    val playlistId = prefs.getString(KEY_PLAYLIST_ID, null)
+    val playlistName = prefs.getString(KEY_PLAYLIST_NAME, null)
+
     return MemorizationConfig(
       startAyah = SuraAyah(startSura, startAyah),
       endAyah = SuraAyah(endSura, endAyah),
@@ -111,7 +130,10 @@ class MemorizationPreferences(
       memoryTestMode = memoryTest,
       maskingLevel = maskingLevel,
       recordRecitation = recordRecitation,
-      enableBridge = prefs.getBoolean(KEY_ENABLE_BRIDGE, true)
+      enableBridge = prefs.getBoolean(KEY_ENABLE_BRIDGE, true),
+      segments = segments,
+      playlistId = playlistId,
+      playlistName = playlistName
     )
   }
 
@@ -167,6 +189,9 @@ class MemorizationPreferences(
     private const val KEY_SAVED_REPEAT = "mem_repeat_iter"
     private const val KEY_HAS_ACTIVE_SESSION = "mem_has_session"
     private const val KEY_MASTERED_RANGES = "mem_mastered_ranges"
+    private const val KEY_SEGMENTS = "mem_segments"
+    private const val KEY_PLAYLIST_ID = "mem_playlist_id"
+    private const val KEY_PLAYLIST_NAME = "mem_playlist_name"
 
     private const val VALUE_DELAY_NONE = "NONE"
     private const val VALUE_DELAY_FIXED = "FIXED"

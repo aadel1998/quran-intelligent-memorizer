@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
 import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
 import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
@@ -58,8 +59,11 @@ fun MemorizationSetupSheet(
   onResumeSession: (() -> Unit)? = null,
   masteredRanges: List<MasteredRange> = emptyList(),
   onReviewRange: ((MasteredRange) -> Unit)? = null,
+  savedPlaylists: List<CustomPlaylist> = emptyList(),
+  initialPlaylist: CustomPlaylist? = null,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
+  var selectedPlaylist by remember { mutableStateOf<CustomPlaylist?>(initialPlaylist) }
   var startAyahNum by remember { mutableIntStateOf(initialStartAyah.ayah) }
   var endAyahNum by remember { mutableIntStateOf(initialEndAyah.ayah.coerceAtLeast(initialStartAyah.ayah + 3)) }
   var windowSize by remember { mutableIntStateOf(4) }
@@ -209,36 +213,88 @@ fun MemorizationSetupSheet(
       HorizontalDivider()
       Spacer(modifier = Modifier.height(12.dp))
 
-      // Ayah Range Selector
-      Text(
-        text = "Ayah Range",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold
-      )
+      if (savedPlaylists.isNotEmpty() || selectedPlaylist != null) {
+        Text(
+          text = "Memorization Target",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          FilterChip(
+            selected = selectedPlaylist == null,
+            onClick = { selectedPlaylist = null },
+            label = { Text("Current Surah") }
+          )
 
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        NumberStepper(
-          label = "From Ayah",
-          value = startAyahNum,
-          onValueChange = {
-            startAyahNum = it.coerceAtLeast(1)
-            if (endAyahNum < startAyahNum) endAyahNum = startAyahNum
+          savedPlaylists.forEach { pl ->
+            FilterChip(
+              selected = selectedPlaylist?.id == pl.id,
+              onClick = { selectedPlaylist = pl },
+              label = { Text(pl.name) }
+            )
           }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+      }
+
+      val currentPl = selectedPlaylist
+      if (currentPl != null) {
+        Card(
+          modifier = Modifier.fillMaxWidth(),
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+          )
+        ) {
+          Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+              text = "Playlist: ${currentPl.name}",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+              text = "${currentPl.summary} across Surahs",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+          }
+        }
+      } else {
+        // Ayah Range Selector
+        Text(
+          text = "Ayah Range",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold
         )
 
-        NumberStepper(
-          label = "To Ayah",
-          value = endAyahNum,
-          onValueChange = {
-            endAyahNum = it.coerceAtLeast(startAyahNum)
-          }
-        )
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          NumberStepper(
+            label = "From Ayah",
+            value = startAyahNum,
+            onValueChange = {
+              startAyahNum = it.coerceAtLeast(1)
+              if (endAyahNum < startAyahNum) endAyahNum = startAyahNum
+            }
+          )
+
+          NumberStepper(
+            label = "To Ayah",
+            value = endAyahNum,
+            onValueChange = {
+              endAyahNum = it.coerceAtLeast(startAyahNum)
+            }
+          )
+        }
       }
 
       Spacer(modifier = Modifier.height(12.dp))
@@ -444,18 +500,39 @@ fun MemorizationSetupSheet(
               else -> MemorizationDelayMode.None
             }
 
-            val config = MemorizationConfig(
-              startAyah = SuraAyah(initialStartAyah.sura, startAyahNum),
-              endAyah = SuraAyah(initialStartAyah.sura, endAyahNum),
-              windowSize = windowSize,
-              singleRepeat = singleRepeat,
-              connectRepeat = connectRepeat,
-              delayMode = delayMode,
-              memoryTestMode = maskingLevel != MaskingLevel.OFF,
-              maskingLevel = maskingLevel,
-              recordRecitation = recordRecitation && canRecord,
-              enableBridge = enableBridge
-            )
+            val pl = selectedPlaylist
+            val config = if (pl != null && pl.segments.isNotEmpty()) {
+              val firstAyah = SuraAyah(pl.segments.first().sura, pl.segments.first().startAyah)
+              val lastAyah = SuraAyah(pl.segments.last().sura, pl.segments.last().endAyah)
+              MemorizationConfig(
+                startAyah = firstAyah,
+                endAyah = lastAyah,
+                windowSize = windowSize,
+                singleRepeat = singleRepeat,
+                connectRepeat = connectRepeat,
+                delayMode = delayMode,
+                memoryTestMode = maskingLevel != MaskingLevel.OFF,
+                maskingLevel = maskingLevel,
+                recordRecitation = recordRecitation && canRecord,
+                enableBridge = enableBridge,
+                segments = pl.segments,
+                playlistId = pl.id,
+                playlistName = pl.name
+              )
+            } else {
+              MemorizationConfig(
+                startAyah = SuraAyah(initialStartAyah.sura, startAyahNum),
+                endAyah = SuraAyah(initialStartAyah.sura, endAyahNum),
+                windowSize = windowSize,
+                singleRepeat = singleRepeat,
+                connectRepeat = connectRepeat,
+                delayMode = delayMode,
+                memoryTestMode = maskingLevel != MaskingLevel.OFF,
+                maskingLevel = maskingLevel,
+                recordRecitation = recordRecitation && canRecord,
+                enableBridge = enableBridge
+              )
+            }
 
             onStartMemorization(config)
           }

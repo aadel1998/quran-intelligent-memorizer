@@ -232,3 +232,51 @@
   - Ran `./gradlew.bat compileMadaniDebugKotlin`: 220 actionable tasks, BUILD SUCCESSFUL.
   - Ran `./gradlew.bat assembleMadaniDebug`: 490 actionable tasks, BUILD SUCCESSFUL. Output APK: `app/build/outputs/apk/madani/debug/app-madani-debug.apk` (37 MB).
   - All Phase 1 through Phase 8 tasks completed, verified, and synchronized to GitHub `main`.
+
+---
+
+## [x] Phase 9: Custom Cross-Surah Memorization & Listening Playlists
+- [x] **1. Cross-Surah Playlist Data Model & Serialization:**
+  - Implemented `PlaylistSegment.kt` (`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/PlaylistSegment.kt`):
+    - Encapsulates Surah segment (`sura: Int`, `startAyah: Int`, `endAyah: Int`, `isFullSurah: Boolean`).
+    - Compact delimiter serialization (`sura:startAyah:endAyah:isFullSurah`).
+    - Helper method `toAyahs(): List<SuraAyah>` generating ordered list of verses for the segment.
+  - Implemented `CustomPlaylist.kt` (`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/CustomPlaylist.kt`):
+    - Encapsulates playlist (`id: String`, `name: String`, `segments: List<PlaylistSegment>`, `createdAt: Long`, `lastPlayedAt: Long`).
+    - Flattens all segments into continuous list of Ayahs via `toFlattenedAyahs(): List<SuraAyah>`.
+    - Compact delimiter serialization (`id##name##createdAt##lastPlayedAt##segmentsJoined`).
+- [x] **2. Playlist Repository & Persistent Storage:**
+  - Implemented `PlaylistRepository.kt` (`common/audio/src/main/java/com/quran/labs/androidquran/common/audio/memorization/PlaylistRepository.kt`):
+    - Manages CRUD operations using SharedPreferences: `savePlaylist`, `getAllPlaylists`, `getPlaylistById`, `deletePlaylist`, `updateLastPlayed`.
+    - Sorts playlists descending by `lastPlayedAt` and `createdAt`.
+    - Injected via Metro DI into `PagerActivity` and Compose wrappers.
+- [x] **3. Engine & Plan Builder Cross-Surah Flattening:**
+  - Extended `MemorizationConfig.kt`:
+    - Added `segments: List<PlaylistSegment>`, `playlistId: String?`, `playlistName: String?`.
+    - Relaxed single-Surah constraint (`startAyah <= endAyah`) when custom segments are provided.
+  - Updated `MemorizationPlanBuilder.kt`:
+    - Flattens multi-Surah segments into a unified sequential Ayah stream.
+    - Generates sliding window SOLO, CONNECT, RECITATION PAUSE, and BRIDGE steps across Surah boundaries.
+    - Guards CONNECT steps so `connectRepeat = 0` produces pure sequential listening playback without repeats.
+  - Updated `AudioService.kt`:
+    - Seamlessly switches Surah audio sources on Surah transitions during multi-segment playlists without breaking playback.
+- [x] **4. Compose UI: Playlist Manager & Editor Sheets:**
+  - Implemented `PlaylistEditorSheet.kt`:
+    - Name input, Surah selector dropdown (1-114), Full Surah vs. Custom Range toggle with Ayah steppers.
+    - Add, reorder (up/down), and delete segment capabilities.
+  - Implemented `PlaylistListSheet.kt`:
+    - Lists all saved playlists with Ayah summary and preview sequence.
+    - Actions: "Play All" (continuous listening), "Memorize" (sliding-window memorization), "Edit", and "Delete".
+  - Implemented `PlaylistSheetWrapper.kt`:
+    - FrameLayout wrapper hosting `PlaylistListSheet` inside `PagerActivity`'s overlay container.
+  - Integrated into `StoppedAudioBar.kt`:
+    - Added dedicated Playlists button (`QuranIcons.List`) next to Memorization button.
+    - Wired through `AudioBarEvent.Playlists`, `AudioBarListener.onPlaylistsPressed()`, and `AudioStatusRepositoryBridge`.
+  - Updated `MemorizationSetupSheet.kt`:
+    - Added "Memorization Target" chips to select between Current Surah and saved Playlists.
+- [x] **5. Verification, Tests & Deployment:**
+  - Unit tests added: `PlaylistRepositoryTest.kt` (CRUD, ordering, updates), `MemorizationPlanBuilderTest.kt` (52-Ayah multi-Surah test spanning Al-Hamd, Al-Baqarah, Al-Ikhlas, Al-Falaq, An-Nas, Al-Kafirun).
+  - Pure JVM tests: `./gradlew :common:audio:testReleaseUnitTest` (100% passed).
+  - Kotlin compilation: `./gradlew compileMadaniDebugKotlin` (BUILD SUCCESSFUL).
+  - APK build: `./gradlew assembleMadaniDebug` (BUILD SUCCESSFUL).
+  - Installed and verified on physical Android phone via USB ADB.

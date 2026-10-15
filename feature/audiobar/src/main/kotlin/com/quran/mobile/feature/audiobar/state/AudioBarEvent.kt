@@ -3,6 +3,7 @@ package com.quran.mobile.feature.audiobar.state
 sealed class AudioBarEvent {
   data object ChangeQari : AudioBarEvent()
   data object Memorize : AudioBarEvent()
+  data object Playlists : AudioBarEvent()
   data object Cancel : AudioBarEvent()
   data object CancelDownload : AudioBarEvent()
   data object Acknowledge : AudioBarEvent()

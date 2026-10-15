@@ -163,4 +163,79 @@ class MemorizationPlanBuilderTest {
     assertThat(bridgeSteps.first().ayahs).containsExactly(SuraAyah(1, 2), SuraAyah(1, 3)).inOrder()
     assertThat(bridgeSteps.first().targetRepeatCount).isEqualTo(1)
   }
+
+  @Test
+  fun `buildPlan with custom cross-surah segments flattens across multiple surahs`() {
+    // User's exact example:
+    // 1: Al-Hamd (1:1-7)
+    // 2: Al-Baqarah (2:1-7)
+    // 3: Al-Ikhlas (112:1-4)
+    // 4: Al-Kafirun (109:1-6)
+    // 5: Al-Falaq (113:1-5)
+    // 6: An-Nas (114:1-6)
+    // 7: Al-Baqarah (2:270-286)
+    val segments = listOf(
+      PlaylistSegment.createFullSurah(1, quranInfo, "Al-Hamd"),
+      PlaylistSegment(sura = 2, startAyah = 1, endAyah = 7, isFullSurah = false, customLabel = "Al-Baqarah 1-7"),
+      PlaylistSegment.createFullSurah(112, quranInfo, "Al-Ikhlas"),
+      PlaylistSegment.createFullSurah(109, quranInfo, "Al-Kafirun"),
+      PlaylistSegment.createFullSurah(113, quranInfo, "Al-Falaq"),
+      PlaylistSegment.createFullSurah(114, quranInfo, "An-Nas"),
+      PlaylistSegment(sura = 2, startAyah = 270, endAyah = 286, isFullSurah = false, customLabel = "Al-Baqarah 270-286")
+    )
+
+    val playlist = CustomPlaylist(
+      id = "daily-adhkar",
+      name = "Daily Recitation",
+      segments = segments
+    )
+
+    // Expected total ayahs: 7 + 7 + 4 + 6 + 5 + 6 + 17 = 52
+    assertThat(playlist.totalAyahsCount).isEqualTo(52)
+    val flattened = playlist.toFlattenedAyahs()
+    assertThat(flattened).hasSize(52)
+    assertThat(flattened.first()).isEqualTo(SuraAyah(1, 1))
+    assertThat(flattened[7]).isEqualTo(SuraAyah(2, 1)) // Transition from Hamd to Baqarah
+    assertThat(flattened.last()).isEqualTo(SuraAyah(2, 286))
+
+    val config = MemorizationConfig(
+      windowSize = 4,
+      singleRepeat = 2,
+      connectRepeat = 1,
+      delayMode = MemorizationDelayMode.None,
+      enableBridge = true,
+      segments = segments,
+      playlistId = playlist.id,
+      playlistName = playlist.name
+    )
+
+    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
+    assertThat(plan).isNotEmpty()
+
+    // 52 ayahs with window size 4 -> 13 windows
+    val soloSteps = plan.filter { it.stepType == StepType.SOLO }
+    assertThat(soloSteps).hasSize(52)
+
+    // First solo step is 1:1, 8th solo step is 2:1
+    assertThat(soloSteps[0].ayahs.first()).isEqualTo(SuraAyah(1, 1))
+    assertThat(soloSteps[7].ayahs.first()).isEqualTo(SuraAyah(2, 1))
+
+    // Bridge steps connect consecutive windows (13 windows -> 12 bridges)
+    val bridgeSteps = plan.filter { it.stepType == StepType.BRIDGE }
+    assertThat(bridgeSteps).hasSize(12)
+
+    // Window 0 is ayahs [1:1, 1:2, 1:3, 1:4]
+    // Window 1 is ayahs [1:5, 1:6, 1:7, 2:1]
+    // Window 1 contains cross-surah transition between 1:7 and 2:1!
+    // Connect step in Window 1 connects 1:5, 1:6, 1:7, 2:1 across surah boundary!
+    val window1Connects = plan.filter { it.windowIndex == 1 && it.stepType == StepType.CONNECT }
+    assertThat(window1Connects).isNotEmpty()
+    val fullWindow1Connect = window1Connects.last()
+    assertThat(fullWindow1Connect.ayahs).containsExactly(
+      SuraAyah(1, 5),
+      SuraAyah(1, 6),
+      SuraAyah(1, 7),
+      SuraAyah(2, 1)
+    ).inOrder()
+  }
 }

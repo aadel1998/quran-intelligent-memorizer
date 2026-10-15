@@ -133,9 +133,15 @@ import com.quran.mobile.feature.audiobar.AudioBarWrapper
 import com.quran.mobile.feature.audiobar.presenter.AudioBarEventRepository
 import com.quran.mobile.feature.ayahbookmark.AyahBookmarkWrapper
 import com.quran.mobile.feature.ayahbookmark.di.AyahBookmarkWrapperInjector
+import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
+import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationPreferences
+import com.quran.labs.androidquran.common.audio.memorization.PlaylistRepository
 import com.quran.mobile.feature.audiobar.ui.MemorizationSetupSheetWrapper
+import com.quran.mobile.feature.audiobar.ui.PlaylistSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.ReadingBookmarkSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.di.ReadingBookmarkSheetWrapperInjector
 import com.quran.mobile.feature.qarilist.QariListWrapper
@@ -248,6 +254,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   @Inject lateinit var audioStatusRepository: AudioStatusRepository
   @Inject lateinit var memorizationEngine: MemorizationEngine
   @Inject lateinit var memorizationPreferences: MemorizationPreferences
+  @Inject lateinit var playlistRepository: PlaylistRepository
   @Inject lateinit var readingEventPresenter: ReadingEventPresenter
   @Inject lateinit var pageProviderFactoryProvider: PageViewFactoryProvider
   @Inject lateinit var additionalAyahPanels: Set<@JvmSuppressWildcards AyahActionFragmentProvider>
@@ -1728,6 +1735,58 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   }
 
   override fun onMemorizePressed() {
+    openMemorizationSetup(null)
+  }
+
+  override fun onPlaylistsPressed() {
+    val playlistWrapper = PlaylistSheetWrapper(
+      context = this,
+      playlistRepository = playlistRepository,
+      quranInfo = quranInfo,
+      onPlayPlaylist = { playlist ->
+        if (playlist.segments.isNotEmpty()) {
+          playlistRepository.updateLastPlayed(playlist.id)
+          val firstSeg = playlist.segments.first()
+          val lastSeg = playlist.segments.last()
+          val playConfig = MemorizationConfig(
+            startAyah = SuraAyah(firstSeg.sura, firstSeg.startAyah),
+            endAyah = SuraAyah(lastSeg.sura, lastSeg.endAyah),
+            windowSize = playlist.totalAyahsCount.coerceAtLeast(1),
+            singleRepeat = 1,
+            connectRepeat = 0,
+            delayMode = MemorizationDelayMode.None,
+            memoryTestMode = false,
+            maskingLevel = MaskingLevel.OFF,
+            recordRecitation = false,
+            enableBridge = false,
+            segments = playlist.segments,
+            playlistId = playlist.id,
+            playlistName = playlist.name
+          )
+          memorizationEngine.startMemorization(playConfig)
+          playFromAyah(firstSeg.sura, firstSeg.startAyah)
+        }
+      },
+      onMemorizePlaylist = { playlist ->
+        openMemorizationSetup(initialPlaylist = playlist)
+      },
+      onDismissed = {
+        overlay.removeAllViews()
+        overlay.visibility = View.GONE
+        toggleActionBarVisibility(true)
+      }
+    )
+    overlay.removeAllViews()
+    overlay.addView(
+      playlistWrapper,
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.MATCH_PARENT
+    )
+    overlay.visibility = View.VISIBLE
+    toggleActionBarVisibility(false)
+  }
+
+  private fun openMemorizationSetup(initialPlaylist: CustomPlaylist? = null) {
     val page = currentPage
     val start = selectionStart
     val end = selectionEnd
@@ -1740,6 +1799,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     val savedConfig = if (hasSaved) memorizationPreferences.getSavedConfig() else null
     val savedStep = if (hasSaved) memorizationPreferences.getSavedStepIndex() else 0
     val masteredRanges = memorizationPreferences.getMasteredRanges()
+    val savedPlaylists = playlistRepository.getAllPlaylists()
 
     val memorizationSetupSheetWrapper = MemorizationSetupSheetWrapper(
       context = this,
@@ -1748,6 +1808,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       savedSessionConfig = savedConfig,
       savedSessionStep = savedStep,
       masteredRanges = masteredRanges,
+      savedPlaylists = savedPlaylists,
+      initialPlaylist = initialPlaylist,
       onResume = {
         if (savedConfig != null) {
           memorizationEngine.resumeSavedSession()
@@ -1759,6 +1821,10 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         if (config.recordRecitation &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
           ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 101)
+        }
+        val playlistId = config.playlistId
+        if (playlistId != null) {
+          playlistRepository.updateLastPlayed(playlistId)
         }
         memorizationEngine.startMemorization(config)
         playFromAyah(config.startAyah.sura, config.startAyah.ayah)
