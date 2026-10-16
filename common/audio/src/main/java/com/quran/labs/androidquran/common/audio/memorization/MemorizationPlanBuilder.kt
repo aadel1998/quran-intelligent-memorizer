@@ -1,4 +1,4 @@
-package com.quran.labs.androidquran.common.audio.memorization
+﻿package com.quran.labs.androidquran.common.audio.memorization
 
 import com.quran.data.core.QuranInfo
 import com.quran.data.model.SuraAyah
@@ -27,129 +27,127 @@ object MemorizationPlanBuilder {
 
   /**
    * Constructs the full sequence of [MemorizationStep]s for the provided [config].
-   * If [config.segments] is populated, flattens all segments across Surahs.
+   *
+   * ### Algorithm (True Sliding-Window)
+   *
+   * For N total ayahs and window size W the plan is built one ayah at a time:
+   *
+   *   for j in 0..<N:
+   *     windowStart = max(0, j - W + 1)
+   *     window      = allAyahs[windowStart..j]   // grows then slides
+   *
+   *     emit SOLO(allAyahs[j], Rs)               // new ayah solo
+   *     emit PAUSE_FOR_RECITATION?               // if delayMode != None
+   *     if window.size > 1 && Rc > 0:
+   *       emit CONNECT(window, Rc)               // sliding group
+   *       emit PAUSE_FOR_RECITATION?
+   *
+   * The windowIndex reported to the HUD is j (0-based) so the user sees
+   * smooth linear progress ("Window 5/24") with no sudden jumps.
+   *
+   * This replaces the previous chunked() approach which created
+   * non-overlapping fixed blocks and never properly practised cross-chunk
+   * transitions (the root cause of "ayahs missed at the beginning").
+   *
+   * If config.segments is populated, all segments are flattened first.
    */
   fun buildPlan(config: MemorizationConfig, quranInfo: QuranInfo): List<MemorizationStep> {
-    val allAyahs = if (config.segments.isNotEmpty()) {
+    val allAyahs: List<SuraAyah> = if (config.segments.isNotEmpty()) {
       config.segments.flatMap { it.toAyahs() }
     } else {
       getAyahsInRange(config.startAyah, config.endAyah, quranInfo)
     }
     if (allAyahs.isEmpty()) return emptyList()
 
-    val windows = allAyahs.chunked(config.windowSize)
-    val totalWindows = windows.size
+    val n = allAyahs.size
+    val W = config.windowSize
+    // totalWindows == n so HUD shows "Window j+1 / n" -- smooth linear progress
+    val totalWindows = n
     val steps = mutableListOf<MemorizationStep>()
     var stepIndex = 0
 
-    for (wIdx in windows.indices) {
-      val windowAyahs = windows[wIdx]
+    for (j in 0 until n) {
+      val currentAyah = allAyahs[j]
+      // Sliding window: grows from 1 up to W, then oldest drops off each step
+      val windowStart = maxOf(0, j - W + 1)
+      // .toList() snapshots the subList so MemorizationStep holds stable data
+      val windowAyahs: List<SuraAyah> = allAyahs.subList(windowStart, j + 1).toList()
 
-      for (j in windowAyahs.indices) {
-        val currentAyah = windowAyahs[j]
-        val ayahLabel = "Surah ${currentAyah.sura}:${currentAyah.ayah}"
+      val ayahLabel = "Surah ${currentAyah.sura}:${currentAyah.ayah}"
 
-        // 1. Solo Step for current Ayah
+      // 1. SOLO step for the newly introduced Ayah
+      steps.add(
+        MemorizationStep(
+          stepIndex = stepIndex++,
+          windowIndex = j,
+          totalWindows = totalWindows,
+          stepType = StepType.SOLO,
+          ayahs = listOf(currentAyah),
+          targetRepeatCount = config.singleRepeat,
+          delayMode = config.delayMode,
+          isMaskedByDefault = false,
+          description = "$ayahLabel Solo"
+        )
+      )
+
+      // 1b. Optional Recitation Pause after Solo
+      if (config.delayMode != MemorizationDelayMode.None) {
         steps.add(
           MemorizationStep(
             stepIndex = stepIndex++,
-            windowIndex = wIdx,
+            windowIndex = j,
             totalWindows = totalWindows,
-            stepType = StepType.SOLO,
+            stepType = StepType.PAUSE_FOR_RECITATION,
             ayahs = listOf(currentAyah),
-            targetRepeatCount = config.singleRepeat,
+            targetRepeatCount = 1,
             delayMode = config.delayMode,
-            isMaskedByDefault = false,
-            description = "$ayahLabel Solo"
+            isMaskedByDefault = config.memoryTestMode,
+            description = "Recitation Pause ($ayahLabel)"
+          )
+        )
+      }
+
+      // 2. CONNECT step -- the live sliding window of accumulated Ayahs.
+      // Activated once 2+ ayahs are in the window and connectRepeat > 0.
+      if (windowAyahs.size > 1 && config.connectRepeat > 0) {
+        val first = windowAyahs.first()
+        val last = windowAyahs.last()
+        val connectLabel = if (first.sura == last.sura) {
+          "Connecting Ayah ${first.ayah}-${last.ayah} (Surah ${first.sura})"
+        } else {
+          "Connecting ${first.sura}:${first.ayah} -> ${last.sura}:${last.ayah}"
+        }
+
+        steps.add(
+          MemorizationStep(
+            stepIndex = stepIndex++,
+            windowIndex = j,
+            totalWindows = totalWindows,
+            stepType = StepType.CONNECT,
+            ayahs = windowAyahs,
+            targetRepeatCount = config.connectRepeat,
+            delayMode = config.delayMode,
+            isMaskedByDefault = config.memoryTestMode,
+            description = connectLabel
           )
         )
 
-        // 1b. Optional Recitation Pause after Solo
+        // 2b. Optional Recitation Pause after Connect
         if (config.delayMode != MemorizationDelayMode.None) {
           steps.add(
             MemorizationStep(
               stepIndex = stepIndex++,
-              windowIndex = wIdx,
+              windowIndex = j,
               totalWindows = totalWindows,
               stepType = StepType.PAUSE_FOR_RECITATION,
-              ayahs = listOf(currentAyah),
+              ayahs = windowAyahs,
               targetRepeatCount = 1,
               delayMode = config.delayMode,
               isMaskedByDefault = config.memoryTestMode,
-              description = "Recitation Pause ($ayahLabel)"
+              description = "Recitation Pause ($connectLabel)"
             )
           )
         }
-
-        // 2. Connect Step if 2 or more Ayahs accumulated in current window
-        if (j > 0 && config.connectRepeat > 0) {
-          val connectedAyahs = windowAyahs.subList(0, j + 1)
-          val first = connectedAyahs.first()
-          val last = connectedAyahs.last()
-          val connectLabel = if (first.sura == last.sura) {
-            "Connecting Ayah ${first.ayah}–${last.ayah} (Surah ${first.sura})"
-          } else {
-            "Connecting ${first.sura}:${first.ayah} ➔ ${last.sura}:${last.ayah}"
-          }
-
-          steps.add(
-            MemorizationStep(
-              stepIndex = stepIndex++,
-              windowIndex = wIdx,
-              totalWindows = totalWindows,
-              stepType = StepType.CONNECT,
-              ayahs = connectedAyahs,
-              targetRepeatCount = config.connectRepeat,
-              delayMode = config.delayMode,
-              isMaskedByDefault = config.memoryTestMode,
-              description = connectLabel
-            )
-          )
-
-          // 2b. Optional Recitation Pause after Connect
-          if (config.delayMode != MemorizationDelayMode.None) {
-            steps.add(
-              MemorizationStep(
-                stepIndex = stepIndex++,
-                windowIndex = wIdx,
-                totalWindows = totalWindows,
-                stepType = StepType.PAUSE_FOR_RECITATION,
-                ayahs = connectedAyahs,
-                targetRepeatCount = 1,
-                delayMode = config.delayMode,
-                isMaskedByDefault = config.memoryTestMode,
-                description = "Recitation Pause ($connectLabel)"
-              )
-            )
-          }
-        }
-      }
-
-      // 3. Sliding Window Bridge Step (between current window and next window)
-      if (config.enableBridge && wIdx < totalWindows - 1) {
-        val nextWindow = windows[wIdx + 1]
-        val bridgeAyahs = listOf(windowAyahs.last(), nextWindow.first())
-        val bFirst = bridgeAyahs[0]
-        val bSecond = bridgeAyahs[1]
-        val bridgeLabel = if (bFirst.sura == bSecond.sura) {
-          "Bridge Ayah ${bFirst.ayah} ➔ ${bSecond.ayah}"
-        } else {
-          "Bridge ${bFirst.sura}:${bFirst.ayah} ➔ ${bSecond.sura}:${bSecond.ayah}"
-        }
-
-        steps.add(
-          MemorizationStep(
-            stepIndex = stepIndex++,
-            windowIndex = wIdx,
-            totalWindows = totalWindows,
-            stepType = StepType.BRIDGE,
-            ayahs = bridgeAyahs,
-            targetRepeatCount = 1,
-            delayMode = MemorizationDelayMode.None,
-            isMaskedByDefault = config.memoryTestMode,
-            description = bridgeLabel
-          )
-        )
       }
     }
 

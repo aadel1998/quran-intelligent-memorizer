@@ -138,8 +138,15 @@ class MemorizationEngine @Inject constructor(
 
     plan = newPlan
     val targetIndex = if (currentAyah != null) {
-      val foundIdx = newPlan.indexOfFirst { step -> currentAyah in step.ayahs }
-      if (foundIdx >= 0) foundIdx else 0
+      val sameStepAndAyah = newPlan.indexOfFirst { step ->
+        step.stepType == current.currentStep?.stepType && currentAyah in step.ayahs
+      }
+      if (sameStepAndAyah >= 0) {
+        sameStepAndAyah
+      } else {
+        val anyWithAyah = newPlan.indexOfFirst { step -> currentAyah in step.ayahs }
+        if (anyWithAyah >= 0) anyWithAyah else 0
+      }
     } else {
       current.currentStepIndex.coerceIn(newPlan.indices)
     }

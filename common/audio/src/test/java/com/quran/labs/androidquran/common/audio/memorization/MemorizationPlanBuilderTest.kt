@@ -142,11 +142,11 @@ class MemorizationPlanBuilderTest {
   }
 
   @Test
-  fun `buildPlan adds Bridge step between multiple windows`() {
+  fun `buildPlan connects across sliding window boundaries naturally without gaps`() {
     val config = MemorizationConfig(
       startAyah = SuraAyah(1, 1),
       endAyah = SuraAyah(1, 4),
-      windowSize = 2, // 2 windows: [1, 2] and [3, 4]
+      windowSize = 2,
       singleRepeat = 1,
       connectRepeat = 1,
       delayMode = MemorizationDelayMode.None,
@@ -155,13 +155,26 @@ class MemorizationPlanBuilderTest {
 
     val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
 
-    // Window 0 has [A1, A2] -> Solo A1, Solo A2, Connect A1..A2
-    // Bridge step between Window 0 and Window 1: connects A2 and A3
-    // Window 1 has [A3, A4] -> Solo A3, Solo A4, Connect A3..A4
-    val bridgeSteps = plan.filter { it.stepType == StepType.BRIDGE }
-    assertThat(bridgeSteps).hasSize(1)
-    assertThat(bridgeSteps.first().ayahs).containsExactly(SuraAyah(1, 2), SuraAyah(1, 3)).inOrder()
-    assertThat(bridgeSteps.first().targetRepeatCount).isEqualTo(1)
+    // With a true sliding window of size 2 across 4 ayahs:
+    // j = 0 (A1): Solo A1
+    // j = 1 (A2): Solo A2, Connect A1..A2
+    // j = 2 (A3): Solo A3, Connect A2..A3 (slid forward!)
+    // j = 3 (A4): Solo A4, Connect A3..A4 (slid forward!)
+    // Total steps: 1 + 2 + 2 + 2 = 7 steps
+    assertThat(plan).hasSize(7)
+
+    val soloSteps = plan.filter { it.stepType == StepType.SOLO }
+    assertThat(soloSteps).hasSize(4)
+
+    val connectSteps = plan.filter { it.stepType == StepType.CONNECT }
+    assertThat(connectSteps).hasSize(3)
+
+    // Connect step 1: A1, A2
+    assertThat(connectSteps[0].ayahs).containsExactly(SuraAyah(1, 1), SuraAyah(1, 2)).inOrder()
+    // Connect step 2: A2, A3 (bridges window across A2 and A3!)
+    assertThat(connectSteps[1].ayahs).containsExactly(SuraAyah(1, 2), SuraAyah(1, 3)).inOrder()
+    // Connect step 3: A3, A4 (bridges window across A3 and A4!)
+    assertThat(connectSteps[2].ayahs).containsExactly(SuraAyah(1, 3), SuraAyah(1, 4)).inOrder()
   }
 
   @Test
@@ -212,7 +225,7 @@ class MemorizationPlanBuilderTest {
     val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
     assertThat(plan).isNotEmpty()
 
-    // 52 ayahs with window size 4 -> 13 windows
+    // 52 ayahs with sliding window
     val soloSteps = plan.filter { it.stepType == StepType.SOLO }
     assertThat(soloSteps).hasSize(52)
 
@@ -220,18 +233,15 @@ class MemorizationPlanBuilderTest {
     assertThat(soloSteps[0].ayahs.first()).isEqualTo(SuraAyah(1, 1))
     assertThat(soloSteps[7].ayahs.first()).isEqualTo(SuraAyah(2, 1))
 
-    // Bridge steps connect consecutive windows (13 windows -> 12 bridges)
-    val bridgeSteps = plan.filter { it.stepType == StepType.BRIDGE }
-    assertThat(bridgeSteps).hasSize(12)
+    // 51 connect steps for 52 ayahs (starting from j=1)
+    val connectSteps = plan.filter { it.stepType == StepType.CONNECT }
+    assertThat(connectSteps).hasSize(51)
 
-    // Window 0 is ayahs [1:1, 1:2, 1:3, 1:4]
-    // Window 1 is ayahs [1:5, 1:6, 1:7, 2:1]
-    // Window 1 contains cross-surah transition between 1:7 and 2:1!
-    // Connect step in Window 1 connects 1:5, 1:6, 1:7, 2:1 across surah boundary!
-    val window1Connects = plan.filter { it.windowIndex == 1 && it.stepType == StepType.CONNECT }
-    assertThat(window1Connects).isNotEmpty()
-    val fullWindow1Connect = window1Connects.last()
-    assertThat(fullWindow1Connect.ayahs).containsExactly(
+    // At j=7 (where 2:1 is introduced), windowStart = maxOf(0, 7 - 4 + 1) = 4
+    // Ayahs at 4, 5, 6, 7 are 1:5, 1:6, 1:7, 2:1!
+    // This connects across the surah boundary between 1:7 and 2:1!
+    val crossSurahConnect = plan.first { it.windowIndex == 7 && it.stepType == StepType.CONNECT }
+    assertThat(crossSurahConnect.ayahs).containsExactly(
       SuraAyah(1, 5),
       SuraAyah(1, 6),
       SuraAyah(1, 7),
