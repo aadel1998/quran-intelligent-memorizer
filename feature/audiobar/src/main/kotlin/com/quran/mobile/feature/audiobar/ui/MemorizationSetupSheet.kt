@@ -574,7 +574,7 @@ fun MemorizationSetupSheet(
 }
 
 @Composable
-private fun NumberStepper(
+internal fun NumberStepper(
   label: String,
   value: Int,
   onValueChange: (Int) -> Unit,

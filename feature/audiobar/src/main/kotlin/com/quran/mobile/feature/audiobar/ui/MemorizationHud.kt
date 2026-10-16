@@ -48,6 +48,7 @@ fun MemorizationHud(
   onStop: () -> Unit,
   onToggleMask: () -> Unit,
   onReplayRecitation: (() -> Unit)? = null,
+  onOpenSettings: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val colors = LocalQuranColors.current
@@ -193,6 +194,17 @@ fun MemorizationHud(
             contentDescription = "Skip Step",
             tint = colors.defaultTextColor
           )
+        }
+
+        // Live Settings Tuning Button
+        if (onOpenSettings != null) {
+          IconButton(onClick = onOpenSettings) {
+            Icon(
+              QuranIcons.Settings,
+              contentDescription = "Tuning Memorization Settings",
+              tint = colors.defaultTextColor
+            )
+          }
         }
       }
     }

@@ -140,9 +140,11 @@ import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMo
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationPreferences
 import com.quran.labs.androidquran.common.audio.memorization.PlaylistRepository
+import com.quran.labs.androidquran.common.audio.util.QuranAudioExtensionDecider
 import com.quran.mobile.feature.audiobar.ui.MemorizationSetupSheetWrapper
 import com.quran.mobile.feature.audiobar.ui.PlaylistSheetWrapper
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.ReadingBookmarkSheetWrapper
+import java.io.File
 import com.quran.mobile.feature.ayahbookmark.readingbookmark.di.ReadingBookmarkSheetWrapperInjector
 import com.quran.mobile.feature.qarilist.QariListWrapper
 import com.quran.mobile.feature.qarilist.di.QariListWrapperInjector
@@ -264,7 +266,10 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   @Inject lateinit var downloadInfoStreams: DownloadInfoStreams
   @Inject lateinit var qariManager: CurrentQariManager
   @Inject lateinit var downloadBridge: DownloadBridge
+  @Inject lateinit var audioExtensionDecider: QuranAudioExtensionDecider
 
+  private var pendingMemorizationConfig: MemorizationConfig? = null
+  private var pendingIsResume: Boolean = false
   private lateinit var audioStatusRepositoryBridge: AudioStatusRepositoryBridge
   private lateinit var readingEventPresenterBridge: ReadingEventPresenterBridge
   private lateinit var windowInsetsController: WindowInsetsControllerCompat
@@ -1406,7 +1411,12 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
 
   private fun onDownloadSuccess() {
     refreshQuranPages()
-    audioPresenter.onDownloadSuccess()
+    val pending = pendingMemorizationConfig
+    if (pending != null) {
+      startMemorizationSession(pending, pendingIsResume)
+    } else {
+      audioPresenter.onDownloadSuccess()
+    }
   }
 
   fun toggleActionBarVisibility(visible: Boolean) {
@@ -1767,6 +1777,103 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     toggleActionBarVisibility(false)
   }
 
+  private fun haveFilesForRange(start: SuraAyah, end: SuraAyah, qari: QariItem): Boolean {
+    val localPath = audioUtils.getLocalQariUrl(qari) ?: return false
+    val databasePath = audioUtils.getQariDatabasePathIfGapless(qari)
+    val extension = audioExtensionDecider.audioExtensionForQari(qari)
+    val urlFormat = if (databasePath.isNullOrEmpty()) {
+      localPath + File.separator + "%d" + File.separator + "%d" + ".$extension"
+    } else {
+      localPath + File.separator + "%03d" + ".$extension"
+    }
+    return audioUtils.haveAllFiles(
+      urlFormat,
+      localPath,
+      start,
+      end,
+      databasePath != null,
+      audioExtensionDecider.allowedAudioExtensions(qari)
+    )
+  }
+
+  private fun findFirstMissingAudioRange(config: MemorizationConfig, item: QariItem): Pair<SuraAyah, SuraAyah>? {
+    if (!quranFileUtils.haveAyaPositionFile()) {
+      return config.startAyah to config.endAyah
+    }
+    val databasePath = audioUtils.getQariDatabasePathIfGapless(item)
+    if (databasePath != null && !File(databasePath).exists()) {
+      return config.startAyah to config.endAyah
+    }
+    if (config.segments.isNotEmpty()) {
+      for (seg in config.segments) {
+        val s = SuraAyah(seg.sura, seg.startAyah)
+        val e = SuraAyah(seg.sura, seg.endAyah)
+        if (!haveFilesForRange(s, e, item)) {
+          return s to e
+        }
+      }
+    } else {
+      if (!haveFilesForRange(config.startAyah, config.endAyah, item)) {
+        return config.startAyah to config.endAyah
+      }
+    }
+    return null
+  }
+
+  private fun startMemorizationSession(config: MemorizationConfig, isResume: Boolean = false) {
+    val item = currentQariItem()
+    val missingRange = if (!quranSettings.shouldStream()) {
+      findFirstMissingAudioRange(config, item)
+    } else {
+      if (!quranFileUtils.haveAyaPositionFile()) {
+        config.startAyah to config.endAyah
+      } else {
+        val databasePath = audioUtils.getQariDatabasePathIfGapless(item)
+        if (databasePath != null && !File(databasePath).exists()) {
+          config.startAyah to config.endAyah
+        } else {
+          null
+        }
+      }
+    }
+
+    if (missingRange != null) {
+      pendingMemorizationConfig = config
+      pendingIsResume = isResume
+      val (start, end) = missingRange
+      ensurePage(start.sura, start.ayah)
+      audioPresenter.play(
+        start,
+        end,
+        item,
+        0,
+        0,
+        true,
+        1.0f,
+        shouldStream = false
+      )
+    } else {
+      launchMemorizationPlayback(config, isResume)
+    }
+  }
+
+  private fun launchMemorizationPlayback(config: MemorizationConfig, isResume: Boolean) {
+    pendingMemorizationConfig = null
+    pendingIsResume = false
+    if (isResume) {
+      memorizationEngine.resumeSavedSession()
+      val currentAyah = memorizationEngine.state.value.currentPlayingAyah ?: config.startAyah
+      ensurePage(currentAyah.sura, currentAyah.ayah)
+      val page = quranInfo.getPageFromSuraAyah(currentAyah.sura, currentAyah.ayah)
+      playFromAyah(currentAyah, config.endAyah, page, 0, 0, true, 1.0f)
+    } else {
+      ensurePage(config.startAyah.sura, config.startAyah.ayah)
+      memorizationEngine.startMemorization(config)
+      val page = quranInfo.getPageFromSuraAyah(config.startAyah.sura, config.startAyah.ayah)
+      playFromAyah(config.startAyah, config.endAyah, page, 0, 0, true, 1.0f)
+    }
+  }
+
   private fun playPlaylist(playlist: CustomPlaylist) {
     if (playlist.segments.isNotEmpty()) {
       playlistRepository.updateLastPlayed(playlist.id)
@@ -1787,9 +1894,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         playlistId = playlist.id,
         playlistName = playlist.name
       )
-      ensurePage(firstSeg.sura, firstSeg.startAyah)
-      memorizationEngine.startMemorization(playConfig)
-      playFromAyah(firstSeg.sura, firstSeg.startAyah)
+      startMemorizationSession(playConfig, false)
     }
   }
 
@@ -1844,9 +1949,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       maxAyahsForSura = quranInfo.getNumberOfAyahs(starting.sura),
       onResume = {
         if (savedConfig != null) {
-          memorizationEngine.resumeSavedSession()
-          val currentAyah = memorizationEngine.state.value.currentPlayingAyah ?: savedConfig.startAyah
-          playFromAyah(currentAyah.sura, currentAyah.ayah)
+          startMemorizationSession(savedConfig, true)
         }
       },
       onStart = { config ->
@@ -1858,8 +1961,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         if (playlistId != null) {
           playlistRepository.updateLastPlayed(playlistId)
         }
-        memorizationEngine.startMemorization(config)
-        playFromAyah(config.startAyah.sura, config.startAyah.ayah)
+        startMemorizationSession(config, false)
       },
       onDismissed = {
         overlay.removeAllViews()
@@ -1960,6 +2062,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   override fun onCancelPressed(cancelDownload: Boolean) {
     if (cancelDownload) {
       needsPermissionToDownloadOver3g = true
+      pendingMemorizationConfig = null
+      pendingIsResume = false
 
       val i = Intent(this, QuranDownloadService::class.java)
       i.setAction(QuranDownloadService.ACTION_CANCEL_DOWNLOADS)

@@ -33,9 +33,13 @@ import dev.zacsweers.metro.Inject
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
+import com.quran.mobile.feature.audiobar.state.AudioBarState
 import com.quran.mobile.feature.audiobar.state.AudioBarUiEvent
 import com.quran.mobile.feature.audiobar.ui.MemorizationHud
+import com.quran.mobile.feature.audiobar.ui.MemorizationLiveSettingsSheet
 
 class AudioBarWrapper @JvmOverloads constructor(
   context: Context,
@@ -64,12 +68,17 @@ class AudioBarWrapper @JvmOverloads constructor(
       }
       val eventListeners = remember(audioBarPresenter) { audioBarPresenter.eventListeners() }
       val memorizationState by memorizationEngine.state.collectAsState()
+      val audioBarState by flow.collectAsState()
+      val isDownloading = audioBarState is AudioBarState.Downloading ||
+          audioBarState is AudioBarState.Prompt ||
+          audioBarState is AudioBarState.Loading
+      var showLiveSettingsSheet by remember { mutableStateOf(false) }
 
       Card(
         shape = CardDefaults.shape.topOnly(),
         modifier = Modifier.fillMaxWidth()
       ) {
-        if (memorizationState.isActive) {
+        if (memorizationState.isActive && !isDownloading) {
           MemorizationHud(
             state = memorizationState,
             onPreviousStep = { memorizationEngine.previousStep() },
@@ -88,6 +97,7 @@ class AudioBarWrapper @JvmOverloads constructor(
               eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
             },
             onToggleMask = { memorizationEngine.toggleTextMask() },
+            onOpenSettings = { showLiveSettingsSheet = true },
             onReplayRecitation = {
               val path = memorizationState.lastRecitationAudioPath
               if (path != null) {
@@ -127,6 +137,18 @@ class AudioBarWrapper @JvmOverloads constructor(
               .heightIn(min = dimensionResource(id = R.dimen.audiobar_height))
           )
         }
+      }
+
+      val currentConfig = memorizationState.config
+      if (showLiveSettingsSheet && currentConfig != null) {
+        MemorizationLiveSettingsSheet(
+          currentConfig = currentConfig,
+          onApplySettings = { updated ->
+            memorizationEngine.updateConfig(updated)
+            showLiveSettingsSheet = false
+          },
+          onDismissRequest = { showLiveSettingsSheet = false }
+        )
       }
     }
   }

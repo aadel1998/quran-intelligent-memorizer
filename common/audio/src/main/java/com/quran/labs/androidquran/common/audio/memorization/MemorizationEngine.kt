@@ -126,6 +126,43 @@ class MemorizationEngine @Inject constructor(
   }
 
   /**
+   * Updates the session configuration live during playback without losing the current Ayah position.
+   */
+  fun updateConfig(newConfig: MemorizationConfig) {
+    val current = _state.value
+    if (!current.isActive) return
+
+    val currentAyah = current.currentPlayingAyah ?: current.activeAyahsInStep.firstOrNull()
+    val newPlan = MemorizationPlanBuilder.buildPlan(newConfig, quranInfo)
+    if (newPlan.isEmpty()) return
+
+    plan = newPlan
+    val targetIndex = if (currentAyah != null) {
+      val foundIdx = newPlan.indexOfFirst { step -> currentAyah in step.ayahs }
+      if (foundIdx >= 0) foundIdx else 0
+    } else {
+      current.currentStepIndex.coerceIn(newPlan.indices)
+    }
+
+    val step = newPlan[targetIndex]
+    memorizationPreferences?.saveSession(newConfig, targetIndex, 1)
+
+    _state.value = current.copy(
+      config = newConfig,
+      currentWindowIndex = step.windowIndex,
+      totalWindows = step.totalWindows,
+      currentStepIndex = targetIndex,
+      totalSteps = newPlan.size,
+      currentStep = step,
+      currentRepeatIteration = 1,
+      totalRepeatIterations = step.targetRepeatCount,
+      activeAyahsInStep = step.ayahs,
+      currentPlayingAyah = currentAyah ?: step.ayahs.firstOrNull(),
+      isTextMasked = shouldMaskText(step, 1, newConfig)
+    )
+  }
+
+  /**
    * Terminates the memorization session and returns to idle state.
    */
   fun stopMemorization() {

@@ -508,15 +508,7 @@ class AudioService : Service(), Player.Listener {
           if (nextAyah != null) {
             serviceHandler.removeMessages(MSG_UPDATE_AUDIO_POS)
             currentWord = null
-            localAudioQueue.playAt(nextAyah.sura, nextAyah.ayah, true)
-            if (nextAyah.sura == sura) {
-              val seekPos = getSeekPosition(false)
-              if (seekPos > -1) {
-                localPlayer.seekTo(seekPos)
-              }
-            } else {
-              playAudio(true)
-            }
+            handleNextMemorizationAyah(nextAyah, localAudioQueue)
           } else {
             processStopRequest(true)
           }
