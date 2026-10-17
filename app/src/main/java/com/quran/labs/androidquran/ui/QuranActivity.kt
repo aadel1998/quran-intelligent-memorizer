@@ -441,8 +441,14 @@ class QuranActivity : AppCompatActivity(),
             onStartFromBeginningMemorization = { session ->
               startMemorizationFromBeginning(session.sura)
             },
-            onOpenSearch = {
-              startActivity(Intent(this@QuranActivity, SearchActivity::class.java))
+            onOpenSearch = { query ->
+              val searchIntent = Intent(this@QuranActivity, SearchActivity::class.java).apply {
+                if (query.isNotBlank()) {
+                  action = Intent.ACTION_SEARCH
+                  putExtra(SearchManager.QUERY, query)
+                }
+              }
+              startActivity(searchIntent)
             },
             onOpenJump = {
               isJumpSheetVisible = true

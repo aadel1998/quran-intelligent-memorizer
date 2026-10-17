@@ -20,9 +20,14 @@ import android.widget.CursorAdapter
 import android.widget.ListView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import androidx.appcompat.widget.Toolbar
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
@@ -43,9 +48,13 @@ import com.quran.labs.androidquran.service.util.QuranDownloadNotifier
 import com.quran.labs.androidquran.service.util.ServiceIntentHelper.getDownloadIntent
 import com.quran.labs.androidquran.ui.TranslationManagerActivity
 import com.quran.labs.androidquran.ui.helpers.QuranNavigator
+import com.quran.labs.androidquran.ui.modern.ModernSearchResultItem
+import com.quran.labs.androidquran.ui.modern.ModernSearchScreen
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.labs.androidquran.util.QuranFileUtils
 import com.quran.labs.androidquran.util.QuranSettings
 import com.quran.labs.androidquran.util.QuranUtils
+import com.quran.mobile.common.ui.core.R as UiCoreR
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -61,6 +70,13 @@ class SearchActivity : AppCompatActivity(), SimpleDownloadListener,
   private var query: String = ""
   private var adapter: ResultAdapter? = null
   private var downloadReceiver: DefaultDownloadReceiver? = null
+
+  // Modern UI State
+  private val modernResults = mutableStateListOf<ModernSearchResultItem>()
+  private var modernQuery by mutableStateOf("")
+  private var modernIsLoading by mutableStateOf(false)
+  private var modernShowArabicWarning by mutableStateOf(false)
+  private var modernShowNeedTranslationsWarning by mutableStateOf(false)
 
   /**
    * Routes at most one search suggestion at a time.
@@ -100,58 +116,105 @@ class SearchActivity : AppCompatActivity(), SimpleDownloadListener,
 
     (application as QuranApplication)
       .applicationComponent.inject(this)
-    setContentView(R.layout.search)
 
-    val root = findViewById<ViewGroup>(R.id.root)
-    ViewCompat.setOnApplyWindowInsetsListener(root) { _, windowInsets ->
-      val insets = windowInsets.getInsets(
-        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-      )
-      root.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-        topMargin = insets.top
-        leftMargin = insets.left
-        rightMargin = insets.right
+    val isModern = quranSettings.isModernUiEnabled
+    if (isModern) {
+      setContent {
+        QuranTheme {
+          ModernSearchScreen(
+            query = modernQuery,
+            onQueryChange = { q ->
+              modernQuery = q
+              if (q.length >= 2) {
+                modernIsLoading = true
+                showResults(q)
+              } else if (q.isEmpty()) {
+                modernResults.clear()
+                modernIsLoading = false
+              }
+            },
+            onSearch = { q ->
+              modernQuery = q
+              modernIsLoading = true
+              showResults(q)
+            },
+            searchResults = modernResults,
+            isLoading = modernIsLoading,
+            showArabicWarning = modernShowArabicWarning,
+            showNeedTranslationsWarning = modernShowNeedTranslationsWarning,
+            onDownloadArabicDb = { downloadArabicSearchDb() },
+            onOpenTranslations = {
+              val intent = Intent(applicationContext, TranslationManagerActivity::class.java)
+              startActivity(intent)
+            },
+            onJumpToResult = { sura, ayah, translation ->
+              jumpToResult(sura, ayah, jumpToTranslation = translation)
+            },
+            onShareAyah = { item ->
+              val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                val text = Html.fromHtml(item.text, Html.FROM_HTML_MODE_LEGACY).toString()
+                putExtra(Intent.EXTRA_TEXT, "$text\n\n[Surah ${item.suraName} ${item.sura}:${item.ayah} - Page ${item.page}]")
+              }
+              startActivity(Intent.createChooser(shareIntent, null))
+            },
+            onNavigateUp = { finish() }
+          )
+        }
+      }
+    } else {
+      setContentView(R.layout.search)
+
+      val root = findViewById<ViewGroup>(R.id.root)
+      ViewCompat.setOnApplyWindowInsetsListener(root) { _, windowInsets ->
+        val insets = windowInsets.getInsets(
+          WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
+        root.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+          topMargin = insets.top
+          leftMargin = insets.left
+          rightMargin = insets.right
+        }
+        windowInsets
       }
 
-      // if we return WindowInsetsCompat.CONSUMED, the SnackBar won't
-      // be properly positioned on Android 29 and below (will be under
-      // the navigation bar).
-      windowInsets
-    }
+      val listView = findViewById<ListView>(R.id.results_list)
+      ViewCompat.setOnApplyWindowInsetsListener(listView) { _, windowInsets ->
+        val insets = windowInsets.getInsets(
+          WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
 
-    val listView = findViewById<ListView>(R.id.results_list)
-    ViewCompat.setOnApplyWindowInsetsListener(listView) { _, windowInsets ->
-      val insets = windowInsets.getInsets(
-        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-      )
+        listView.setPadding(0, 0, 0, insets.bottom)
+        windowInsets
+      }
 
-      listView.setPadding(0, 0, 0, insets.bottom)
-      windowInsets
-    }
+      val toolbar = findViewById<Toolbar>(R.id.toolbar)
+      toolbar.setTitle(R.string.menu_search)
+      setSupportActionBar(toolbar)
+      val ab = supportActionBar
+      ab?.setDisplayHomeAsUpEnabled(true)
 
-    val toolbar = findViewById<Toolbar>(R.id.toolbar)
-    toolbar.setTitle(R.string.menu_search)
-    setSupportActionBar(toolbar)
-    val ab = supportActionBar
-    ab?.setDisplayHomeAsUpEnabled(true)
-
-    messageView = findViewById(R.id.search_area)
-    warningView = findViewById(R.id.search_warning)
-    buttonGetTranslations = findViewById(R.id.btnGetTranslations)
-    buttonGetTranslations.setOnClickListener { v: View? ->
-      var intent: Intent?
-      if (downloadArabicSearchDb) {
-        downloadArabicSearchDb()
-      } else {
-        intent = Intent(applicationContext, TranslationManagerActivity::class.java)
-        startActivity(intent)
-        finish()
+      messageView = findViewById(R.id.search_area)
+      warningView = findViewById(R.id.search_warning)
+      buttonGetTranslations = findViewById(R.id.btnGetTranslations)
+      buttonGetTranslations.setOnClickListener { v: View? ->
+        var intent: Intent?
+        if (downloadArabicSearchDb) {
+          downloadArabicSearchDb()
+        } else {
+          intent = Intent(applicationContext, TranslationManagerActivity::class.java)
+          startActivity(intent)
+          finish()
+        }
       }
     }
     handleIntent(intent)
   }
 
   override fun onCreateOptionsMenu(menu: Menu): Boolean {
+    if (quranSettings.isModernUiEnabled) {
+      return false
+    }
     super.onCreateOptionsMenu(menu)
     menuInflater.inflate(R.menu.search_menu, menu)
     val searchItem = menu.findItem(R.id.search)
@@ -222,6 +285,11 @@ class SearchActivity : AppCompatActivity(), SimpleDownloadListener,
   }
 
   override fun handleDownloadSuccess() {
+    if (quranSettings.isModernUiEnabled) {
+      modernShowArabicWarning = false
+      showResults(modernQuery)
+      return
+    }
     warningView.visibility = View.GONE
     buttonGetTranslations.visibility = View.GONE
     handleIntent(intent)
@@ -249,6 +317,45 @@ class SearchActivity : AppCompatActivity(), SimpleDownloadListener,
     val showArabicWarning = containsArabic &&
         !quranFileUtils.hasTranslation(QuranDataProvider.QURAN_ARABIC_DATABASE)
     val jumpToTranslation = !containsArabic || showArabicWarning
+
+    if (quranSettings.isModernUiEnabled) {
+      modernIsLoading = false
+      modernShowArabicWarning = showArabicWarning
+      modernShowNeedTranslationsWarning = !containsArabic && query.length > 2 && cursor == null
+      downloadArabicSearchDb = showArabicWarning
+
+      val items = mutableListOf<ModernSearchResultItem>()
+      if (cursor != null && cursor.moveToFirst()) {
+        val arabicNames = resources.getStringArray(UiCoreR.array.sura_names_arabic)
+        do {
+          val id = cursor.getInt(0)
+          val sura = cursor.getInt(1)
+          val ayah = cursor.getInt(2)
+          val page = quranInfo.getPageFromSuraAyah(sura, ayah)
+          val juz = quranInfo.getJuzFromPage(page)
+          val text = cursor.getString(3)
+          val suraName = quranDisplayData.getSuraName(this, sura, false)
+          val arabicSuraName = arabicNames.getOrElse(sura - 1) { "" }
+          val isItemArabic = QuranUtils.doesStringContainArabic(text)
+          items.add(
+            ModernSearchResultItem(
+              id = id,
+              sura = sura,
+              ayah = ayah,
+              page = page,
+              juz = juz,
+              suraName = suraName,
+              suraArabicName = arabicSuraName,
+              text = text,
+              isArabic = isItemArabic
+            )
+          )
+        } while (cursor.moveToNext())
+      }
+      modernResults.clear()
+      modernResults.addAll(items)
+      return
+    }
 
     if (showArabicWarning) {
       // Without the Arabic database, Arabic tafseer matches should open in translation view.
@@ -303,6 +410,10 @@ class SearchActivity : AppCompatActivity(), SimpleDownloadListener,
   }
 
   override fun onLoaderReset(loader: Loader<Cursor?>) {
+    if (quranSettings.isModernUiEnabled) {
+      modernResults.clear()
+      return
+    }
     adapter?.swapCursor(null)
   }
 
@@ -314,7 +425,11 @@ class SearchActivity : AppCompatActivity(), SimpleDownloadListener,
     cancelPendingViewIntentNavigation()
 
     if (Intent.ACTION_SEARCH == intent.action) {
-      val query = intent.getStringExtra(SearchManager.QUERY)
+      val query = intent.getStringExtra(SearchManager.QUERY) ?: ""
+      if (quranSettings.isModernUiEnabled) {
+        modernQuery = query
+        modernIsLoading = true
+      }
       showResults(query)
     } else if (Intent.ACTION_VIEW == intent.action) {
       val intentData = intent.data

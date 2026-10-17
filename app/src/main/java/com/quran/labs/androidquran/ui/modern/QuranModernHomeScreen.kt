@@ -126,7 +126,7 @@ fun QuranModernHomeScreen(
   onOpenLastRead: (page: Int) -> Unit,
   onResumeMemorization: (SavedSuraSession) -> Unit,
   onStartFromBeginningMemorization: (SavedSuraSession) -> Unit,
-  onOpenSearch: () -> Unit,
+  onOpenSearch: (String) -> Unit,
   onOpenJump: () -> Unit,
   onOpenPlaylists: () -> Unit,
   onOpenSettings: () -> Unit,
@@ -237,7 +237,7 @@ private fun ModernHomeTopBar(
   searchQuery: String,
   onSearchQueryChange: (String) -> Unit,
   onToggleSearch: () -> Unit,
-  onOpenSearch: () -> Unit,
+  onOpenSearch: (String) -> Unit,
   onOpenJump: () -> Unit,
   onOpenPlaylists: () -> Unit,
   onOpenSettings: () -> Unit,
@@ -312,38 +312,83 @@ private fun ModernHomeTopBar(
     }
 
     AnimatedVisibility(visible = isSearchExpanded) {
-      OutlinedTextField(
-        value = searchQuery,
-        onValueChange = onSearchQueryChange,
-        placeholder = { Text("Filter Surahs by name or number...") },
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-          focusedBorderColor = MaterialTheme.colorScheme.primary,
-          unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-          focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-          unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
-        ),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = {
-          keyboardController?.hide()
-          focusManager.clearFocus()
-        }),
-        trailingIcon = {
-          if (searchQuery.isNotEmpty()) {
-            IconButton(onClick = { onSearchQueryChange("") }) {
-              Icon(
-                imageVector = QuranIcons.Close,
-                contentDescription = "Clear",
-                modifier = Modifier.size(18.dp)
-              )
+      Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        OutlinedTextField(
+          value = searchQuery,
+          onValueChange = onSearchQueryChange,
+          placeholder = { Text("Filter Surahs by name or number...") },
+          singleLine = true,
+          shape = RoundedCornerShape(12.dp),
+          colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+          ),
+          keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+          keyboardActions = KeyboardActions(onSearch = {
+            keyboardController?.hide()
+            focusManager.clearFocus()
+            if (searchQuery.isNotBlank()) {
+              onOpenSearch(searchQuery)
             }
+          }),
+          trailingIcon = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              if (searchQuery.isNotEmpty()) {
+                IconButton(onClick = { onSearchQueryChange("") }) {
+                  Icon(
+                    imageVector = QuranIcons.Close,
+                    contentDescription = "Clear",
+                    modifier = Modifier.size(18.dp)
+                  )
+                }
+              }
+              IconButton(onClick = { onOpenSearch(searchQuery) }) {
+                Icon(
+                  imageVector = QuranIcons.Search,
+                  contentDescription = "Search whole Quran",
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(20.dp)
+                )
+              }
+            }
+          },
+          modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onOpenSearch(searchQuery) }
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+              imageVector = QuranIcons.Search,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+              text = if (searchQuery.isNotBlank()) "Search whole Quran for \"$searchQuery\"" else "Deep search across entire Quran",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.Medium,
+              color = MaterialTheme.colorScheme.primary
+            )
           }
-        },
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(top = 8.dp)
-      )
+          Icon(
+            imageVector = QuranIcons.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(14.dp)
+          )
+        }
+      }
     }
   }
 }
