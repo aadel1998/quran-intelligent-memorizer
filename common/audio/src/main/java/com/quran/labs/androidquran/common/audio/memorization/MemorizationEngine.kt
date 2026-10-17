@@ -82,6 +82,18 @@ class MemorizationEngine @Inject constructor(
   }
 
   /**
+   * Resumes the previously saved memorization session for a specific Surah if one exists.
+   */
+  fun resumeSavedSessionForSura(sura: Int): Boolean {
+    val suraSession = memorizationPreferences?.getSavedSessionForSura(sura) ?: return false
+    startMemorization(suraSession.config)
+    if (suraSession.stepIndex in plan.indices) {
+      goToStep(suraSession.stepIndex)
+    }
+    return true
+  }
+
+  /**
    * Pauses the active memorization session.
    */
   fun pause() {
@@ -277,6 +289,9 @@ class MemorizationEngine @Inject constructor(
         currentPlayingAyah = firstAyah,
         isTextMasked = shouldMaskText(step, nextRepeat, current.config)
       )
+      current.config?.let {
+        memorizationPreferences?.saveSession(it, current.currentStepIndex, nextRepeat)
+      }
       return firstAyah
     }
 
@@ -328,6 +343,7 @@ class MemorizationEngine @Inject constructor(
           repetitions = config.singleRepeat + config.connectRepeat
         )
       )
+      memorizationPreferences?.clearSessionForSura(config.startAyah.sura)
     }
     memorizationPreferences?.clearSession()
     _state.value = _state.value.copy(

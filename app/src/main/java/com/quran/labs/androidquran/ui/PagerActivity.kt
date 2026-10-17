@@ -1882,7 +1882,11 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     audioStatusBar.translationY = 0f
     handler.removeMessages(MSG_HIDE_ACTIONBAR)
     if (isResume) {
-      memorizationEngine.resumeSavedSession()
+      if (memorizationPreferences.hasSavedSessionForSura(config.startAyah.sura)) {
+        memorizationEngine.resumeSavedSessionForSura(config.startAyah.sura)
+      } else {
+        memorizationEngine.resumeSavedSession()
+      }
       val currentAyah = memorizationEngine.state.value.currentPlayingAyah ?: config.startAyah
       ensurePage(currentAyah.sura, currentAyah.ayah)
       val page = quranInfo.getPageFromSuraAyah(currentAyah.sura, currentAyah.ayah)
@@ -1949,12 +1953,17 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     val end = selectionEnd
 
     val pageRange = quranInfo.getVerseRangeForPage(page)
-    val starting = start ?: SuraAyah(pageRange.startSura, pageRange.startAyah)
-    val ending = end ?: SuraAyah(pageRange.endingSura, pageRange.endingAyah)
+    val sura = start?.sura ?: pageRange.startSura
+    val maxAyahs = quranInfo.getNumberOfAyahs(sura)
 
-    val hasSaved = memorizationPreferences.hasSavedSession()
-    val savedConfig = if (hasSaved) memorizationPreferences.getSavedConfig() else null
-    val savedStep = if (hasSaved) memorizationPreferences.getSavedStepIndex() else 0
+    val starting = start ?: SuraAyah(sura, 1)
+    val ending = end ?: SuraAyah(sura, maxAyahs)
+
+    val suraSession = memorizationPreferences.getSavedSessionForSura(starting.sura)
+    val savedConfig = suraSession?.config
+    val savedStep = suraSession?.stepIndex ?: 0
+    val defaultSettings = memorizationPreferences.getLastUsedSettings()
+
     val masteredRanges = memorizationPreferences.getMasteredRanges()
     val savedPlaylists = playlistRepository.getAllPlaylists()
 
@@ -1964,16 +1973,30 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       initialEndAyah = ending,
       savedSessionConfig = savedConfig,
       savedSessionStep = savedStep,
-      masteredRanges = masteredRanges,
-      savedPlaylists = savedPlaylists,
-      initialPlaylist = initialPlaylist,
-      maxAyahsForSura = quranInfo.getNumberOfAyahs(starting.sura),
       onResume = {
         if (savedConfig != null) {
           startMemorizationSession(savedConfig, true)
         }
       },
+      onResetSurah = {
+        memorizationPreferences.clearSessionForSura(starting.sura)
+      },
+      defaultSettings = defaultSettings,
+      masteredRanges = masteredRanges,
+      savedPlaylists = savedPlaylists,
+      initialPlaylist = initialPlaylist,
+      maxAyahsForSura = maxAyahs,
       onStart = { config ->
+        memorizationPreferences.saveLastUsedSettings(
+          windowSize = config.windowSize,
+          singleRepeat = config.singleRepeat,
+          connectRepeat = config.connectRepeat,
+          delayMode = config.delayMode,
+          memoryTestMode = config.memoryTestMode,
+          maskingLevel = config.maskingLevel,
+          recordRecitation = config.recordRecitation,
+          enableBridge = config.enableBridge
+        )
         if (config.recordRecitation &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
           ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 101)

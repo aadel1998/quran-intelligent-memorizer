@@ -9,6 +9,7 @@ import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
 import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
 import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationDefaultSettings
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
 import com.quran.labs.androidquran.common.ui.core.QuranTheme
 
@@ -23,8 +24,10 @@ class MemorizationSetupSheetWrapper(
   private val onStart: (MemorizationConfig) -> Unit,
   private val onDismissed: () -> Unit,
   private val savedSessionConfig: MemorizationConfig? = null,
-  private val savedSessionStep: Int = 0,
+  savedSessionStep: Int = 0,
   private val onResume: (() -> Unit)? = null,
+  private val onResetSurah: (() -> Unit)? = null,
+  private val defaultSettings: MemorizationDefaultSettings = MemorizationDefaultSettings(),
   private val masteredRanges: List<MasteredRange> = emptyList(),
   private val onReview: ((MasteredRange) -> Unit)? = null,
   private val savedPlaylists: List<CustomPlaylist> = emptyList(),
@@ -45,14 +48,16 @@ class MemorizationSetupSheetWrapper(
             initialEndAyah = initialEndAyah,
             savedSessionConfig = savedSessionConfig,
             savedSessionStep = savedSessionStep,
-            masteredRanges = masteredRanges,
-            savedPlaylists = savedPlaylists,
-            initialPlaylist = initialPlaylist,
-            maxAyahsForSura = maxAyahsForSura,
             onResumeSession = {
               onResume?.invoke()
               onDismissed()
             },
+            onResetSurah = onResetSurah,
+            defaultSettings = defaultSettings,
+            masteredRanges = masteredRanges,
+            savedPlaylists = savedPlaylists,
+            initialPlaylist = initialPlaylist,
+            maxAyahsForSura = maxAyahsForSura,
             onReviewRange = { range ->
               if (onReview != null) {
                 onReview.invoke(range)

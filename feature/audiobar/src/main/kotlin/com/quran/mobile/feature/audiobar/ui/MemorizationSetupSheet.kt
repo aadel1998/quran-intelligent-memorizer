@@ -43,6 +43,7 @@ import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
 import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
 import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationDefaultSettings
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
 
 /**
@@ -58,6 +59,8 @@ fun MemorizationSetupSheet(
   savedSessionConfig: MemorizationConfig? = null,
   savedSessionStep: Int = 0,
   onResumeSession: (() -> Unit)? = null,
+  onResetSurah: (() -> Unit)? = null,
+  defaultSettings: MemorizationDefaultSettings = MemorizationDefaultSettings(),
   masteredRanges: List<MasteredRange> = emptyList(),
   onReviewRange: ((MasteredRange) -> Unit)? = null,
   savedPlaylists: List<CustomPlaylist> = emptyList(),
@@ -65,16 +68,24 @@ fun MemorizationSetupSheet(
   maxAyahsForSura: Int = 286,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
+  var activeSavedSessionConfig by remember { mutableStateOf(savedSessionConfig) }
+  var activeSavedSessionStep by remember { mutableIntStateOf(savedSessionStep) }
+
   var selectedPlaylist by remember { mutableStateOf<CustomPlaylist?>(initialPlaylist) }
   var startAyahNum by remember { mutableIntStateOf(initialStartAyah.ayah) }
-  var endAyahNum by remember { mutableIntStateOf(initialEndAyah.ayah.coerceAtLeast(initialStartAyah.ayah + 3)) }
-  var windowSize by remember { mutableIntStateOf(4) }
-  var singleRepeat by remember { mutableIntStateOf(3) }
-  var connectRepeat by remember { mutableIntStateOf(2) }
-  var selectedDelayOption by remember { mutableIntStateOf(0) } // 0: None, 1: 3s, 2: 5s, 3: Match Duration
-  var maskingLevel by remember { mutableStateOf(MaskingLevel.OFF) }
-  var recordRecitation by remember { mutableStateOf(false) }
-  var enableBridge by remember { mutableStateOf(true) }
+  var endAyahNum by remember { mutableIntStateOf(initialEndAyah.ayah.coerceIn(initialStartAyah.ayah, maxAyahsForSura)) }
+  var windowSize by remember { mutableIntStateOf(defaultSettings.windowSize) }
+  var singleRepeat by remember { mutableIntStateOf(defaultSettings.singleRepeat) }
+  var connectRepeat by remember { mutableIntStateOf(defaultSettings.connectRepeat) }
+  val initialDelayOption = when (val dm = defaultSettings.delayMode) {
+    is MemorizationDelayMode.FixedSeconds -> if (dm.seconds == 5) 2 else 1
+    is MemorizationDelayMode.MatchAyahDuration -> 3
+    else -> 0
+  }
+  var selectedDelayOption by remember { mutableIntStateOf(initialDelayOption) }
+  var maskingLevel by remember { mutableStateOf(defaultSettings.maskingLevel) }
+  var recordRecitation by remember { mutableStateOf(defaultSettings.recordRecitation) }
+  var enableBridge by remember { mutableStateOf(defaultSettings.enableBridge) }
 
   ModalBottomSheet(
     onDismissRequest = onDismissRequest,
@@ -99,7 +110,8 @@ fun MemorizationSetupSheet(
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
 
-      if (savedSessionConfig != null && onResumeSession != null) {
+      val currentSaved = activeSavedSessionConfig
+      if (currentSaved != null && onResumeSession != null) {
         Spacer(modifier = Modifier.height(12.dp))
         Card(
           modifier = Modifier.fillMaxWidth(),
@@ -107,34 +119,65 @@ fun MemorizationSetupSheet(
             containerColor = MaterialTheme.colorScheme.primaryContainer
           )
         ) {
-          Row(
+          Column(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+              .padding(14.dp)
           ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = "Resume Last Session",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-              )
-              Text(
-                text = "Surah ${savedSessionConfig.startAyah.sura}:${savedSessionConfig.startAyah.ayah}–${savedSessionConfig.endAyah.ayah} • Step ${savedSessionStep + 1}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-              )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-              onClick = onResumeSession,
-              colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
-              )
+            Text(
+              text = "Previous Progress",
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+              text = "Surah ${currentSaved.startAyah.sura}:${currentSaved.startAyah.ayah}–${currentSaved.endAyah.ayah} • Step ${activeSavedSessionStep + 1}",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.End,
+              verticalAlignment = Alignment.CenterVertically
             ) {
-              Text("Resume")
+              if (onResetSurah != null) {
+                OutlinedButton(
+                  onClick = {
+                    onResetSurah.invoke()
+                    activeSavedSessionConfig = null
+                    startAyahNum = 1
+                    endAyahNum = maxAyahsForSura
+                    windowSize = defaultSettings.windowSize
+                    singleRepeat = defaultSettings.singleRepeat
+                    connectRepeat = defaultSettings.connectRepeat
+                    selectedDelayOption = initialDelayOption
+                    maskingLevel = defaultSettings.maskingLevel
+                    recordRecitation = defaultSettings.recordRecitation
+                    enableBridge = defaultSettings.enableBridge
+                  },
+                  colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                  ),
+                  border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                  )
+                ) {
+                  Text("Reset Surah")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+              }
+
+              Button(
+                onClick = onResumeSession,
+                colors = ButtonDefaults.buttonColors(
+                  containerColor = MaterialTheme.colorScheme.primary
+                )
+              ) {
+                Text("Continue")
+              }
             }
           }
         }

@@ -135,6 +135,55 @@ class MemorizationPreferencesTest {
     assertThat(memorizationPreferences.getMasteredRanges()).isEmpty()
   }
 
+  @Test
+  fun `per-surah session is persisted and can be cleared independently`() {
+    val configBaqarah = MemorizationConfig(
+      startAyah = SuraAyah(2, 1),
+      endAyah = SuraAyah(2, 286),
+      windowSize = 7,
+      singleRepeat = 3,
+      connectRepeat = 2
+    )
+
+    memorizationPreferences.saveSession(configBaqarah, currentStepIndex = 12, currentRepeatIteration = 2)
+
+    assertThat(memorizationPreferences.hasSavedSessionForSura(2)).isTrue()
+    val suraSession = memorizationPreferences.getSavedSessionForSura(2)
+    assertThat(suraSession).isNotNull()
+    assertThat(suraSession?.stepIndex).isEqualTo(12)
+    assertThat(suraSession?.config?.startAyah).isEqualTo(SuraAyah(2, 1))
+    assertThat(suraSession?.config?.endAyah).isEqualTo(SuraAyah(2, 286))
+    assertThat(suraSession?.config?.windowSize).isEqualTo(7)
+
+    // Another surah shouldn't have active session
+    assertThat(memorizationPreferences.hasSavedSessionForSura(3)).isFalse()
+
+    // Clear surah 2
+    memorizationPreferences.clearSessionForSura(2)
+    assertThat(memorizationPreferences.hasSavedSessionForSura(2)).isFalse()
+  }
+
+  @Test
+  fun `last used settings defaults to window 7 repeat 3 connect 2 when empty and persists changes`() {
+    // Initial defaults
+    val initialDefaults = memorizationPreferences.getLastUsedSettings()
+    assertThat(initialDefaults.windowSize).isEqualTo(7)
+    assertThat(initialDefaults.singleRepeat).isEqualTo(3)
+    assertThat(initialDefaults.connectRepeat).isEqualTo(2)
+
+    // Save custom settings
+    memorizationPreferences.saveLastUsedSettings(
+      windowSize = 5,
+      singleRepeat = 4,
+      connectRepeat = 3
+    )
+
+    val updatedDefaults = memorizationPreferences.getLastUsedSettings()
+    assertThat(updatedDefaults.windowSize).isEqualTo(5)
+    assertThat(updatedDefaults.singleRepeat).isEqualTo(4)
+    assertThat(updatedDefaults.connectRepeat).isEqualTo(3)
+  }
+
   /**
    * Lightweight in-memory implementation of [SharedPreferences] for unit tests.
    */
