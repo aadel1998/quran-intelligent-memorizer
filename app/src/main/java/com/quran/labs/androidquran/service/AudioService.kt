@@ -474,8 +474,10 @@ class AudioService : Service(), Player.Listener {
         player?.stop()
         state = State.Stopped
         Timber.d("stop if playing...")
+        processPlayRequest()
+      } else {
+        processTogglePlaybackRequest()
       }
-      processTogglePlaybackRequest()
     } else if (ACTION_PLAY == action) {
       processPlayRequest()
     } else if (ACTION_PAUSE == action) {
@@ -704,17 +706,20 @@ class AudioService : Service(), Player.Listener {
   private fun processTogglePlaybackRequest() {
     val memState = memorizationEngine.state.value
     if (memState.isActive) {
-      if (memState.isPaused) {
-        processPlayRequest()
-      } else {
-        processPauseRequest()
+      val currentStep = memState.currentStep
+      if (currentStep?.stepType == StepType.PAUSE_FOR_RECITATION) {
+        if (memState.isPaused) {
+          processPlayRequest()
+        } else {
+          processPauseRequest()
+        }
+        return
       }
-      return
     }
-    if (State.Paused == state || State.Stopped == state) {
-      processPlayRequest()
-    } else {
+    if (State.Playing == state) {
       processPauseRequest()
+    } else {
+      processPlayRequest()
     }
   }
 
@@ -759,6 +764,8 @@ class AudioService : Service(), Player.Listener {
         memorizationEngine.setRecordingRecitation(false)
       }
       memorizationEngine.pause()
+      updateAudioPlaybackStatus()
+      updateNotification()
     }
     if (State.Playing == state || State.Paused == state) {
       // Pause exo player and cancel the 'foreground service' state.
@@ -771,7 +778,7 @@ class AudioService : Service(), Player.Listener {
       relaxResources(releaseExoPlayer = false, stopForeground = false)
       pauseNotification()
       updateAudioPlaybackStatus()
-    } else if (State.Stopped == state) {
+    } else if (State.Stopped == state && !memorizationEngine.state.value.isActive) {
       // if we get a pause while we're already stopped, it means we likely woke up because
       // of AudioIntentReceiver, so just stop in this case.
       setState(PlaybackStateCompat.STATE_STOPPED)
@@ -1687,6 +1694,9 @@ class AudioService : Service(), Player.Listener {
   }
 
   override fun onDestroy() {
+    if (::scope.isInitialized) {
+      scope.cancel()
+    }
     compositeDisposable.clear()
     // Service is being killed, so make sure we release our resources
     serviceHandler.removeCallbacksAndMessages(null)
@@ -1698,7 +1708,6 @@ class AudioService : Service(), Player.Listener {
     recitationRecorder?.cancelRecording()
     recitationRecorder?.stopPlayback()
     recitationRecorder = null
-    scope.cancel()
     super.onDestroy()
   }
 
