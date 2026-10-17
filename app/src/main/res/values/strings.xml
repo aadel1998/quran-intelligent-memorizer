@@ -162,6 +162,8 @@
   <string name="prefs_category_reading">Reading Preferences</string>
   <string name="prefs_category_translation">Translation Preferences</string>
   <string name="prefs_category_display_settings">Display Settings</string>
+  <string name="prefs_use_modern_ui_title">Modern UI Experience</string>
+  <string name="prefs_use_modern_ui_summary">Enable redesigned modern Material 3 interface and cards</string>
   <string name="prefs_use_arabic_title">Arabic mode (الوضع العربي)</string>
   <string name="prefs_use_arabic_summary_on">Use Arabic for application interface</string>
   <string name="prefs_new_background_title">New background</string>

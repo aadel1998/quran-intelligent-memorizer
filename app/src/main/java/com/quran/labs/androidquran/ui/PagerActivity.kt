@@ -1944,6 +1944,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     if (intent == null) return
     val playPlaylistId = intent.getStringExtra(EXTRA_PLAY_PLAYLIST_ID)
     val memorizePlaylistId = intent.getStringExtra(EXTRA_MEMORIZE_PLAYLIST_ID)
+    val resumeMemorizeSura = intent.getIntExtra(EXTRA_RESUME_MEMORIZATION_SURA, 0)
+    val startMemorizeSura = intent.getIntExtra(EXTRA_START_MEMORIZATION_SURA, 0)
 
     if (playPlaylistId != null) {
       intent.removeExtra(EXTRA_PLAY_PLAYLIST_ID)
@@ -1959,6 +1961,22 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       if (playlist != null) {
         viewPager.post {
           openMemorizationSetup(initialPlaylist = playlist)
+        }
+      }
+    } else if (resumeMemorizeSura in 1..114) {
+      intent.removeExtra(EXTRA_RESUME_MEMORIZATION_SURA)
+      viewPager.post {
+        val saved = memorizationPreferences.getSavedSessionForSura(resumeMemorizeSura)
+        if (saved != null) {
+          startMemorizationSession(saved.config, isResume = true)
+        }
+      }
+    } else if (startMemorizeSura in 1..114) {
+      intent.removeExtra(EXTRA_START_MEMORIZATION_SURA)
+      viewPager.post {
+        val saved = memorizationPreferences.getSavedSessionForSura(startMemorizeSura)
+        if (saved != null) {
+          startMemorizationSession(saved.config, isResume = false)
         }
       }
     }
@@ -2516,6 +2534,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     const val LAST_WAS_DUAL_PAGES: String = "wasDualPages"
     const val EXTRA_PLAY_PLAYLIST_ID: String = "playPlaylistId"
     const val EXTRA_MEMORIZE_PLAYLIST_ID: String = "memorizePlaylistId"
+    const val EXTRA_RESUME_MEMORIZATION_SURA: String = "resumeMemorizationSura"
+    const val EXTRA_START_MEMORIZATION_SURA: String = "startMemorizationSura"
 
     private const val DEFAULT_HIDE_AFTER_TIME: Long = 2000
 

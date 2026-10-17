@@ -99,6 +99,14 @@ public class QuranSettings {
     prefs.edit().putBoolean(Constants.PREF_OVERLAY_PAGE_INFO, shouldOverlay).apply();
   }
 
+  public boolean isModernUiEnabled() {
+    return prefs.getBoolean(Constants.PREF_USE_MODERN_UI, true);
+  }
+
+  public void setModernUiEnabled(boolean enabled) {
+    prefs.edit().putBoolean(Constants.PREF_USE_MODERN_UI, enabled).apply();
+  }
+
   public boolean shouldDisplayMarkerPopup() {
     return prefs.getBoolean(Constants.PREF_DISPLAY_MARKER_POPUP, true);
   }

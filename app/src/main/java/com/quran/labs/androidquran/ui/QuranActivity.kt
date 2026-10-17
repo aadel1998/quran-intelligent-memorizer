@@ -64,6 +64,34 @@ import com.quran.labs.androidquran.util.QuranSettings
 import com.quran.labs.androidquran.util.QuranUtils
 import com.quran.labs.androidquran.view.SlidingTabLayout
 import com.quran.mobile.di.ExtraScreenProvider
+import com.quran.labs.androidquran.data.QuranDisplayData
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationPreferences
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
+import com.quran.labs.androidquran.ui.modern.BookmarkItemModel
+import com.quran.labs.androidquran.ui.modern.JuzItemModel
+import com.quran.labs.androidquran.ui.modern.LastReadModel
+import com.quran.labs.androidquran.ui.modern.QuarterItemModel
+import com.quran.labs.androidquran.ui.modern.QuranModernHomeScreen
+import com.quran.labs.androidquran.ui.modern.ReadingBookmarkItemModel
+import com.quran.labs.androidquran.ui.modern.SuraItemModel
+import com.quran.labs.androidquran.ui.modern.TagItemModel
+import com.quran.data.dao.BookmarksDao
+import com.quran.data.dao.ReadingBookmarksDao
+import com.quran.data.model.bookmark.AyahReadingBookmark
+import com.quran.data.model.bookmark.EmptyReadingBookmark
+import com.quran.data.model.bookmark.PageReadingBookmark
+import com.quran.data.model.bookmark.ReadingBookmarkType
+import com.quran.labs.androidquran.model.translation.ArabicDatabaseUtils
+import com.quran.mobile.common.ui.core.R as UiCoreR
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import dev.zacsweers.metro.Inject
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Completable
@@ -143,7 +171,17 @@ class QuranActivity : AppCompatActivity(),
   lateinit var playlistRepository: PlaylistRepository
   @Inject
   lateinit var quranInfo: QuranInfo
+  @Inject
+  lateinit var quranDisplayData: QuranDisplayData
+  @Inject
+  lateinit var bookmarksDao: BookmarksDao
+  @Inject
+  lateinit var readingBookmarksDao: ReadingBookmarksDao
+  @Inject
+  lateinit var arabicDatabaseUtils: ArabicDatabaseUtils
 
+  private var isModernUi = true
+  private lateinit var memorizationPreferences: MemorizationPreferences
   private var jumpToPageOnResume: Int? = null
 
   public override fun onCreate(savedInstanceState: Bundle?) {
@@ -157,6 +195,276 @@ class QuranActivity : AppCompatActivity(),
       .generate()
       .inject(this)
 
+    memorizationPreferences = MemorizationPreferences(this)
+    isModernUi = settings.isModernUiEnabled
+
+    if (isModernUi) {
+      setupModernUi()
+    } else {
+      setupClassicUi(savedInstanceState)
+    }
+
+    val intent = intent
+    if (intent != null) {
+      if (ShortcutsActivity.ACTION_JUMP_TO_LATEST == intent.action) {
+        jumpToLastPage()
+      }
+    }
+    updateTranslationsListAsNeeded()
+    quranIndexEventLogger.logAnalytics()
+  }
+
+  private fun setupModernUi() {
+    val suraNames = resources.getStringArray(UiCoreR.array.sura_names)
+    val arabicSuraNames = resources.getStringArray(UiCoreR.array.sura_names_arabic)
+    val wantPrefix = resources.getBoolean(R.bool.show_surat_prefix)
+    val wantTranslation = settings.isShowSuraTranslatedName
+
+    setContent {
+      QuranTheme {
+        val recentPage by latestPageFlow.collectAsState(initial = Constants.NO_PAGE)
+        val lastReadModel = remember(recentPage) {
+          if (recentPage != Constants.NO_PAGE) {
+            val recentSura = quranDisplayData.safelyGetSuraOnPage(recentPage)
+            LastReadModel(
+              page = recentPage,
+              suraNumber = recentSura,
+              suraName = quranDisplayData.getSuraName(this@QuranActivity, recentSura, true, false),
+              arabicName = arabicSuraNames.getOrElse(recentSura - 1) { "" },
+              juzNumber = quranInfo.getJuzFromPage(recentPage)
+            )
+          } else null
+        }
+
+        var savedSessions by remember {
+          mutableStateOf(memorizationPreferences.getAllSavedSurahSessions())
+        }
+
+        val rawBookmarks by bookmarksDao.bookmarksFlow().collectAsState(initial = emptyList())
+        val rawReadingBookmarks by readingBookmarksDao.readingBookmarksFlow().collectAsState(initial = emptyList())
+        val rawTags by bookmarksDao.tagsFlow().collectAsState(initial = emptyList())
+
+        val readingRibbonsMap = remember(rawReadingBookmarks) {
+          val map = mutableMapOf<Int, MutableList<ReadingBookmarkType>>()
+          rawReadingBookmarks.forEach { rb ->
+            val sura = when (rb) {
+              is PageReadingBookmark -> quranDisplayData.safelyGetSuraOnPage(rb.page)
+              is AyahReadingBookmark -> rb.sura
+              is EmptyReadingBookmark -> null
+            }
+            if (sura != null) {
+              map.getOrPut(sura) { mutableListOf() }.add(rb.slot)
+            }
+          }
+          map
+        }
+
+        val surahs = remember(savedSessions, readingRibbonsMap) {
+          val savedMap = savedSessions.associateBy { it.sura }
+          (1..Constants.SURAS_COUNT).map { sura ->
+            SuraItemModel(
+              number = sura,
+              englishName = quranDisplayData.getSuraName(this@QuranActivity, sura, wantPrefix, wantTranslation),
+              arabicName = arabicSuraNames.getOrElse(sura - 1) { "" },
+              isMakki = quranInfo.isMakki(sura),
+              numberOfAyahs = quranInfo.getNumberOfAyahs(sura),
+              startPage = quranInfo.getPageNumberForSura(sura),
+              juzNumber = quranInfo.getJuzFromPage(quranInfo.getPageNumberForSura(sura)),
+              savedSession = savedMap[sura],
+              readingRibbons = readingRibbonsMap[sura] ?: emptyList()
+            )
+          }
+        }
+
+        val juzs = remember {
+          (1..Constants.JUZ2_COUNT).map { juz ->
+            val startPage = quranInfo.getStartingPageForJuz(juz)
+            val startSura = quranDisplayData.safelyGetSuraOnPage(startPage)
+            val quarters = (0..7).map { qIndex ->
+              val globalIndex = (juz - 1) * 8 + qIndex
+              val quarterAyah = quranInfo.quarters[globalIndex]
+              val page = quranInfo.getPageFromSuraAyah(quarterAyah.sura, quarterAyah.ayah)
+              val sName = quranDisplayData.getSuraName(this@QuranActivity, quarterAyah.sura, wantPrefix, wantTranslation)
+              QuarterItemModel(
+                index = qIndex,
+                hizb = ((juz - 1) * 2) + (qIndex / 4) + 1,
+                rub = (qIndex % 4) + 1,
+                sura = quarterAyah.sura,
+                ayah = quarterAyah.ayah,
+                suraName = sName,
+                page = page
+              )
+            }
+            JuzItemModel(
+              number = juz,
+              startingPage = startPage,
+              startingSuraNumber = startSura,
+              startingSuraName = quranDisplayData.getSuraName(this@QuranActivity, startSura, wantPrefix, wantTranslation),
+              startingArabicName = arabicSuraNames.getOrElse(startSura - 1) { "" },
+              quarters = quarters
+            )
+          }
+        }
+
+        val tagModels = remember(rawTags) {
+          rawTags.map { TagItemModel(it.id, it.name) }
+        }
+
+        val readingBookmarkModels = remember(rawReadingBookmarks) {
+          rawReadingBookmarks.mapNotNull { rb ->
+            when (rb) {
+              is PageReadingBookmark -> {
+                val sura = quranDisplayData.safelyGetSuraOnPage(rb.page)
+                ReadingBookmarkItemModel(
+                  slot = rb.slot,
+                  page = rb.page,
+                  sura = sura,
+                  ayah = null,
+                  suraName = quranDisplayData.getSuraName(this@QuranActivity, sura, wantPrefix, wantTranslation),
+                  name = rb.name,
+                  timestamp = rb.timestamp.toEpochMilliseconds()
+                )
+              }
+              is AyahReadingBookmark -> {
+                val page = quranInfo.getPageFromSuraAyah(rb.sura, rb.ayah)
+                ReadingBookmarkItemModel(
+                  slot = rb.slot,
+                  page = page,
+                  sura = rb.sura,
+                  ayah = rb.ayah,
+                  suraName = quranDisplayData.getSuraName(this@QuranActivity, rb.sura, wantPrefix, wantTranslation),
+                  name = rb.name,
+                  timestamp = rb.timestamp.toEpochMilliseconds()
+                )
+              }
+              is EmptyReadingBookmark -> null
+            }
+          }
+        }
+
+        val bookmarkModels by produceState<List<BookmarkItemModel>>(initialValue = emptyList(), rawBookmarks, rawTags) {
+          value = withContext(Dispatchers.IO) {
+            val hydrated = arabicDatabaseUtils.hydrateAyahText(rawBookmarks.toMutableList())
+            val tagMap = rawTags.associate { it.id to it.name }
+            hydrated.map { b ->
+              val sura = b.sura
+              val ayah = b.ayah
+              val suraName = if (sura != null) {
+                quranDisplayData.getSuraName(this@QuranActivity, sura, wantPrefix, wantTranslation)
+              } else {
+                val s = quranDisplayData.safelyGetSuraOnPage(b.page)
+                quranDisplayData.getSuraName(this@QuranActivity, s, wantPrefix, wantTranslation)
+              }
+              val arabicSuraName = if (sura != null) {
+                arabicSuraNames.getOrElse(sura - 1) { "" }
+              } else {
+                val s = quranDisplayData.safelyGetSuraOnPage(b.page)
+                arabicSuraNames.getOrElse(s - 1) { "" }
+              }
+              BookmarkItemModel(
+                id = b.id,
+                sura = sura,
+                ayah = ayah,
+                page = b.page,
+                suraName = suraName,
+                arabicSuraName = arabicSuraName,
+                ayahText = b.ayahText,
+                timestamp = b.timestamp,
+                isPageBookmark = b.isPageBookmark(),
+                tags = b.tags.mapNotNull { tagId -> tagMap[tagId]?.let { name -> TagItemModel(tagId, name) } }
+              )
+            }
+          }
+        }
+
+        QuranModernHomeScreen(
+          surahs = surahs,
+          juzs = juzs,
+          bookmarks = bookmarkModels,
+          readingBookmarks = readingBookmarkModels,
+          tags = tagModels,
+          savedSessions = savedSessions,
+          lastRead = lastReadModel,
+          onOpenSurah = { sura, page ->
+            jumpTo(QuranRow.Builder().withPage(page).withSura(sura).build())
+          },
+          onOpenJuz = { _, page ->
+            jumpTo(page)
+          },
+          onOpenQuarter = { page ->
+            jumpTo(page)
+          },
+          onOpenBookmark = { bm ->
+            if (bm.isPageBookmark || bm.sura == null || bm.ayah == null) {
+              jumpTo(bm.page)
+            } else {
+              jumpToAndHighlight(bm.page, bm.sura, bm.ayah)
+            }
+          },
+          onOpenReadingBookmark = { rb ->
+            val location = if (rb.ayah != null && rb.sura != null) {
+              SuraAyah(rb.sura, rb.ayah)
+            } else {
+              Page(rb.page)
+            }
+            quranNavigator.jumpTo(location, rb.slot, settings.wasShowingTranslation)
+          },
+          onDeleteBookmark = { bm ->
+            lifecycleScope.launch(Dispatchers.IO) {
+              val toRemove = rawBookmarks.find { it.id == bm.id }
+              if (toRemove != null) {
+                bookmarksDao.removeBookmarks(listOf(toRemove))
+              }
+            }
+          },
+          onClearReadingBookmark = { slot ->
+            lifecycleScope.launch(Dispatchers.IO) {
+              readingBookmarksDao.clearReadingBookmark(slot)
+            }
+          },
+          onOpenLastRead = { page ->
+            jumpTo(page)
+          },
+          onResumeMemorization = { session ->
+            resumeMemorization(session.sura)
+          },
+          onStartFromBeginningMemorization = { session ->
+            startMemorizationFromBeginning(session.sura)
+          },
+          onOpenSearch = {
+            startActivity(Intent(this@QuranActivity, SearchActivity::class.java))
+          },
+          onOpenJump = {
+            gotoPageDialog()
+          },
+          onOpenPlaylists = {
+            showPlaylistsSheet()
+          },
+          onOpenSettings = {
+            startActivity(Intent(this@QuranActivity, QuranPreferenceActivity::class.java))
+          }
+        )
+      }
+    }
+  }
+
+  private fun resumeMemorization(sura: Int) {
+    val intent = Intent(this, PagerActivity::class.java).apply {
+      putExtra("page", quranInfo.getPageNumberForSura(sura))
+      putExtra(PagerActivity.EXTRA_RESUME_MEMORIZATION_SURA, sura)
+    }
+    startActivity(intent)
+  }
+
+  private fun startMemorizationFromBeginning(sura: Int) {
+    val intent = Intent(this, PagerActivity::class.java).apply {
+      putExtra("page", quranInfo.getPageNumberForSura(sura))
+      putExtra(PagerActivity.EXTRA_START_MEMORIZATION_SURA, sura)
+    }
+    startActivity(intent)
+  }
+
+  private fun setupClassicUi(savedInstanceState: Bundle?) {
     registerBackPressedCallbacks()
     setContentView(R.layout.quran_index)
     isRtl = isRtl()
@@ -171,10 +479,6 @@ class QuranActivity : AppCompatActivity(),
         leftMargin = insets.left
         rightMargin = insets.right
       }
-
-      // if we return WindowInsetsCompat.CONSUMED, the SnackBar won't
-      // be properly positioned on Android 29 and below (will be under
-      // the navigation bar).
       windowInsets
     }
 
@@ -201,36 +505,35 @@ class QuranActivity : AppCompatActivity(),
       )
     }
 
-    val intent = intent
-    if (intent != null) {
-      val extras = intent.extras
-      if (extras != null) {
-        if (extras.getBoolean(EXTRA_SHOW_TRANSLATION_UPGRADE, false)) {
-          if (!showedTranslationUpgradeDialog) {
-            showTranslationsUpgradeDialog()
-          }
-        }
-      }
-      if (ShortcutsActivity.ACTION_JUMP_TO_LATEST == intent.action) {
-        jumpToLastPage()
+    val extras = intent?.extras
+    if (extras != null && extras.getBoolean(EXTRA_SHOW_TRANSLATION_UPGRADE, false)) {
+      if (!showedTranslationUpgradeDialog) {
+        showTranslationsUpgradeDialog()
       }
     }
-    updateTranslationsListAsNeeded()
-    quranIndexEventLogger.logAnalytics()
   }
 
   public override fun onResume() {
     super.onResume()
+    if (isModernUi != settings.isModernUiEnabled) {
+      val i = intent
+      finish()
+      startActivity(i)
+      return
+    }
+
     val isRtl = isRtl()
     if (isRtl != this.isRtl) {
       val i = intent
       finish()
       startActivity(i)
     } else {
-      val pageToJumpTo = jumpToPageOnResume
-      if (pageToJumpTo != null) {
-        findViewById<ViewPager>(R.id.index_pager).currentItem = pageToJumpTo
-        jumpToPageOnResume = null
+      if (!isModernUi) {
+        val pageToJumpTo = jumpToPageOnResume
+        if (pageToJumpTo != null) {
+          findViewById<ViewPager>(R.id.index_pager)?.currentItem = pageToJumpTo
+          jumpToPageOnResume = null
+        }
       }
 
       compositeDisposable.add(

@@ -68,7 +68,7 @@
     <activity
         android:name=".ui.QuranActivity"
         android:theme="@style/QuranToolBarDayNight"
-        android:exported="false"/>
+        android:exported="true"/>
     <activity
         android:name=".AboutUsActivity"
         android:theme="@style/QuranToolBarDayNight"
@@ -82,7 +82,7 @@
         android:theme="@style/QuranToolBar.Overlay"
         android:supportsPictureInPicture="true"
         android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
-        android:exported="false"/>
+        android:exported="true"/>
     <activity
         android:name=".ui.TranslationManagerActivity"
         android:theme="@style/QuranToolBarDayNight"
