@@ -392,7 +392,8 @@ class AudioService : Service(), Player.Listener {
       if (updatedAudioRequest != null) {
         audioRequest = updatedAudioRequest
         val start = updatedAudioRequest.start
-        val basmallah = !updatedAudioRequest.isGapless() && start.requiresBasmallah()
+        val basmallah = !memorizationEngine.state.value.isActive &&
+            !updatedAudioRequest.isGapless() && start.requiresBasmallah()
         audioQueue = AudioQueue(
           quranInfo, updatedAudioRequest,
           AudioPlaybackInfo(start, 1, 1, basmallah)
@@ -448,7 +449,7 @@ class AudioService : Service(), Player.Listener {
     if (gaplessSura == localAudioQueue.getCurrentSura()) {
       val ayah = localAudioQueue.getCurrentAyah()
       val time = gaplessSuraData.ayahTimings[ayah]
-      return if (ayah == 1 && !isRepeating) {
+      return if (ayah == 1 && !isRepeating && !memorizationEngine.state.value.isActive) {
         gaplessSuraData.ayahTimings[0]
       } else time
     }
@@ -984,7 +985,7 @@ class AudioService : Service(), Player.Listener {
         }
       }
       var overrideResource = 0
-      if (playRepeatSeparator) {
+      if (playRepeatSeparator && !memorizationEngine.state.value.isActive) {
         val sura = localAudioQueue.getCurrentSura()
         val ayah = localAudioQueue.getCurrentAyah()
         if (sura != 9 && ayah > 1) {
@@ -1176,6 +1177,14 @@ class AudioService : Service(), Player.Listener {
       val localAudioQueue = audioQueue ?: return
       val localAudioRequest = audioRequest ?: return
 
+      // If the file that just completed was the Basmallah (for a gapped reciter),
+      // clear the flag and play the actual verse. Do not notify memorizationEngine!
+      if (localAudioQueue.isCurrentBasmallah()) {
+        localAudioQueue.clearBasmallah()
+        playAudio(false)
+        return
+      }
+
       if (memorizationEngine.state.value.isActive) {
         val currentAyah = SuraAyah(localAudioQueue.getCurrentSura(), localAudioQueue.getCurrentAyah())
         val nextAyah = memorizationEngine.onAyahPlaybackCompleted(currentAyah)
@@ -1283,7 +1292,7 @@ class AudioService : Service(), Player.Listener {
     memorizationEngine.updatePauseRemaining(0)
     val localAudioRequest = audioRequest ?: return
     val beforeSura = localAudioQueue.getCurrentSura()
-    localAudioQueue.playAt(nextAyah.sura, nextAyah.ayah, true)
+    localAudioQueue.playAt(nextAyah.sura, nextAyah.ayah, skipAyahRepeat = true, allowBasmallah = false)
 
     if (localAudioRequest.isGapless() && gaplessSura == nextAyah.sura && beforeSura == nextAyah.sura) {
       val timing = gaplessSuraData.ayahTimings.get(nextAyah.ayah, -1L)

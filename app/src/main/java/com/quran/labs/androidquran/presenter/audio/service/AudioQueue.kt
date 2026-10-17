@@ -21,7 +21,7 @@ class AudioQueue(private val quranInfo: QuranInfo,
                  initialPlaybackInfo: AudioPlaybackInfo = AudioPlaybackInfo(audioRequest.start)) {
   private var playbackInfo: AudioPlaybackInfo = initialPlaybackInfo
 
-  fun playAt(sura: Int, ayah: Int, skipAyahRepeat: Boolean = false): Boolean {
+  fun playAt(sura: Int, ayah: Int, skipAyahRepeat: Boolean = false, allowBasmallah: Boolean = true): Boolean {
     val updatedPlaybackInfo =
         if (!skipAyahRepeat && shouldRepeat(audioRequest.repeatInfo, playbackInfo.timesPlayed)) {
           playbackInfo.copy(timesPlayed = playbackInfo.timesPlayed + 1, shouldPlayBasmallah = false)
@@ -32,14 +32,14 @@ class AudioQueue(private val quranInfo: QuranInfo,
               playbackInfo.copy(currentAyah = start,
                   timesPlayed = 1,
                   rangePlayedTimes = playbackInfo.rangePlayedTimes + 1,
-                  shouldPlayBasmallah = (!audioRequest.isGapless() && start.requiresBasmallah()))
+                  shouldPlayBasmallah = (allowBasmallah && !audioRequest.isGapless() && start.requiresBasmallah()))
             } else {
               playbackInfo
             }
           } else {
             val currentAyah = playbackInfo.currentAyah
             val updatedAyah = SuraAyah(sura, ayah)
-            val playBasmallahFlag = (!audioRequest.isGapless() &&
+            val playBasmallahFlag = (allowBasmallah && !audioRequest.isGapless() &&
                 currentAyah != updatedAyah &&
                 updatedAyah.requiresBasmallah())
             playbackInfo.copy(currentAyah = SuraAyah(
@@ -57,6 +57,14 @@ class AudioQueue(private val quranInfo: QuranInfo,
   fun getCurrentSura() = playbackInfo.currentAyah.sura
   fun getCurrentAyah() = playbackInfo.currentAyah.ayah
   fun getCurrentPlaybackAyah() = playbackInfo.currentAyah
+
+  fun isCurrentBasmallah(): Boolean = playbackInfo.shouldPlayBasmallah
+
+  fun clearBasmallah() {
+    if (playbackInfo.shouldPlayBasmallah) {
+      playbackInfo = playbackInfo.copy(shouldPlayBasmallah = false)
+    }
+  }
 
   fun playNextAyah(skipAyahRepeat: Boolean = false): Boolean {
     if (playbackInfo.shouldPlayBasmallah) {

@@ -59,7 +59,50 @@ class AudioQueueTest {
     assertThat(queue.getUrl()).isEqualTo("https://example.com/audio/1/1.opus")
   }
 
-  private fun audioRequest(urlFormat: String, allowedExtensions: List<String>): AudioRequest {
+  @Test
+  fun testPlayAtWithAllowBasmallahFalsePreventsBasmallah() {
+    val format = "https://example.com/audio/%d/%d.opus"
+    val req = audioRequest(format, listOf("opus", "mp3"), start = SuraAyah(2, 1), end = SuraAyah(2, 5))
+    val queue = AudioQueue(quranInfo, req)
+
+    // Simulate moving to ayah 2
+    queue.playAt(2, 2, skipAyahRepeat = true)
+    assertThat(queue.isCurrentBasmallah()).isFalse()
+
+    // Loop back to ayah 1 with allowBasmallah = false (memorization mode)
+    queue.playAt(2, 1, skipAyahRepeat = true, allowBasmallah = false)
+    assertThat(queue.isCurrentBasmallah()).isFalse()
+    // Should directly return 2:1 url, not 1:1 Basmallah
+    assertThat(queue.getUrl()).isEqualTo("https://example.com/audio/2/1.opus")
+  }
+
+  @Test
+  fun testPlayAtWithAllowBasmallahTrueTriggersBasmallahForNonGapless() {
+    val format = "https://example.com/audio/%d/%d.opus"
+    val req = audioRequest(format, listOf("opus", "mp3"), start = SuraAyah(2, 1), end = SuraAyah(2, 5))
+    val queue = AudioQueue(quranInfo, req)
+
+    // Move to ayah 2
+    queue.playAt(2, 2, skipAyahRepeat = true)
+
+    // Jump back to ayah 1 with allowBasmallah = true (normal mode)
+    queue.playAt(2, 1, skipAyahRepeat = true, allowBasmallah = true)
+    assertThat(queue.isCurrentBasmallah()).isTrue()
+    // Should return 1:1 Basmallah
+    assertThat(queue.getUrl()).isEqualTo("https://example.com/audio/1/1.opus")
+
+    // Clear basmallah
+    queue.clearBasmallah()
+    assertThat(queue.isCurrentBasmallah()).isFalse()
+    assertThat(queue.getUrl()).isEqualTo("https://example.com/audio/2/1.opus")
+  }
+
+  private fun audioRequest(
+    urlFormat: String,
+    allowedExtensions: List<String>,
+    start: SuraAyah = SuraAyah(1, 1),
+    end: SuraAyah = SuraAyah(1, 7)
+  ): AudioRequest {
     val qariItem = QariItem(
       id = 1,
       name = "Test Qari",
@@ -70,8 +113,8 @@ class AudioQueueTest {
     )
 
     return AudioRequest(
-      start = SuraAyah(1, 1),
-      end = SuraAyah(1, 7),
+      start = start,
+      end = end,
       qari = qariItem,
       enforceBounds = true,
       shouldStream = false,

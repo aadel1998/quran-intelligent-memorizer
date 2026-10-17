@@ -17,6 +17,23 @@ class MemorizationPlanBuilderTest {
   }
 
   @Test
+  fun `simulate 1 to 24 memorization flow and print trace`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(2, 1),
+      endAyah = SuraAyah(2, 24),
+      windowSize = 4,
+      singleRepeat = 3,
+      connectRepeat = 2,
+      delayMode = MemorizationDelayMode.None
+    )
+    val plan = MemorizationPlanBuilder.buildPlan(config, quranInfo)
+    println("=== TOTAL STEPS: ${plan.size} ===")
+    plan.forEach { step ->
+      println("Step ${step.stepIndex} [Window ${step.windowIndex + 1}/${step.totalWindows}]: ${step.stepType} -> ${step.ayahs.map { "${it.sura}:${it.ayah}" }} (repeat ${step.targetRepeatCount}x)")
+    }
+  }
+
+  @Test
   fun `getAyahsInRange returns exact sequence within single sura`() {
     val start = SuraAyah(1, 1)
     val end = SuraAyah(1, 7)
