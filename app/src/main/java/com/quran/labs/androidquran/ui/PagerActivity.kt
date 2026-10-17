@@ -56,6 +56,7 @@ import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.mobile.common.ui.core.R as UiCoreR
 import com.quran.labs.androidquran.ui.modern.ModernAudioSettingsSheet
 import com.quran.labs.androidquran.ui.modern.ModernAyahActionSheet
+import com.quran.labs.androidquran.ui.modern.ModernJumpSheet
 import com.quran.labs.androidquran.ui.modern.ModernPageScrubber
 import com.quran.labs.androidquran.ui.modern.ModernReaderTopBar
 import com.quran.labs.androidquran.ui.modern.ModernTranslationPickerSheet
@@ -311,6 +312,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   private var ayahActionSheetState by mutableStateOf(ModernAyahActionSheetState())
   private var isTranslationPickerVisible by mutableStateOf(false)
   private var isAudioSettingsVisible by mutableStateOf(false)
+  private var isJumpSheetVisible by mutableStateOf(false)
   private var audioSettingsStartSura by mutableIntStateOf(1)
   private var audioSettingsStartAyah by mutableIntStateOf(1)
   private var audioSettingsEndSura by mutableIntStateOf(1)
@@ -766,6 +768,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       override fun handleOnBackPressed() {
         isTranslationPickerVisible = false
         isAudioSettingsVisible = false
+        isJumpSheetVisible = false
         modernModalLayer?.visibility = View.GONE
         isEnabled = false
       }
@@ -1384,9 +1387,13 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       finish()
       return true
     } else if (itemId == R.id.jump) {
-      val fm = supportFragmentManager
-      val jumpDialog = JumpFragment()
-      jumpDialog.show(fm, JumpFragment.TAG)
+      if (quranSettings.isModernUiEnabled) {
+        showModernJump()
+      } else {
+        val fm = supportFragmentManager
+        val jumpDialog = JumpFragment()
+        jumpDialog.show(fm, JumpFragment.TAG)
+      }
       return true
     }
     return super.onOptionsItemSelected(item)
@@ -2691,9 +2698,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
             updateModernReaderUi(currentPage)
           },
           onJumpClick = {
-            val fm = supportFragmentManager
-            val jumpDialog = JumpFragment()
-            jumpDialog.show(fm, JumpFragment.TAG)
+            showModernJump()
           },
           onSettingsClick = {
             startActivity(Intent(this@PagerActivity, QuranPreferenceActivity::class.java))
@@ -2713,9 +2718,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
             viewPager.currentItem = position
           },
           onJumpClick = {
-            val fm = supportFragmentManager
-            val jumpDialog = JumpFragment()
-            jumpDialog.show(fm, JumpFragment.TAG)
+            showModernJump()
           }
         )
       }
@@ -2840,8 +2843,45 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
           onDismiss = {
             isAudioSettingsVisible = false
             onDismissTranslationPickerBackCallback?.isEnabled = false
-            if (!isTranslationPickerVisible) modalLayer.visibility = View.GONE
+            if (!isTranslationPickerVisible && !isJumpSheetVisible) modalLayer.visibility = View.GONE
           }
+        )
+
+        ModernJumpSheet(
+          visible = isJumpSheetVisible,
+          currentPage = currentPage,
+          totalPages = quranInfo.numberOfPages,
+          suraNames = suraNames,
+          onJumpToPage = { targetPage ->
+            jumpTo(targetPage)
+            isJumpSheetVisible = false
+            onDismissTranslationPickerBackCallback?.isEnabled = false
+            if (!isTranslationPickerVisible && !isAudioSettingsVisible) {
+              modalLayer.visibility = View.GONE
+            }
+          },
+          onJumpToSuraAyah = { targetSura, targetAyah ->
+            val page = quranInfo.getPageFromSuraAyah(targetSura, targetAyah)
+            jumpToAndHighlight(page, targetSura, targetAyah)
+            isJumpSheetVisible = false
+            onDismissTranslationPickerBackCallback?.isEnabled = false
+            if (!isTranslationPickerVisible && !isAudioSettingsVisible) {
+              modalLayer.visibility = View.GONE
+            }
+          },
+          onDismiss = {
+            isJumpSheetVisible = false
+            onDismissTranslationPickerBackCallback?.isEnabled = false
+            if (!isTranslationPickerVisible && !isAudioSettingsVisible) {
+              modalLayer.visibility = View.GONE
+            }
+          },
+          getSuraForPage = { p -> quranInfo.getSuraNumberFromPage(p) },
+          getFirstAyahForPage = { p -> quranInfo.getFirstAyahOnPage(p) },
+          getPageForSuraAyah = { s, a -> quranInfo.getPageFromSuraAyah(s, a) },
+          getNumberOfAyahs = { s -> quranInfo.getNumberOfAyahs(s) },
+          getStartingPageForJuz = { j -> quranInfo.getStartingPageForJuz(j) },
+          getJuzForPage = { p -> quranInfo.getJuzFromPage(p) }
         )
       }
     }
@@ -2933,10 +2973,17 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
 
     isAudioSettingsVisible = false
     onDismissTranslationPickerBackCallback?.isEnabled = false
-    if (!isTranslationPickerVisible) {
+    if (!isTranslationPickerVisible && !isJumpSheetVisible) {
       modernModalLayer?.visibility = View.GONE
     }
     toggleActionBarVisibility(true)
+  }
+
+  private fun showModernJump() {
+    val modalLayer = modernModalLayer ?: return
+    modalLayer.visibility = View.VISIBLE
+    isJumpSheetVisible = true
+    onDismissTranslationPickerBackCallback?.isEnabled = true
   }
 
   private fun updateModernReaderUi(page: Int) {

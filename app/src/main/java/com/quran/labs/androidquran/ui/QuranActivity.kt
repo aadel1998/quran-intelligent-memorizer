@@ -70,6 +70,7 @@ import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.labs.androidquran.ui.modern.BookmarkItemModel
 import com.quran.labs.androidquran.ui.modern.JuzItemModel
 import com.quran.labs.androidquran.ui.modern.LastReadModel
+import com.quran.labs.androidquran.ui.modern.ModernJumpSheet
 import com.quran.labs.androidquran.ui.modern.QuarterItemModel
 import com.quran.labs.androidquran.ui.modern.QuranModernHomeScreen
 import com.quran.labs.androidquran.ui.modern.ReadingBookmarkItemModel
@@ -84,6 +85,9 @@ import com.quran.data.model.bookmark.ReadingBookmarkType
 import com.quran.labs.androidquran.model.translation.ArabicDatabaseUtils
 import com.quran.mobile.common.ui.core.R as UiCoreR
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -377,73 +381,105 @@ class QuranActivity : AppCompatActivity(),
           }
         }
 
-        QuranModernHomeScreen(
-          surahs = surahs,
-          juzs = juzs,
-          bookmarks = bookmarkModels,
-          readingBookmarks = readingBookmarkModels,
-          tags = tagModels,
-          savedSessions = savedSessions,
-          lastRead = lastReadModel,
-          onOpenSurah = { sura, page ->
-            jumpTo(QuranRow.Builder().withPage(page).withSura(sura).build())
-          },
-          onOpenJuz = { _, page ->
-            jumpTo(page)
-          },
-          onOpenQuarter = { page ->
-            jumpTo(page)
-          },
-          onOpenBookmark = { bm ->
-            if (bm.isPageBookmark || bm.sura == null || bm.ayah == null) {
-              jumpTo(bm.page)
-            } else {
-              jumpToAndHighlight(bm.page, bm.sura, bm.ayah)
-            }
-          },
-          onOpenReadingBookmark = { rb ->
-            val location = if (rb.ayah != null && rb.sura != null) {
-              SuraAyah(rb.sura, rb.ayah)
-            } else {
-              Page(rb.page)
-            }
-            quranNavigator.jumpTo(location, rb.slot, settings.wasShowingTranslation)
-          },
-          onDeleteBookmark = { bm ->
-            lifecycleScope.launch(Dispatchers.IO) {
-              val toRemove = rawBookmarks.find { it.id == bm.id }
-              if (toRemove != null) {
-                bookmarksDao.removeBookmarks(listOf(toRemove))
+        var isJumpSheetVisible by remember { mutableStateOf(false) }
+        val suraNames = remember {
+          resources.getStringArray(UiCoreR.array.sura_names).toList()
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+          QuranModernHomeScreen(
+            surahs = surahs,
+            juzs = juzs,
+            bookmarks = bookmarkModels,
+            readingBookmarks = readingBookmarkModels,
+            tags = tagModels,
+            savedSessions = savedSessions,
+            lastRead = lastReadModel,
+            onOpenSurah = { sura, page ->
+              jumpTo(QuranRow.Builder().withPage(page).withSura(sura).build())
+            },
+            onOpenJuz = { _, page ->
+              jumpTo(page)
+            },
+            onOpenQuarter = { page ->
+              jumpTo(page)
+            },
+            onOpenBookmark = { bm ->
+              if (bm.isPageBookmark || bm.sura == null || bm.ayah == null) {
+                jumpTo(bm.page)
+              } else {
+                jumpToAndHighlight(bm.page, bm.sura, bm.ayah)
               }
+            },
+            onOpenReadingBookmark = { rb ->
+              val location = if (rb.ayah != null && rb.sura != null) {
+                SuraAyah(rb.sura, rb.ayah)
+              } else {
+                Page(rb.page)
+              }
+              quranNavigator.jumpTo(location, rb.slot, settings.wasShowingTranslation)
+            },
+            onDeleteBookmark = { bm ->
+              lifecycleScope.launch(Dispatchers.IO) {
+                val toRemove = rawBookmarks.find { it.id == bm.id }
+                if (toRemove != null) {
+                  bookmarksDao.removeBookmarks(listOf(toRemove))
+                }
+              }
+            },
+            onClearReadingBookmark = { slot ->
+              lifecycleScope.launch(Dispatchers.IO) {
+                readingBookmarksDao.clearReadingBookmark(slot)
+              }
+            },
+            onOpenLastRead = { page ->
+              jumpTo(page)
+            },
+            onResumeMemorization = { session ->
+              resumeMemorization(session.sura)
+            },
+            onStartFromBeginningMemorization = { session ->
+              startMemorizationFromBeginning(session.sura)
+            },
+            onOpenSearch = {
+              startActivity(Intent(this@QuranActivity, SearchActivity::class.java))
+            },
+            onOpenJump = {
+              isJumpSheetVisible = true
+            },
+            onOpenPlaylists = {
+              showPlaylistsSheet()
+            },
+            onOpenSettings = {
+              startActivity(Intent(this@QuranActivity, QuranPreferenceActivity::class.java))
             }
-          },
-          onClearReadingBookmark = { slot ->
-            lifecycleScope.launch(Dispatchers.IO) {
-              readingBookmarksDao.clearReadingBookmark(slot)
-            }
-          },
-          onOpenLastRead = { page ->
-            jumpTo(page)
-          },
-          onResumeMemorization = { session ->
-            resumeMemorization(session.sura)
-          },
-          onStartFromBeginningMemorization = { session ->
-            startMemorizationFromBeginning(session.sura)
-          },
-          onOpenSearch = {
-            startActivity(Intent(this@QuranActivity, SearchActivity::class.java))
-          },
-          onOpenJump = {
-            gotoPageDialog()
-          },
-          onOpenPlaylists = {
-            showPlaylistsSheet()
-          },
-          onOpenSettings = {
-            startActivity(Intent(this@QuranActivity, QuranPreferenceActivity::class.java))
-          }
-        )
+          )
+
+          ModernJumpSheet(
+            visible = isJumpSheetVisible,
+            currentPage = lastReadModel?.page ?: 1,
+            totalPages = quranInfo.numberOfPages,
+            suraNames = suraNames,
+            onJumpToPage = { targetPage ->
+              isJumpSheetVisible = false
+              jumpTo(targetPage)
+            },
+            onJumpToSuraAyah = { targetSura, targetAyah ->
+              isJumpSheetVisible = false
+              val page = quranInfo.getPageFromSuraAyah(targetSura, targetAyah)
+              jumpToAndHighlight(page, targetSura, targetAyah)
+            },
+            onDismiss = {
+              isJumpSheetVisible = false
+            },
+            getSuraForPage = { p -> quranInfo.getSuraNumberFromPage(p) },
+            getFirstAyahForPage = { p -> quranInfo.getFirstAyahOnPage(p) },
+            getPageForSuraAyah = { s, a -> quranInfo.getPageFromSuraAyah(s, a) },
+            getNumberOfAyahs = { s -> quranInfo.getNumberOfAyahs(s) },
+            getStartingPageForJuz = { j -> quranInfo.getStartingPageForJuz(j) },
+            getJuzForPage = { p -> quranInfo.getJuzFromPage(p) }
+          )
+        }
       }
     }
   }
