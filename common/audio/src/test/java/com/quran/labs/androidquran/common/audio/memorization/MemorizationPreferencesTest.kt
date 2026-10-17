@@ -184,6 +184,28 @@ class MemorizationPreferencesTest {
     assertThat(updatedDefaults.connectRepeat).isEqualTo(3)
   }
 
+  @Test
+  fun `getAllSavedSurahSessions returns all active surah sessions sorted by last updated`() {
+    val configBaqarah = MemorizationConfig(startAyah = SuraAyah(2, 1), endAyah = SuraAyah(2, 286))
+    val configYasin = MemorizationConfig(startAyah = SuraAyah(36, 1), endAyah = SuraAyah(36, 83))
+
+    memorizationPreferences.saveSessionForSura(2, configBaqarah, currentStepIndex = 5, currentRepeatIteration = 1)
+    Thread.sleep(10)
+    memorizationPreferences.saveSessionForSura(36, configYasin, currentStepIndex = 2, currentRepeatIteration = 1)
+
+    val allSessions = memorizationPreferences.getAllSavedSurahSessions()
+    assertThat(allSessions).hasSize(2)
+    // Most recently updated (Surah 36) should be first
+    assertThat(allSessions[0].sura).isEqualTo(36)
+    assertThat(allSessions[1].sura).isEqualTo(2)
+
+    // Clear Surah 2
+    memorizationPreferences.clearSessionForSura(2)
+    val remainingSessions = memorizationPreferences.getAllSavedSurahSessions()
+    assertThat(remainingSessions).hasSize(1)
+    assertThat(remainingSessions[0].sura).isEqualTo(36)
+  }
+
   /**
    * Lightweight in-memory implementation of [SharedPreferences] for unit tests.
    */

@@ -16,7 +16,9 @@ data class SavedSuraSession(
   val stepIndex: Int,
   val repeatIteration: Int,
   val lastUpdated: Long = System.currentTimeMillis()
-)
+) {
+  val sura: Int get() = config.startAyah.sura
+}
 
 /**
  * Persisted default settings for memorization configuration.
@@ -301,6 +303,15 @@ class MemorizationPreferences(
 
   fun clearSessionForSura(sura: Int) {
     prefs.edit().putBoolean("sura_${sura}_$KEY_HAS_ACTIVE_SESSION", false).apply()
+  }
+
+  /**
+   * Returns all active saved Surah memorization sessions sorted by most recently updated.
+   */
+  fun getAllSavedSurahSessions(): List<SavedSuraSession> {
+    return (1..114).mapNotNull { sura ->
+      getSavedSessionForSura(sura)
+    }.sortedByDescending { it.lastUpdated }
   }
 
   fun saveLastUsedSettings(

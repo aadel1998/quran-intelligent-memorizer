@@ -11,6 +11,7 @@ import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDefaultSettings
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
+import com.quran.labs.androidquran.common.audio.memorization.SavedSuraSession
 import com.quran.labs.androidquran.common.ui.core.QuranTheme
 
 /**
@@ -26,8 +27,13 @@ class MemorizationSetupSheetWrapper(
   private val savedSessionConfig: MemorizationConfig? = null,
   savedSessionStep: Int = 0,
   private val onResume: (() -> Unit)? = null,
+  private val onStartFromBeginning: (() -> Unit)? = null,
   private val onResetSurah: (() -> Unit)? = null,
   private val defaultSettings: MemorizationDefaultSettings = MemorizationDefaultSettings(),
+  private val allSavedSurahs: List<SavedSuraSession> = emptyList(),
+  private val onResumeOtherSura: ((SavedSuraSession) -> Unit)? = null,
+  private val onStartOtherSura: ((SavedSuraSession) -> Unit)? = null,
+  private val onClearOtherSura: ((Int) -> Unit)? = null,
   private val masteredRanges: List<MasteredRange> = emptyList(),
   private val onReview: ((MasteredRange) -> Unit)? = null,
   private val savedPlaylists: List<CustomPlaylist> = emptyList(),
@@ -52,8 +58,22 @@ class MemorizationSetupSheetWrapper(
               onResume?.invoke()
               onDismissed()
             },
+            onStartFromBeginning = {
+              onStartFromBeginning?.invoke()
+              onDismissed()
+            },
             onResetSurah = onResetSurah,
             defaultSettings = defaultSettings,
+            allSavedSurahs = allSavedSurahs,
+            onResumeOtherSura = { s ->
+              onResumeOtherSura?.invoke(s)
+              onDismissed()
+            },
+            onStartOtherSura = { s ->
+              onStartOtherSura?.invoke(s)
+              onDismissed()
+            },
+            onClearOtherSura = onClearOtherSura,
             masteredRanges = masteredRanges,
             savedPlaylists = savedPlaylists,
             initialPlaylist = initialPlaylist,

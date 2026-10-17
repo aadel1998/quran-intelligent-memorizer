@@ -38,6 +38,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import com.quran.data.model.SuraAyah
 import com.quran.labs.androidquran.common.audio.memorization.CustomPlaylist
 import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
@@ -45,6 +49,9 @@ import com.quran.labs.androidquran.common.audio.memorization.MasteredRange
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDefaultSettings
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
+import com.quran.labs.androidquran.common.audio.memorization.SavedSuraSession
+import com.quran.labs.androidquran.common.ui.core.QuranIcons
+import com.quran.mobile.common.ui.core.R as UiCoreR
 
 /**
  * Bottom sheet modal dialog for configuring and launching an Intelligent Quran Memorization session.
@@ -59,8 +66,13 @@ fun MemorizationSetupSheet(
   savedSessionConfig: MemorizationConfig? = null,
   savedSessionStep: Int = 0,
   onResumeSession: (() -> Unit)? = null,
+  onStartFromBeginning: (() -> Unit)? = null,
   onResetSurah: (() -> Unit)? = null,
   defaultSettings: MemorizationDefaultSettings = MemorizationDefaultSettings(),
+  allSavedSurahs: List<SavedSuraSession> = emptyList(),
+  onResumeOtherSura: ((SavedSuraSession) -> Unit)? = null,
+  onStartOtherSura: ((SavedSuraSession) -> Unit)? = null,
+  onClearOtherSura: ((Int) -> Unit)? = null,
   masteredRanges: List<MasteredRange> = emptyList(),
   onReviewRange: ((MasteredRange) -> Unit)? = null,
   savedPlaylists: List<CustomPlaylist> = emptyList(),
@@ -68,6 +80,20 @@ fun MemorizationSetupSheet(
   maxAyahsForSura: Int = 286,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
+  val context = LocalContext.current
+  val suraNames = remember {
+    try {
+      context.resources.getStringArray(UiCoreR.array.sura_names)
+    } catch (e: Exception) {
+      emptyArray()
+    }
+  }
+
+  fun getSuraTitle(sura: Int): String {
+    val name = if (sura in 1..suraNames.size) suraNames[sura - 1] else "Surah $sura"
+    return "$sura. $name"
+  }
+
   var activeSavedSessionConfig by remember { mutableStateOf(savedSessionConfig) }
   var activeSavedSessionStep by remember { mutableIntStateOf(savedSessionStep) }
 
@@ -105,7 +131,7 @@ fun MemorizationSetupSheet(
       )
 
       Text(
-        text = "Surah ${initialStartAyah.sura} • Progressive Sliding Window Learning",
+        text = "${getSuraTitle(initialStartAyah.sura)} • Progressive Sliding Window Learning",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
@@ -124,26 +150,27 @@ fun MemorizationSetupSheet(
               .fillMaxWidth()
               .padding(14.dp)
           ) {
-            Text(
-              text = "Previous Progress",
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-              text = "Surah ${currentSaved.startAyah.sura}:${currentSaved.startAyah.ayah}–${currentSaved.endAyah.ayah} • Step ${activeSavedSessionStep + 1}",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
             Row(
               modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.End,
+              horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = "Previous Progress",
+                  style = MaterialTheme.typography.titleMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                  text = "${getSuraTitle(currentSaved.startAyah.sura)} (Ayah ${currentSaved.startAyah.ayah}–${currentSaved.endAyah.ayah}) • Step ${activeSavedSessionStep + 1}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                )
+              }
+
               if (onResetSurah != null) {
-                OutlinedButton(
+                IconButton(
                   onClick = {
                     onResetSurah.invoke()
                     activeSavedSessionConfig = null
@@ -156,27 +183,139 @@ fun MemorizationSetupSheet(
                     maskingLevel = defaultSettings.maskingLevel
                     recordRecitation = defaultSettings.recordRecitation
                     enableBridge = defaultSettings.enableBridge
-                  },
-                  colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                  ),
-                  border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
-                  )
+                  }
                 ) {
-                  Text("Reset Surah")
+                  Icon(
+                    QuranIcons.Close,
+                    contentDescription = "Clear Progress",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.error
+                  )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
               }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.End,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              FilledTonalButton(
+                onClick = {
+                  if (onStartFromBeginning != null) {
+                    onStartFromBeginning.invoke()
+                  } else {
+                    startAyahNum = 1
+                    endAyahNum = maxAyahsForSura
+                    onStartMemorization(
+                      currentSaved.copy(
+                        startAyah = SuraAyah(currentSaved.startAyah.sura, 1),
+                        endAyah = SuraAyah(currentSaved.startAyah.sura, maxAyahsForSura)
+                      )
+                    )
+                  }
+                },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+              ) {
+                Text("Start from Beginning", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+              }
+
+              Spacer(modifier = Modifier.width(8.dp))
 
               Button(
                 onClick = onResumeSession,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                 colors = ButtonDefaults.buttonColors(
                   containerColor = MaterialTheme.colorScheme.primary
                 )
               ) {
-                Text("Continue")
+                Text("Resume (Step ${activeSavedSessionStep + 1})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+              }
+            }
+          }
+        }
+      }
+
+      val otherSurahs = allSavedSurahs.filter { it.sura != initialStartAyah.sura }
+      if (otherSurahs.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+          text = "Surah Memorization Tracker (${otherSurahs.size} active)",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          otherSurahs.forEach { s ->
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+              )
+            ) {
+              Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                      text = getSuraTitle(s.sura),
+                      style = MaterialTheme.typography.bodyMedium,
+                      fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                      text = "Ayah ${s.config.startAyah.ayah}–${s.config.endAyah.ayah} • Step ${s.stepIndex + 1}",
+                      style = MaterialTheme.typography.labelSmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                  }
+
+                  if (onClearOtherSura != null) {
+                    IconButton(onClick = { onClearOtherSura(s.sura) }) {
+                      Icon(
+                        QuranIcons.Close,
+                        contentDescription = "Clear",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.End,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  if (onStartOtherSura != null) {
+                    FilledTonalButton(
+                      onClick = { onStartOtherSura(s) },
+                      contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                    ) {
+                      Text("From Beginning", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                  }
+
+                  if (onResumeOtherSura != null) {
+                    Button(
+                      onClick = { onResumeOtherSura(s) },
+                      contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+                    ) {
+                      Text("Resume", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                  }
+                }
               }
             }
           }

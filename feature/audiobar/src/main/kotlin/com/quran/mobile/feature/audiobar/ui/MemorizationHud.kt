@@ -53,6 +53,7 @@ fun MemorizationHud(
   onReplayRecitation: (() -> Unit)? = null,
   onOpenSettings: (() -> Unit)? = null,
   onEnterPip: (() -> Unit)? = null,
+  onOpenTracker: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val colors = LocalQuranColors.current
@@ -116,6 +117,28 @@ fun MemorizationHud(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+          if (onOpenTracker != null) {
+            TextButton(
+              onClick = onOpenTracker,
+              contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+              Icon(
+                QuranIcons.List,
+                contentDescription = "Surah Tracker",
+                modifier = Modifier
+                  .size(16.dp)
+                  .padding(end = 2.dp),
+                tint = MaterialTheme.colorScheme.primary
+              )
+              Text(
+                text = "Tracker",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+
           if (onOpenSettings != null) {
             TextButton(
               onClick = onOpenSettings,

@@ -35,11 +35,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationEngine
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationPreferences
 import com.quran.mobile.feature.audiobar.state.AudioBarState
 import com.quran.mobile.feature.audiobar.state.AudioBarUiEvent
 import com.quran.mobile.feature.audiobar.ui.MemorizationHud
 import com.quran.mobile.feature.audiobar.ui.MemorizationLiveSettingsSheet
+import com.quran.mobile.feature.audiobar.ui.MemorizationTrackerSheet
 
 class AudioBarWrapper @JvmOverloads constructor(
   context: Context,
@@ -53,7 +56,13 @@ class AudioBarWrapper @JvmOverloads constructor(
   @Inject
   lateinit var memorizationEngine: MemorizationEngine
 
+  @Inject
+  lateinit var memorizationPreferences: MemorizationPreferences
+
   var onEnterPip: (() -> Unit)? = null
+  var onResumeSuraSession: ((MemorizationConfig) -> Unit)? = null
+  var onStartSuraSession: ((MemorizationConfig) -> Unit)? = null
+  var onRestartCurrentSession: (() -> Unit)? = null
 
   init {
     (context as? AudioBarInjector)?.inject(this)
@@ -75,6 +84,7 @@ class AudioBarWrapper @JvmOverloads constructor(
           audioBarState is AudioBarState.Prompt ||
           audioBarState is AudioBarState.Loading
       var showLiveSettingsSheet by remember { mutableStateOf(false) }
+      var showTrackerSheet by remember { mutableStateOf(false) }
 
       Card(
         shape = CardDefaults.shape.topOnly(),
@@ -104,6 +114,7 @@ class AudioBarWrapper @JvmOverloads constructor(
             },
             onToggleMask = { memorizationEngine.toggleTextMask() },
             onOpenSettings = { showLiveSettingsSheet = true },
+            onOpenTracker = { showTrackerSheet = true },
             onEnterPip = onEnterPip,
             onReplayRecitation = {
               val path = memorizationState.lastRecitationAudioPath
@@ -155,6 +166,32 @@ class AudioBarWrapper @JvmOverloads constructor(
             showLiveSettingsSheet = false
           },
           onDismissRequest = { showLiveSettingsSheet = false }
+        )
+      }
+
+      if (showTrackerSheet) {
+        val savedSurahs = remember(showTrackerSheet) {
+          memorizationPreferences.getAllSavedSurahSessions()
+        }
+        MemorizationTrackerSheet(
+          savedSurahSessions = savedSurahs,
+          currentActiveState = memorizationState,
+          onResumeSession = { config ->
+            showTrackerSheet = false
+            onResumeSuraSession?.invoke(config)
+          },
+          onStartFromBeginning = { config ->
+            showTrackerSheet = false
+            onStartSuraSession?.invoke(config)
+          },
+          onClearSession = { sura ->
+            memorizationPreferences.clearSessionForSura(sura)
+          },
+          onRestartCurrentSession = {
+            showTrackerSheet = false
+            onRestartCurrentSession?.invoke()
+          },
+          onDismissRequest = { showTrackerSheet = false }
         )
       }
     }

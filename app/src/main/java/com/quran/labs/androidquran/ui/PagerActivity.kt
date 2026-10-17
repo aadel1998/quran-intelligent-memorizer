@@ -491,6 +491,23 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
 
     audioStatusBar = findViewById(R.id.audio_area)
     audioStatusBar.onEnterPip = { enterMemorizationPip() }
+    audioStatusBar.onResumeSuraSession = { config ->
+      startMemorizationSession(config, isResume = true)
+    }
+    audioStatusBar.onStartSuraSession = { config ->
+      startMemorizationSession(config, isResume = false)
+    }
+    audioStatusBar.onRestartCurrentSession = {
+      val active = memorizationEngine.state.value.config
+      if (active != null) {
+        val maxAyahs = quranInfo.getNumberOfAyahs(active.startAyah.sura)
+        val freshConfig = active.copy(
+          startAyah = SuraAyah(active.startAyah.sura, 1),
+          endAyah = SuraAyah(active.startAyah.sura, maxAyahs)
+        )
+        startMemorizationSession(freshConfig, isResume = false)
+      }
+    }
 
     toolBarArea = findViewById(R.id.toolbar_area)
     translationsSpinner = findViewById(R.id.spinner)
@@ -1964,6 +1981,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     val savedStep = suraSession?.stepIndex ?: 0
     val defaultSettings = memorizationPreferences.getLastUsedSettings()
 
+    val allSavedSurahs = memorizationPreferences.getAllSavedSurahSessions()
     val masteredRanges = memorizationPreferences.getMasteredRanges()
     val savedPlaylists = playlistRepository.getAllPlaylists()
 
@@ -1978,10 +1996,44 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
           startMemorizationSession(savedConfig, true)
         }
       },
+      onStartFromBeginning = {
+        val baseConfig = savedConfig ?: MemorizationConfig(
+          startAyah = SuraAyah(starting.sura, 1),
+          endAyah = SuraAyah(starting.sura, maxAyahs),
+          windowSize = defaultSettings.windowSize,
+          singleRepeat = defaultSettings.singleRepeat,
+          connectRepeat = defaultSettings.connectRepeat,
+          delayMode = defaultSettings.delayMode,
+          memoryTestMode = defaultSettings.memoryTestMode,
+          maskingLevel = defaultSettings.maskingLevel,
+          recordRecitation = defaultSettings.recordRecitation,
+          enableBridge = defaultSettings.enableBridge
+        )
+        val freshConfig = baseConfig.copy(
+          startAyah = SuraAyah(starting.sura, 1),
+          endAyah = SuraAyah(starting.sura, maxAyahs)
+        )
+        startMemorizationSession(freshConfig, false)
+      },
       onResetSurah = {
         memorizationPreferences.clearSessionForSura(starting.sura)
       },
       defaultSettings = defaultSettings,
+      allSavedSurahs = allSavedSurahs,
+      onResumeOtherSura = { s ->
+        startMemorizationSession(s.config, true)
+      },
+      onStartOtherSura = { s ->
+        val maxOther = quranInfo.getNumberOfAyahs(s.sura)
+        val freshOther = s.config.copy(
+          startAyah = SuraAyah(s.sura, 1),
+          endAyah = SuraAyah(s.sura, maxOther)
+        )
+        startMemorizationSession(freshOther, false)
+      },
+      onClearOtherSura = { suraToClear ->
+        memorizationPreferences.clearSessionForSura(suraToClear)
+      },
       masteredRanges = masteredRanges,
       savedPlaylists = savedPlaylists,
       initialPlaylist = initialPlaylist,
