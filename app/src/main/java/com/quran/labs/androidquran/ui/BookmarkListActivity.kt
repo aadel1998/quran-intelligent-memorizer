@@ -8,10 +8,15 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.Toolbar
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
@@ -28,18 +33,22 @@ import com.quran.data.model.SuraAyah
 import com.quran.data.model.highlight.HighlightColor
 import com.quran.labs.androidquran.QuranApplication
 import com.quran.labs.androidquran.R
+import com.quran.labs.androidquran.common.ui.core.HighlightColors
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.labs.androidquran.dao.bookmark.BookmarkListMode
 import com.quran.labs.androidquran.dao.bookmark.BookmarkListRowData
+import com.quran.labs.androidquran.data.QuranDisplayData
 import com.quran.labs.androidquran.presenter.bookmark.BookmarkListPresenter
 import com.quran.labs.androidquran.presenter.bookmark.BookmarkPresenter
 import com.quran.labs.androidquran.ui.fragment.AddTagDialog
 import com.quran.labs.androidquran.ui.fragment.TagBookmarkDialog
 import com.quran.labs.androidquran.ui.fragment.TagBookmarkDialog.OnBookmarkTagsUpdateListener
-import com.quran.labs.androidquran.common.ui.core.HighlightColors
 import com.quran.labs.androidquran.ui.helpers.QuranListAdapter
 import com.quran.labs.androidquran.ui.helpers.QuranNavigator
 import com.quran.labs.androidquran.ui.helpers.QuranRow
 import com.quran.labs.androidquran.ui.helpers.QuranRowFactory
+import com.quran.labs.androidquran.ui.modern.ModernBookmarkListScreen
+import com.quran.labs.androidquran.ui.modern.ModernBookmarkRow
 import com.quran.labs.androidquran.util.QuranSettings
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -61,6 +70,10 @@ class BookmarkListActivity : AppCompatActivity(),
   private var isPaused = false
   private val sortOrder = MutableStateFlow(BookmarkSortOrder.SORT_DATE_ADDED)
 
+  private var modernRowsState by mutableStateOf<List<ModernBookmarkRow>>(emptyList())
+  private var modernTitleState by mutableStateOf("")
+  private var modernSortOrderState by mutableIntStateOf(BookmarkSortOrder.SORT_DATE_ADDED)
+
   @Inject lateinit var quranNavigatorFactory: QuranNavigator.Factory
   private val quranNavigator by lazy { quranNavigatorFactory.create(this) }
 
@@ -69,6 +82,9 @@ class BookmarkListActivity : AppCompatActivity(),
 
   @Inject
   lateinit var quranRowFactory: QuranRowFactory
+
+  @Inject
+  lateinit var quranDisplayData: QuranDisplayData
 
   @Inject
   lateinit var quranSettings: QuranSettings
@@ -84,6 +100,42 @@ class BookmarkListActivity : AppCompatActivity(),
       return
     }
     this.mode = mode
+    sortOrder.value = quranSettings.bookmarksSortOrder
+    modernSortOrderState = quranSettings.bookmarksSortOrder
+
+    if (quranSettings.isModernUiEnabled) {
+      setContent {
+        QuranTheme {
+          val highlightColor = (mode as? BookmarkListMode.Highlights)?.color?.let { HighlightColors[it].color }
+          ModernBookmarkListScreen(
+            title = modernTitleState.ifEmpty {
+              when (mode) {
+                is BookmarkListMode.Collection -> intent.getStringExtra(EXTRA_COLLECTION_NAME).orEmpty()
+                is BookmarkListMode.Highlights -> getString(HighlightColors[mode.color].nameResourceId)
+              }
+            },
+            items = modernRowsState,
+            sortOrder = modernSortOrderState,
+            canRename = mode is BookmarkListMode.Collection,
+            highlightColor = highlightColor,
+            onBackClick = { finish() },
+            onSortChanged = { newOrder -> setSortOrder(newOrder) },
+            onRenameClick = {
+              val currentMode = this.mode
+              if (currentMode is BookmarkListMode.Collection && !isPaused) {
+                AddTagDialog.newInstance(currentMode.collectionId, collectionName.orEmpty())
+                  .show(supportFragmentManager, AddTagDialog.TAG)
+              }
+            },
+            onItemClick = ::onModernRowClicked,
+            onDeleteItem = ::onModernDeleteClicked
+          )
+        }
+      }
+      updateTitle()
+      subscribeToData()
+      return
+    }
 
     setContentView(R.layout.bookmark_list)
 
@@ -97,6 +149,7 @@ class BookmarkListActivity : AppCompatActivity(),
         leftMargin = insets.left
         rightMargin = insets.right
       }
+
       windowInsets
     }
 
@@ -130,7 +183,6 @@ class BookmarkListActivity : AppCompatActivity(),
     )
     this.emptyStateView = emptyStateView
 
-    sortOrder.value = quranSettings.bookmarksSortOrder
     updateTitle()
     subscribeToData()
   }
@@ -150,7 +202,6 @@ class BookmarkListActivity : AppCompatActivity(),
       lifecycleScope.launch {
         repeatOnLifecycle(Lifecycle.State.STARTED) {
           bookmarkListPresenter.collectionName(mode.collectionId).collect { name ->
-            // the collection can be renamed from this screen, or deleted from elsewhere
             if (name == null) {
               finish()
             } else {
@@ -164,16 +215,21 @@ class BookmarkListActivity : AppCompatActivity(),
   }
 
   private fun updateTitle() {
-    supportActionBar?.title = when (val mode = mode) {
+    val title = when (val mode = mode) {
       is BookmarkListMode.Collection ->
         collectionName ?: intent.getStringExtra(EXTRA_COLLECTION_NAME).orEmpty()
 
       is BookmarkListMode.Highlights -> getString(HighlightColors[mode.color].nameResourceId)
     }
+    modernTitleState = title
+    supportActionBar?.title = title
   }
 
   private fun onNewRowData(rows: List<BookmarkListRowData>) {
     rowData = rows
+    modernRowsState = mapToModernRows(rows)
+
+    if (quranSettings.isModernUiEnabled) return
 
     val quranRows = rows.map { row ->
       when (row) {
@@ -193,9 +249,101 @@ class BookmarkListActivity : AppCompatActivity(),
     emptyStateView?.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
   }
 
+  private fun mapToModernRows(rows: List<BookmarkListRowData>): List<ModernBookmarkRow> {
+    return rows.map { row ->
+      when (row) {
+        is BookmarkListRowData.SuraHeader -> {
+          val quranRow = quranRowFactory.fromSuraHeader(this, row.sura)
+          ModernBookmarkRow.Header(quranRow.text.orEmpty())
+        }
+        is BookmarkListRowData.BookmarkItem -> {
+          val bookmark = row.bookmark
+          if (bookmark.isPageBookmark()) {
+            val quranRow = quranRowFactory.fromBookmark(this, bookmark, row.collectionId)
+            ModernBookmarkRow.Page(
+              id = bookmark.id.toString(),
+              page = bookmark.page,
+              title = quranRow.text.orEmpty(),
+              metadata = quranRow.metadata.orEmpty(),
+              timestamp = bookmark.timestamp
+            )
+          } else {
+            val quranRow = quranRowFactory.fromBookmark(this, bookmark, row.collectionId)
+            val sura = bookmark.sura ?: 1
+            val suraName = quranDisplayData.getSuraName(this, sura, true)
+            ModernBookmarkRow.Ayah(
+              id = bookmark.id.toString(),
+              sura = sura,
+              ayah = bookmark.ayah ?: 1,
+              page = bookmark.page,
+              suraName = suraName,
+              ayahText = bookmark.ayahText,
+              metadata = quranRow.metadata.orEmpty(),
+              timestamp = bookmark.timestamp
+            )
+          }
+        }
+        is BookmarkListRowData.HighlightItem -> {
+          val highlight = row.highlight
+          val quranRow = quranRowFactory.fromHighlight(this, highlight, row.ayahText)
+          val sura = highlight.suraAyah.sura
+          val ayah = highlight.suraAyah.ayah
+          val page = quranRow.page
+          val suraName = quranDisplayData.getSuraName(this, sura, true)
+          ModernBookmarkRow.Ayah(
+            id = "${sura}_${ayah}_${page}",
+            sura = sura,
+            ayah = ayah,
+            page = page,
+            suraName = suraName,
+            ayahText = row.ayahText,
+            metadata = quranRow.metadata.orEmpty(),
+            timestamp = highlight.timestamp.toEpochMilliseconds(),
+            tagColor = HighlightColors[highlight.color].color
+          )
+        }
+      }
+    }
+  }
+
+  private fun onModernRowClicked(row: ModernBookmarkRow) {
+    when (row) {
+      is ModernBookmarkRow.Ayah -> jumpToAndHighlight(row.page, row.sura, row.ayah)
+      is ModernBookmarkRow.Page -> jumpToAndHighlight(row.page, 0, 0)
+      is ModernBookmarkRow.Header -> {}
+    }
+  }
+
+  private fun onModernDeleteClicked(row: ModernBookmarkRow) {
+    val target = when (row) {
+      is ModernBookmarkRow.Ayah -> {
+        rowData.firstOrNull { r ->
+          when (r) {
+            is BookmarkListRowData.BookmarkItem -> r.bookmark.id.toString() == row.id
+            is BookmarkListRowData.HighlightItem ->
+              r.highlight.suraAyah.sura == row.sura && r.highlight.suraAyah.ayah == row.ayah
+            else -> false
+          }
+        }
+      }
+      is ModernBookmarkRow.Page -> {
+        rowData.firstOrNull { r ->
+          r is BookmarkListRowData.BookmarkItem && r.bookmark.id.toString() == row.id
+        }
+      }
+      is ModernBookmarkRow.Header -> null
+    }
+
+    if (target != null) {
+      bookmarkListPresenter.removeAfterSomeTime(
+        listOf(target),
+        BookmarkPresenter.DELAY_DELETION_DURATION_IN_MS.toLong()
+      )
+    }
+  }
+
   override fun onStop() {
     isPaused = true
-    // the undo window does not follow the user off the screen
     bookmarkListPresenter.flushPendingRemovals()
     super.onStop()
   }
@@ -249,19 +397,18 @@ class BookmarkListActivity : AppCompatActivity(),
   }
 
   private fun setSortOrder(order: Int) {
-    if (sortOrder.value == order) {
-      return
-    }
-    // shared with the bookmarks tab, so the two screens agree on how the list is sorted
-    quranSettings.bookmarksSortOrder = order
+    if (sortOrder.value == order) return
     sortOrder.value = order
+    modernSortOrderState = order
+    quranSettings.bookmarksSortOrder = order
   }
 
   override fun onClick(row: QuranRow, position: Int) {
     val adapter = adapter ?: return
     if (actionMode != null) {
       if (isValidSelection(row)) {
-        adapter.setItemChecked(position, !adapter.isItemChecked(position))
+        val isChecked = !adapter.isItemChecked(position)
+        adapter.setItemChecked(position, isChecked)
         if (adapter.getCheckedItems().isEmpty()) {
           finishActionMode()
         } else {
@@ -282,7 +429,6 @@ class BookmarkListActivity : AppCompatActivity(),
     return if (adapter == null || !isValidSelection(row)) {
       false
     } else {
-
       adapter.setItemChecked(position, !adapter.isItemChecked(position))
       if (actionMode != null && adapter.getCheckedItems().isEmpty()) {
         finishActionMode()
@@ -372,7 +518,6 @@ class BookmarkListActivity : AppCompatActivity(),
     }
 
     override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
-      // tagging only makes sense for bookmarks; a highlight is not in a collection
       menu.findItem(R.id.cab_tag_bookmark).isVisible =
         this@BookmarkListActivity.mode is BookmarkListMode.Collection
       menu.findItem(R.id.cab_delete).setTitle(

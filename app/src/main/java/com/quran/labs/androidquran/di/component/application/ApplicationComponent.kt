@@ -5,6 +5,7 @@ import com.quran.analytics.provider.AnalyticsModule
 import com.quran.common.networking.NetworkModule
 import com.quran.data.di.AppScope
 import com.quran.data.page.provider.QuranDataModule
+import com.quran.labs.androidquran.QuranAdvancedPreferenceActivity
 import com.quran.labs.androidquran.QuranApplication
 import com.quran.labs.androidquran.QuranDataActivity
 import com.quran.labs.androidquran.QuranForwarderActivity
@@ -77,6 +78,7 @@ interface ApplicationComponent : QuranApplicationComponent {
   fun inject(pageSelectActivity: PageSelectActivity)
   fun inject(showJumpFragmentActivity: ShowJumpFragmentActivity)
   fun inject(bookmarkListActivity: BookmarkListActivity)
+  fun inject(quranAdvancedPreferenceActivity: QuranAdvancedPreferenceActivity)
 
   // fragments
   fun inject(bookmarksFragment: BookmarksFragment)
