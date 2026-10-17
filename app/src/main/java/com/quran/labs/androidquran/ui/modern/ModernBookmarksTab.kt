@@ -66,7 +66,8 @@ data class BookmarkItemModel(
 
 data class TagItemModel(
   val id: String,
-  val name: String
+  val name: String,
+  val isDefault: Boolean = false
 )
 
 data class ReadingBookmarkItemModel(
@@ -83,6 +84,10 @@ private enum class BookmarkFilterType {
   ALL, AYAHS, PAGES, TAG
 }
 
+enum class BookmarkSortType {
+  NEWEST, OLDEST, PAGE
+}
+
 @Composable
 fun BookmarksTabContent(
   bookmarks: List<BookmarkItemModel>,
@@ -92,13 +97,22 @@ fun BookmarksTabContent(
   onOpenReadingBookmark: (ReadingBookmarkItemModel) -> Unit,
   onDeleteBookmark: (BookmarkItemModel) -> Unit,
   onClearReadingBookmark: (ReadingBookmarkType) -> Unit,
+  onUpdateBookmarkTags: (bookmarkId: String, selectedTagIds: Set<String>) -> Unit = { _, _ -> },
+  onCreateTag: (tagName: String) -> Unit = {},
+  onDeleteTag: (tagId: String) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var selectedFilter by remember { mutableStateOf(BookmarkFilterType.ALL) }
   var selectedTagId by remember { mutableStateOf<String?>(null) }
+  var sortType by remember { mutableStateOf(BookmarkSortType.NEWEST) }
 
-  val filteredBookmarks = remember(bookmarks, selectedFilter, selectedTagId) {
-    when (selectedFilter) {
+  // Tagging Bottom Sheet state
+  var taggingBookmark by remember { mutableStateOf<BookmarkItemModel?>(null) }
+  var isManageTagsOpen by remember { mutableStateOf(false) }
+  var activeTagSheetIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+  val filteredBookmarks = remember(bookmarks, selectedFilter, selectedTagId, sortType) {
+    val list = when (selectedFilter) {
       BookmarkFilterType.ALL -> bookmarks
       BookmarkFilterType.AYAHS -> bookmarks.filter { !it.isPageBookmark }
       BookmarkFilterType.PAGES -> bookmarks.filter { it.isPageBookmark }
@@ -107,99 +121,238 @@ fun BookmarksTabContent(
         if (tagId == null) bookmarks else bookmarks.filter { b -> b.tags.any { it.id == tagId } }
       }
     }
+    when (sortType) {
+      BookmarkSortType.NEWEST -> list.sortedByDescending { it.timestamp }
+      BookmarkSortType.OLDEST -> list.sortedBy { it.timestamp }
+      BookmarkSortType.PAGE -> list.sortedWith(compareBy({ it.page }, { it.ayah ?: 0 }))
+    }
   }
 
   val ayahCount = remember(bookmarks) { bookmarks.count { !it.isPageBookmark } }
   val pageCount = remember(bookmarks) { bookmarks.count { it.isPageBookmark } }
 
-  LazyColumn(
-    modifier = modifier.fillMaxSize(),
-    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-    verticalArrangement = Arrangement.spacedBy(10.dp)
-  ) {
-    // 1. Pinned Reading Bookmarks Ribbons (Teal, Orange, Red)
-    item {
-      ReadingBookmarksSection(
-        readingBookmarks = readingBookmarks,
-        onOpen = onOpenReadingBookmark,
-        onClear = onClearReadingBookmark
-      )
-    }
+  Box(modifier = modifier.fillMaxSize()) {
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+      // 1. Pinned Reading Bookmarks Ribbons (Teal, Orange, Red)
+      item {
+        ReadingBookmarksSection(
+          readingBookmarks = readingBookmarks,
+          onOpen = onOpenReadingBookmark,
+          onClear = onClearReadingBookmark
+        )
+      }
 
-    // 2. Filter Pills Row
-    item {
-      LazyRow(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
+      // 2. Filter Pills Row
+      item {
+        LazyRow(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          item {
+            FilterPill(
+              title = "All (${bookmarks.size})",
+              isSelected = selectedFilter == BookmarkFilterType.ALL,
+              onClick = {
+                selectedFilter = BookmarkFilterType.ALL
+                selectedTagId = null
+              }
+            )
+          }
+          item {
+            FilterPill(
+              title = "Ayahs ($ayahCount)",
+              isSelected = selectedFilter == BookmarkFilterType.AYAHS,
+              onClick = {
+                selectedFilter = BookmarkFilterType.AYAHS
+                selectedTagId = null
+              }
+            )
+          }
+          item {
+            FilterPill(
+              title = "Pages ($pageCount)",
+              isSelected = selectedFilter == BookmarkFilterType.PAGES,
+              onClick = {
+                selectedFilter = BookmarkFilterType.PAGES
+                selectedTagId = null
+              }
+            )
+          }
+          items(tags, key = { it.id }) { tag ->
+            val count = bookmarks.count { b -> b.tags.any { it.id == tag.id } }
+            val tagColor = getModernTagColor(tag.id)
+            FilterPillWithDot(
+              title = "${tag.name} ($count)",
+              dotColor = tagColor,
+              isSelected = selectedFilter == BookmarkFilterType.TAG && selectedTagId == tag.id,
+              onClick = {
+                selectedFilter = BookmarkFilterType.TAG
+                selectedTagId = tag.id
+              }
+            )
+          }
+          item {
+            // "+ Tag" quick action
+            Box(
+              modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                .border(
+                  0.5.dp,
+                  MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                  RoundedCornerShape(20.dp)
+                )
+                .clickable { isManageTagsOpen = true }
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+              contentAlignment = Alignment.Center
+            ) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                  imageVector = QuranIcons.Add,
+                  contentDescription = "New Tag",
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = "New Tag",
+                  fontSize = 12.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  color = MaterialTheme.colorScheme.primary
+                )
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Sort & Summary Row (shown when bookmarks are present)
+      if (bookmarks.isNotEmpty()) {
         item {
-          FilterPill(
-            title = "All (${bookmarks.size})",
-            isSelected = selectedFilter == BookmarkFilterType.ALL,
-            onClick = {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 2.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(
+              text = "${filteredBookmarks.size} ${if (filteredBookmarks.size == 1) "bookmark" else "bookmarks"}",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.Medium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+
+            Box(
+              modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                .clickable {
+                  sortType = if (sortType == BookmarkSortType.NEWEST) {
+                    BookmarkSortType.PAGE
+                  } else {
+                    BookmarkSortType.NEWEST
+                  }
+                }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+              contentAlignment = Alignment.Center
+            ) {
+              Text(
+                text = if (sortType == BookmarkSortType.NEWEST) "⇅ Sort: Recent" else "⇅ Sort: Page Order",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+        }
+      }
+
+      // 4. Bookmarks List or Empty State
+      if (filteredBookmarks.isEmpty()) {
+        item {
+          EmptyBookmarksState(
+            isFilterActive = selectedFilter != BookmarkFilterType.ALL,
+            onResetFilter = {
               selectedFilter = BookmarkFilterType.ALL
               selectedTagId = null
             }
           )
         }
-        item {
-          FilterPill(
-            title = "Ayahs ($ayahCount)",
-            isSelected = selectedFilter == BookmarkFilterType.AYAHS,
-            onClick = {
-              selectedFilter = BookmarkFilterType.AYAHS
-              selectedTagId = null
-            }
-          )
-        }
-        item {
-          FilterPill(
-            title = "Pages ($pageCount)",
-            isSelected = selectedFilter == BookmarkFilterType.PAGES,
-            onClick = {
-              selectedFilter = BookmarkFilterType.PAGES
-              selectedTagId = null
-            }
-          )
-        }
-        items(tags, key = { it.id }) { tag ->
-          val count = bookmarks.count { b -> b.tags.any { it.id == tag.id } }
-          FilterPill(
-            title = "${tag.name} ($count)",
-            isSelected = selectedFilter == BookmarkFilterType.TAG && selectedTagId == tag.id,
-            onClick = {
+      } else {
+        items(
+          items = filteredBookmarks,
+          key = { it.id }
+        ) { bookmark ->
+          BookmarkCard(
+            bookmark = bookmark,
+            onClick = { onOpenBookmark(bookmark) },
+            onDelete = { onDeleteBookmark(bookmark) },
+            onEditTags = {
+              taggingBookmark = bookmark
+              activeTagSheetIds = bookmark.tags.map { it.id }.toSet()
+            },
+            onTagClick = { tagId ->
               selectedFilter = BookmarkFilterType.TAG
-              selectedTagId = tag.id
+              selectedTagId = tagId
             }
           )
         }
       }
     }
 
-    // 3. Bookmarks List or Empty State
-    if (filteredBookmarks.isEmpty()) {
-      item {
-        EmptyBookmarksState(
-          isFilterActive = selectedFilter != BookmarkFilterType.ALL,
-          onResetFilter = {
-            selectedFilter = BookmarkFilterType.ALL
-            selectedTagId = null
-          }
+    // Modern Tag Bottom Sheet for an individual bookmark
+    if (taggingBookmark != null) {
+      val currentBookmark = taggingBookmark
+      if (currentBookmark != null) {
+        val targetLabel = if (!currentBookmark.isPageBookmark && currentBookmark.sura != null && currentBookmark.ayah != null) {
+          "${currentBookmark.suraName} : Ayah ${currentBookmark.ayah}"
+        } else {
+          "Page ${currentBookmark.page}"
+        }
+
+        ModernTagSheet(
+          visible = true,
+          targetTitle = targetLabel,
+          tags = tags,
+          selectedTagIds = activeTagSheetIds,
+          onToggleTag = { tagId ->
+            activeTagSheetIds = if (activeTagSheetIds.contains(tagId)) {
+              activeTagSheetIds - tagId
+            } else {
+              activeTagSheetIds + tagId
+            }
+          },
+          onCreateTag = onCreateTag,
+          onDeleteTag = onDeleteTag,
+          onSave = {
+            onUpdateBookmarkTags(currentBookmark.id, activeTagSheetIds)
+            taggingBookmark = null
+          },
+          onDismiss = { taggingBookmark = null }
         )
       }
-    } else {
-      items(
-        items = filteredBookmarks,
-        key = { it.id }
-      ) { bookmark ->
-        BookmarkCard(
-          bookmark = bookmark,
-          onClick = { onOpenBookmark(bookmark) },
-          onDelete = { onDeleteBookmark(bookmark) }
-        )
-      }
+    }
+
+    // Modern Tag Bottom Sheet for General Tag Management
+    if (isManageTagsOpen) {
+      ModernTagSheet(
+        visible = true,
+        targetTitle = "Manage Collections",
+        tags = tags,
+        selectedTagIds = emptySet(),
+        onToggleTag = {},
+        onCreateTag = onCreateTag,
+        onDeleteTag = onDeleteTag,
+        onSave = { isManageTagsOpen = false },
+        onDismiss = { isManageTagsOpen = false }
+      )
     }
   }
 }
@@ -395,10 +548,53 @@ private fun FilterPill(
 }
 
 @Composable
+private fun FilterPillWithDot(
+  title: String,
+  dotColor: Color,
+  isSelected: Boolean,
+  onClick: () -> Unit
+) {
+  val shape = RoundedCornerShape(20.dp)
+  Box(
+    modifier = Modifier
+      .clip(shape)
+      .background(
+        if (isSelected) dotColor.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+      )
+      .border(
+        width = 0.5.dp,
+        color = if (isSelected) dotColor.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+        shape = shape
+      )
+      .clickable(onClick = onClick)
+      .padding(horizontal = 12.dp, vertical = 6.dp),
+    contentAlignment = Alignment.Center
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Box(
+        modifier = Modifier
+          .size(7.dp)
+          .clip(CircleShape)
+          .background(dotColor)
+      )
+      Spacer(modifier = Modifier.width(6.dp))
+      Text(
+        text = title,
+        fontSize = 12.sp,
+        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+        color = if (isSelected) dotColor else MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
+  }
+}
+
+@Composable
 private fun BookmarkCard(
   bookmark: BookmarkItemModel,
   onClick: () -> Unit,
   onDelete: () -> Unit,
+  onEditTags: () -> Unit,
+  onTagClick: (tagId: String) -> Unit,
   modifier: Modifier = Modifier
 ) {
   val relativeTime = remember(bookmark.timestamp) {
@@ -416,7 +612,7 @@ private fun BookmarkCard(
     contentPadding = 12.dp
   ) {
     Column {
-      // Top Row: Location Pill + Arabic Surah + Delete Icon
+      // Top Row: Location Pill + Arabic Surah + Actions (Tag & Delete)
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -491,6 +687,22 @@ private fun BookmarkCard(
             )
           }
 
+          // Tag Action Button
+          IconButton(
+            onClick = onEditTags,
+            modifier = Modifier.size(28.dp)
+          ) {
+            Icon(
+              imageVector = QuranIcons.BookmarkFilled,
+              contentDescription = "Edit tags",
+              tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+              modifier = Modifier.size(16.dp)
+            )
+          }
+
+          Spacer(modifier = Modifier.width(2.dp))
+
+          // Delete Action Button
           IconButton(
             onClick = onDelete,
             modifier = Modifier.size(28.dp)
@@ -545,11 +757,32 @@ private fun BookmarkCard(
         if (bookmark.tags.isNotEmpty()) {
           Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             bookmark.tags.forEach { tag ->
-              ModernBadgeChip(
-                text = tag.name,
-                backgroundColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-              )
+              val tagColor = getModernTagColor(tag.id)
+              Box(
+                modifier = Modifier
+                  .clip(RoundedCornerShape(6.dp))
+                  .background(tagColor.copy(alpha = 0.14f))
+                  .border(0.5.dp, tagColor.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                  .clickable { onTagClick(tag.id) }
+                  .padding(horizontal = 8.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Box(
+                    modifier = Modifier
+                      .size(6.dp)
+                      .clip(CircleShape)
+                      .background(tagColor)
+                  )
+                  Spacer(modifier = Modifier.width(4.dp))
+                  Text(
+                    text = tag.name,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tagColor
+                  )
+                }
+              }
             }
           }
         }

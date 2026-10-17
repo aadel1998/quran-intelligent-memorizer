@@ -123,6 +123,9 @@ fun QuranModernHomeScreen(
   onOpenReadingBookmark: (ReadingBookmarkItemModel) -> Unit,
   onDeleteBookmark: (BookmarkItemModel) -> Unit,
   onClearReadingBookmark: (ReadingBookmarkType) -> Unit,
+  onUpdateBookmarkTags: (bookmarkId: String, selectedTagIds: Set<String>) -> Unit = { _, _ -> },
+  onCreateTag: (tagName: String) -> Unit = {},
+  onDeleteTag: (tagId: String) -> Unit = {},
   onOpenLastRead: (page: Int) -> Unit,
   onResumeMemorization: (SavedSuraSession) -> Unit,
   onStartFromBeginningMemorization: (SavedSuraSession) -> Unit,
@@ -216,7 +219,10 @@ fun QuranModernHomeScreen(
             onOpenBookmark = onOpenBookmark,
             onOpenReadingBookmark = onOpenReadingBookmark,
             onDeleteBookmark = onDeleteBookmark,
-            onClearReadingBookmark = onClearReadingBookmark
+            onClearReadingBookmark = onClearReadingBookmark,
+            onUpdateBookmarkTags = onUpdateBookmarkTags,
+            onCreateTag = onCreateTag,
+            onDeleteTag = onDeleteTag
           )
           3 -> MemorizerTabContent(
             savedSessions = savedSessions,

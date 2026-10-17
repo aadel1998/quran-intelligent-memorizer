@@ -3,10 +3,13 @@ package com.quran.labs.androidquran.ui.fragment
 import android.app.Dialog
 import android.content.Context
 import android.content.DialogInterface
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import android.widget.AdapterView
 import android.widget.AdapterView.OnItemClickListener
 import android.widget.BaseAdapter
@@ -16,14 +19,26 @@ import android.widget.ListView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AlertDialog.Builder
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.DialogFragment
+import androidx.lifecycle.lifecycleScope
+import com.quran.data.dao.BookmarksDao
 import com.quran.data.model.bookmark.Tag
 import com.quran.labs.androidquran.QuranApplication
 import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.ui.core.CollectionNames
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.labs.androidquran.presenter.bookmark.TagBookmarkPresenter
+import com.quran.labs.androidquran.ui.modern.ModernTagSheet
+import com.quran.labs.androidquran.ui.modern.TagItemModel
+import com.quran.labs.androidquran.util.QuranSettings
 import dev.zacsweers.metro.HasMemberInjections
 import dev.zacsweers.metro.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @HasMemberInjections
 open class TagBookmarkDialog : DialogFragment() {
@@ -31,6 +46,15 @@ open class TagBookmarkDialog : DialogFragment() {
 
   @Inject
   lateinit var tagBookmarkPresenter: TagBookmarkPresenter
+
+  @Inject
+  lateinit var quranSettings: QuranSettings
+
+  @Inject
+  lateinit var bookmarksDao: BookmarksDao
+
+  private val modernTagsState = mutableStateOf<List<TagItemModel>>(emptyList())
+  private val modernCheckedTagsState = mutableStateOf<Set<String>>(emptySet())
 
   override fun onAttach(context: Context) {
     super.onAttach(context)
@@ -83,11 +107,70 @@ open class TagBookmarkDialog : DialogFragment() {
   }
 
   fun setData(tags: List<Tag>?, checkedTags: HashSet<String>) {
+    modernTagsState.value = tags?.map {
+      TagItemModel(it.id, CollectionNames.displayName(requireContext(), it), it.isDefault)
+    } ?: emptyList()
+    modernCheckedTagsState.value = checkedTags.toSet()
+
     adapter?.setData(tags, checkedTags)
     adapter?.notifyDataSetChanged()
   }
 
   override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+    if (quranSettings.isModernUiEnabled) {
+      val dialog = Dialog(requireContext())
+      dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+      val composeView = ComposeView(requireContext()).apply {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        setContent {
+          QuranTheme {
+            val tags by modernTagsState
+            val selectedIds by modernCheckedTagsState
+            ModernTagSheet(
+              visible = true,
+              targetTitle = getString(R.string.tag_dlg_title),
+              tags = tags,
+              selectedTagIds = selectedIds,
+              onToggleTag = { tagId ->
+                val isChecked = tagBookmarkPresenter.toggleTag(tagId)
+                modernCheckedTagsState.value = if (isChecked) {
+                  selectedIds + tagId
+                } else {
+                  selectedIds - tagId
+                }
+              },
+              onCreateTag = { name ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                  bookmarksDao.addTag(name)
+                }
+              },
+              onDeleteTag = { tagId ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                  val tagObj = tags.find { it.id == tagId }
+                  if (tagObj != null && !tagObj.isDefault) {
+                    val actualTag = Tag(tagObj.id, tagObj.name)
+                    bookmarksDao.removeTags(listOf(actualTag))
+                  }
+                }
+              },
+              onSave = {
+                tagBookmarkPresenter.saveChanges()
+                dismiss()
+              },
+              onDismiss = { dismiss() }
+            )
+          }
+        }
+      }
+      dialog.setContentView(composeView)
+      dialog.window?.apply {
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        setGravity(Gravity.BOTTOM)
+        setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+      }
+      return dialog
+    }
+
     val builder = Builder(requireActivity(), R.style.QuranDialogTheme)
     builder.setView(createTagsListView())
     builder.setPositiveButton(R.string.dialog_ok) { _: DialogInterface?, _: Int -> }

@@ -66,6 +66,7 @@ import com.quran.labs.androidquran.view.SlidingTabLayout
 import com.quran.mobile.di.ExtraScreenProvider
 import com.quran.labs.androidquran.data.QuranDisplayData
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationPreferences
+import com.quran.labs.androidquran.common.ui.core.CollectionNames
 import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.labs.androidquran.ui.modern.BookmarkItemModel
 import com.quran.labs.androidquran.ui.modern.JuzItemModel
@@ -311,7 +312,7 @@ class QuranActivity : AppCompatActivity(),
         }
 
         val tagModels = remember(rawTags) {
-          rawTags.map { TagItemModel(it.id, it.name) }
+          rawTags.map { TagItemModel(it.id, CollectionNames.displayName(this@QuranActivity, it), it.isDefault) }
         }
 
         val readingBookmarkModels = remember(rawReadingBookmarks) {
@@ -430,6 +431,24 @@ class QuranActivity : AppCompatActivity(),
             onClearReadingBookmark = { slot ->
               lifecycleScope.launch(Dispatchers.IO) {
                 readingBookmarksDao.clearReadingBookmark(slot)
+              }
+            },
+            onUpdateBookmarkTags = { bookmarkId, tagIds ->
+              lifecycleScope.launch(Dispatchers.IO) {
+                bookmarksDao.updateBookmarkTags(arrayOf(bookmarkId), tagIds, true)
+              }
+            },
+            onCreateTag = { tagName ->
+              lifecycleScope.launch(Dispatchers.IO) {
+                bookmarksDao.addTag(tagName)
+              }
+            },
+            onDeleteTag = { tagId ->
+              lifecycleScope.launch(Dispatchers.IO) {
+                val tagToRemove = rawTags.find { it.id == tagId }
+                if (tagToRemove != null && !tagToRemove.isDefault) {
+                  bookmarksDao.removeTags(listOf(tagToRemove))
+                }
               }
             },
             onOpenLastRead = { page ->
