@@ -52,6 +52,7 @@ fun MemorizationHud(
   onToggleMask: () -> Unit,
   onReplayRecitation: (() -> Unit)? = null,
   onOpenSettings: (() -> Unit)? = null,
+  onEnterPip: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val colors = LocalQuranColors.current
@@ -130,6 +131,20 @@ fun MemorizationHud(
               )
               Text(
                 text = "Tune",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+
+          if (onEnterPip != null) {
+            TextButton(
+              onClick = onEnterPip,
+              contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+              Text(
+                text = "Float",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

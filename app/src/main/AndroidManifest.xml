@@ -80,6 +80,8 @@
         android:name=".ui.PagerActivity"
         android:launchMode="singleTop"
         android:theme="@style/QuranToolBar.Overlay"
+        android:supportsPictureInPicture="true"
+        android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
         android:exported="false"/>
     <activity
         android:name=".ui.TranslationManagerActivity"

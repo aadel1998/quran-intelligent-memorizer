@@ -1,7 +1,13 @@
 package com.quran.labs.androidquran.ui
 
 import android.Manifest
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
 import android.app.SearchManager
+import android.graphics.drawable.Icon
+import android.util.Rational
+import androidx.annotation.RequiresApi
 import android.content.ComponentName
 import android.content.DialogInterface
 import android.content.Intent
@@ -425,6 +431,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       }
     )
 
+    audioStatusBar.onEnterPip = { enterMemorizationPip() }
+
     memorizationEngine.state
       .onEach { memState ->
         val ayah = memState.currentPlayingAyah
@@ -436,6 +444,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
             ensurePage(ayah.sura, ayah.ayah)
             readingEventPresenterBridge.setSelection(ayah.sura, ayah.ayah, true)
           }
+          updatePipParams()
         }
       }
       .launchIn(scope)
@@ -2305,6 +2314,114 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     }
 
     override fun onPanelAnchored(panel: View) {
+    }
+  }
+
+  fun enterMemorizationPip() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      if (memorizationEngine.state.value.isActive) {
+        try {
+          enterPictureInPictureMode(buildPipParams())
+        } catch (e: Exception) {
+          Timber.e(e, "enterPictureInPictureMode failed")
+        }
+      }
+    }
+  }
+
+  @RequiresApi(Build.VERSION_CODES.O)
+  private fun buildPipParams(): PictureInPictureParams {
+    val memState = memorizationEngine.state.value
+    val actions = mutableListOf<RemoteAction>()
+
+    val prevIntent = PendingIntent.getService(
+      this, 201, audioUtils.getAudioIntent(this, AudioService.ACTION_REWIND),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    actions.add(
+      RemoteAction(
+        Icon.createWithResource(this, R.drawable.ic_previous),
+        getString(R.string.previous),
+        getString(R.string.previous),
+        prevIntent
+      )
+    )
+
+    val isPaused = memState.isPaused
+    val playPauseIntent = PendingIntent.getService(
+      this, 202,
+      audioUtils.getAudioIntent(this, if (isPaused) AudioService.ACTION_PLAY else AudioService.ACTION_PAUSE),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val playPauseIconRes = if (isPaused) {
+      com.quran.labs.androidquran.common.toolbar.R.drawable.ic_play
+    } else {
+      R.drawable.ic_pause
+    }
+    actions.add(
+      RemoteAction(
+        Icon.createWithResource(this, playPauseIconRes),
+        if (isPaused) getString(R.string.play) else getString(R.string.pause),
+        if (isPaused) getString(R.string.play) else getString(R.string.pause),
+        playPauseIntent
+      )
+    )
+
+    val nextIntent = PendingIntent.getService(
+      this, 203, audioUtils.getAudioIntent(this, AudioService.ACTION_SKIP),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    actions.add(
+      RemoteAction(
+        Icon.createWithResource(this, R.drawable.ic_next),
+        getString(R.string.next),
+        getString(R.string.next),
+        nextIntent
+      )
+    )
+
+    val builder = PictureInPictureParams.Builder()
+      .setActions(actions)
+      .setAspectRatio(Rational(16, 9))
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      builder.setAutoEnterEnabled(true)
+    }
+
+    return builder.build()
+  }
+
+  private fun updatePipParams() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      if (memorizationEngine.state.value.isActive) {
+        try {
+          setPictureInPictureParams(buildPipParams())
+        } catch (e: Exception) {
+          Timber.e(e, "setPictureInPictureParams failed")
+        }
+      }
+    }
+  }
+
+  override fun onUserLeaveHint() {
+    super.onUserLeaveHint()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      if (memorizationEngine.state.value.isActive) {
+        enterMemorizationPip()
+      }
+    }
+  }
+
+  override fun onPictureInPictureModeChanged(
+    isInPictureInPictureMode: Boolean,
+    newConfig: Configuration
+  ) {
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+    if (isInPictureInPictureMode) {
+      supportActionBar?.hide()
+      audioStatusBar.visibility = View.VISIBLE
+    } else {
+      supportActionBar?.show()
     }
   }
 

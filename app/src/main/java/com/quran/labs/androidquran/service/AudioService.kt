@@ -20,6 +20,7 @@ import android.os.Process
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.view.KeyEvent
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -164,6 +165,7 @@ class AudioService : Service(), Player.Listener {
   private val compositeDisposable = CompositeDisposable()
   private lateinit var scope: CoroutineScope
   private var pauseCountdownJob: Job? = null
+  private var pauseRemainingSeconds = 0
   private var recitationRecorder: RecitationRecorder? = null
 
   @Inject
@@ -336,9 +338,71 @@ class AudioService : Service(), Player.Listener {
           .subscribeOn(Schedulers.io())
           .subscribe { bitmap: Bitmap? -> notificationIcon = bitmap })
     }
+
+    scope.launch {
+      memorizationEngine.state.collect { memState ->
+        if (memState.isActive && isSetupAsForeground) {
+          notifyAyahChanged()
+          if (state == State.Playing) {
+            updateNotification()
+          } else if (state == State.Paused) {
+            pauseNotification()
+          }
+        }
+      }
+    }
   }
 
   private inner class MediaSessionCallback : MediaSessionCompat.Callback() {
+    private var headsetClickCount = 0
+    private val headsetResetRunnable = Runnable {
+      when (headsetClickCount) {
+        1 -> processTogglePlaybackRequest()
+        2 -> processSkipRequest()
+        3 -> processRewindRequest()
+      }
+      headsetClickCount = 0
+    }
+
+    override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {
+      val keyEvent = mediaButtonEvent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+      if (keyEvent != null && keyEvent.action == KeyEvent.ACTION_DOWN) {
+        when (keyEvent.keyCode) {
+          KeyEvent.KEYCODE_HEADSETHOOK, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+            serviceHandler.removeCallbacks(headsetResetRunnable)
+            headsetClickCount++
+            if (headsetClickCount >= 3) {
+              headsetResetRunnable.run()
+            } else {
+              serviceHandler.postDelayed(headsetResetRunnable, 350L)
+            }
+            return true
+          }
+          KeyEvent.KEYCODE_MEDIA_PLAY -> {
+            processPlayRequest()
+            return true
+          }
+          KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+            processPauseRequest()
+            return true
+          }
+          KeyEvent.KEYCODE_MEDIA_NEXT -> {
+            processSkipRequest()
+            return true
+          }
+          KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+            processRewindRequest()
+            return true
+          }
+          KeyEvent.KEYCODE_MEDIA_STOP -> {
+            processStopRequest()
+            return true
+          }
+        }
+      }
+      return super.onMediaButtonEvent(mediaButtonEvent)
+    }
+
     override fun onPlay() {
       processPlayRequest()
     }
@@ -348,6 +412,14 @@ class AudioService : Service(), Player.Listener {
     }
 
     override fun onSkipToPrevious() {
+      processRewindRequest()
+    }
+
+    override fun onFastForward() {
+      processSkipRequest()
+    }
+
+    override fun onRewind() {
       processRewindRequest()
     }
 
@@ -630,6 +702,15 @@ class AudioService : Service(), Player.Listener {
   }
 
   private fun processTogglePlaybackRequest() {
+    val memState = memorizationEngine.state.value
+    if (memState.isActive) {
+      if (memState.isPaused) {
+        processPlayRequest()
+      } else {
+        processPauseRequest()
+      }
+      return
+    }
     if (State.Paused == state || State.Stopped == state) {
       processPlayRequest()
     } else {
@@ -653,14 +734,21 @@ class AudioService : Service(), Player.Listener {
       // If we're stopped, just go ahead to the next file and start playing
       playAudio(localAudioQueue.getCurrentSura() == 9 && localAudioQueue.getCurrentAyah() == 1)
     } else if (State.Paused == state) {
-      // If we're paused, just continue playback and restore the
-      // 'foreground service' state.
-      state = State.Playing
-      if (!isSetupAsForeground) {
-        setUpAsForeground()
+      val currentStep = memorizationEngine.state.value.currentStep
+      if (memorizationEngine.state.value.isActive && currentStep?.stepType == StepType.PAUSE_FOR_RECITATION) {
+        if (!isSetupAsForeground) {
+          setUpAsForeground()
+        }
+        updateAudioPlaybackStatus()
+        updateNotification()
+      } else {
+        state = State.Playing
+        if (!isSetupAsForeground) {
+          setUpAsForeground()
+        }
+        configAndStartExoPlayer()
+        updateAudioPlaybackStatus()
       }
-      configAndStartExoPlayer()
-      updateAudioPlaybackStatus()
     }
   }
 
@@ -672,7 +760,7 @@ class AudioService : Service(), Player.Listener {
       }
       memorizationEngine.pause()
     }
-    if (State.Playing == state) {
+    if (State.Playing == state || State.Paused == state) {
       // Pause exo player and cancel the 'foreground service' state.
       state = State.Paused
       serviceHandler.removeMessages(MSG_UPDATE_AUDIO_POS)
@@ -694,6 +782,11 @@ class AudioService : Service(), Player.Listener {
 
   private fun processRewindRequest() {
     if (memorizationEngine.state.value.isActive) {
+      pauseCountdownJob?.cancel()
+      pauseCountdownJob = null
+      pauseRemainingSeconds = 0
+      recitationRecorder?.cancelRecording()
+      memorizationEngine.setRecordingRecitation(false)
       memorizationEngine.previousStep()
       val prevAyah = memorizationEngine.state.value.currentPlayingAyah
       val localAudioQueue = audioQueue
@@ -747,6 +840,11 @@ class AudioService : Service(), Player.Listener {
       return
     }
     if (memorizationEngine.state.value.isActive) {
+      pauseCountdownJob?.cancel()
+      pauseCountdownJob = null
+      pauseRemainingSeconds = 0
+      recitationRecorder?.cancelRecording()
+      memorizationEngine.setRecordingRecitation(false)
       memorizationEngine.skipCurrentStep()
       val nextAyah = memorizationEngine.state.value.currentPlayingAyah
       val localAudioQueue = audioQueue
@@ -785,6 +883,7 @@ class AudioService : Service(), Player.Listener {
   private fun processStopRequest(force: Boolean = false) {
     pauseCountdownJob?.cancel()
     pauseCountdownJob = null
+    pauseRemainingSeconds = 0
     recitationRecorder?.cancelRecording()
     recitationRecorder?.stopPlayback()
     if (memorizationEngine.state.value.isActive) {
@@ -816,9 +915,23 @@ class AudioService : Service(), Player.Listener {
     val localAudioRequest = audioRequest ?: return
     updateAudioPlaybackStatus()
 
+    val memState = memorizationEngine.state.value
+    val title = getTitle()
+    val subtitle = if (memState.isActive) {
+      memState.hudSummary.ifEmpty { "Memorization Mode" }
+    } else {
+      localAudioRequest.qari.name
+    }
+
     val metadataBuilder = MediaMetadataCompat.Builder()
-      .putString(MediaMetadataCompat.METADATA_KEY_TITLE, getTitle())
+      .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
       .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, localAudioRequest.qari.name)
+      .putString(
+        MediaMetadataCompat.METADATA_KEY_ALBUM,
+        if (memState.isActive) "Window ${memState.currentWindowIndex + 1}/${memState.totalWindows}" else localAudioRequest.qari.name
+      )
+      .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, subtitle)
+      .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, subtitle)
     val localPlayer = player
     if (localPlayer?.isPlaying == true) {
       metadataBuilder.putLong(
@@ -929,11 +1042,30 @@ class AudioService : Service(), Player.Listener {
     return if (audioQueue == null) {
       ""
     } else {
-      quranDisplayData.getSuraAyahString(
+      val ayahStr = quranDisplayData.getSuraAyahString(
         this,
         audioQueue.getCurrentSura(),
         audioQueue.getCurrentAyah()
       )
+      if (memorizationEngine.state.value.isActive) {
+        val memState = memorizationEngine.state.value
+        val step = memState.currentStep
+        val stepDesc = when (step?.stepType) {
+          StepType.SOLO -> "Solo (${memState.currentRepeatIteration}/${memState.totalRepeatIterations})"
+          StepType.CONNECT -> {
+            val first = step.ayahs.firstOrNull()
+            val last = step.ayahs.lastOrNull()
+            val range = if (first != null && last != null) "Ayah ${first.ayah}-${last.ayah}" else "Connect"
+            "$range (${memState.currentRepeatIteration}/${memState.totalRepeatIterations})"
+          }
+          StepType.PAUSE_FOR_RECITATION -> "Recite Now (${memState.pauseRemainingSeconds}s)"
+          StepType.BRIDGE -> "Bridge"
+          else -> "Memorizing"
+        }
+        "$ayahStr • $stepDesc"
+      } else {
+        ayahStr
+      }
     }
   }
 
@@ -1262,10 +1394,16 @@ class AudioService : Service(), Player.Listener {
         memorizationEngine.setRecordingRecitation(started)
       }
 
+      pauseRemainingSeconds = delaySeconds
       pauseCountdownJob = scope.launch {
-        for (remaining in delaySeconds downTo 1) {
-          memorizationEngine.updatePauseRemaining(remaining)
-          delay(1000L)
+        while (pauseRemainingSeconds > 0) {
+          if (!memorizationEngine.state.value.isPaused) {
+            memorizationEngine.updatePauseRemaining(pauseRemainingSeconds)
+            delay(1000L)
+            pauseRemainingSeconds--
+          } else {
+            delay(200L)
+          }
         }
         memorizationEngine.updatePauseRemaining(0)
 
@@ -1331,7 +1469,19 @@ class AudioService : Service(), Player.Listener {
 
   /** Updates the notification.  */
   private fun updateNotification() {
-    notificationBuilder?.setContentText(getTitle())
+    val audioTitle = getTitle()
+    notificationBuilder?.apply {
+      setContentTitle(
+        if (memorizationEngine.state.value.isActive) {
+          val memState = memorizationEngine.state.value
+          "Quran Memorizer (Window ${memState.currentWindowIndex + 1}/${memState.totalWindows})"
+        } else {
+          getString(R.string.app_name)
+        }
+      )
+      setContentText(audioTitle)
+      setSubText(if (memorizationEngine.state.value.isActive) audioRequest?.qari?.name else null)
+    }
     if (!didSetNotificationIconOnNotificationBuilder && notificationIcon != null) {
       notificationBuilder?.setLargeIcon(notificationIcon)
       didSetNotificationIconOnNotificationBuilder = true
@@ -1436,8 +1586,17 @@ class AudioService : Service(), Player.Listener {
       currentNotificationBuilder
     }
 
+    updatedBuilder.setContentTitle(
+      if (memorizationEngine.state.value.isActive) {
+        val memState = memorizationEngine.state.value
+        "Quran Memorizer (Window ${memState.currentWindowIndex + 1}/${memState.totalWindows})"
+      } else {
+        getString(R.string.app_name)
+      }
+    )
     updatedBuilder.setTicker(audioTitle)
     updatedBuilder.setContentText(audioTitle)
+    updatedBuilder.setSubText(if (memorizationEngine.state.value.isActive) audioRequest?.qari?.name else null)
     startForeground(NOTIFICATION_ID, updatedBuilder.build())
     isSetupAsForeground = true
   }
@@ -1446,8 +1605,16 @@ class AudioService : Service(), Player.Listener {
     val appContext = applicationContext
 
     val mutabilityFlag = PendingIntent.FLAG_IMMUTABLE
+    val previousIntent = PendingIntent.getService(
+      appContext, REQUEST_CODE_PREVIOUS, audioUtils.getAudioIntent(this, ACTION_REWIND),
+      PendingIntent.FLAG_UPDATE_CURRENT or mutabilityFlag
+    )
     val resumeIntent = PendingIntent.getService(
-      appContext, REQUEST_CODE_RESUME, audioUtils.getAudioIntent(this, ACTION_PLAYBACK),
+      appContext, REQUEST_CODE_RESUME, audioUtils.getAudioIntent(this, ACTION_PLAY),
+      PendingIntent.FLAG_UPDATE_CURRENT or mutabilityFlag
+    )
+    val nextIntent = PendingIntent.getService(
+      appContext, REQUEST_CODE_SKIP, audioUtils.getAudioIntent(this, ACTION_SKIP),
       PendingIntent.FLAG_UPDATE_CURRENT or mutabilityFlag
     )
     val stopIntent = PendingIntent.getService(
@@ -1462,18 +1629,19 @@ class AudioService : Service(), Player.Listener {
       builder
         .setSmallIcon(R.drawable.ic_notification)
         .setColor(notificationColor)
-        .setOngoing(true)
-        .setContentTitle(getString(R.string.app_name))
+        .setOngoing(false)
         .setContentIntent(pi)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .addAction(R.drawable.ic_previous, getString(R.string.previous), previousIntent)
         .addAction(com.quran.labs.androidquran.common.toolbar.R.drawable.ic_play, getString(R.string.play), resumeIntent)
+        .addAction(R.drawable.ic_next, getString(R.string.next), nextIntent)
         .addAction(R.drawable.ic_stop, getString(R.string.stop), stopIntent)
         .setShowWhen(false)
         .setWhen(0)
         .setLargeIcon(notificationIcon)
         .setStyle(
           androidx.media.app.NotificationCompat.MediaStyle()
-            .setShowActionsInCompactView(0, 1)
+            .setShowActionsInCompactView(0, 1, 2)
             .setMediaSession(mediaSession.sessionToken)
         )
       pausedNotificationBuilder = builder
@@ -1482,7 +1650,16 @@ class AudioService : Service(), Player.Listener {
       localPausedNotificationBuilder
     }
 
+    pauseBuilder.setContentTitle(
+      if (memorizationEngine.state.value.isActive) {
+        val memState = memorizationEngine.state.value
+        "Quran Memorizer (Window ${memState.currentWindowIndex + 1}/${memState.totalWindows}) [Paused]"
+      } else {
+        getString(R.string.app_name)
+      }
+    )
     pauseBuilder.setContentText(getTitle())
+    pauseBuilder.setSubText(if (memorizationEngine.state.value.isActive) audioRequest?.qari?.name else null)
     return pauseBuilder
   }
 

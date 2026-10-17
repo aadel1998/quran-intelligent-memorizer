@@ -53,6 +53,8 @@ class AudioBarWrapper @JvmOverloads constructor(
   @Inject
   lateinit var memorizationEngine: MemorizationEngine
 
+  var onEnterPip: (() -> Unit)? = null
+
   init {
     (context as? AudioBarInjector)?.inject(this)
   }
@@ -102,6 +104,7 @@ class AudioBarWrapper @JvmOverloads constructor(
             },
             onToggleMask = { memorizationEngine.toggleTextMask() },
             onOpenSettings = { showLiveSettingsSheet = true },
+            onEnterPip = onEnterPip,
             onReplayRecitation = {
               val path = memorizationState.lastRecitationAudioPath
               if (path != null) {
