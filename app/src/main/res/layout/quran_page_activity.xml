@@ -44,13 +44,37 @@
           android:visibility="gone"
           />
     </androidx.appcompat.widget.Toolbar>
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/modern_reader_top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        />
   </FrameLayout>
+
+  <androidx.compose.ui.platform.ComposeView
+      android:id="@+id/modern_reader_bottom_bar"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_gravity="bottom"
+      android:visibility="gone"
+      />
 
   <com.quran.mobile.feature.audiobar.AudioBarWrapper
       android:id="@+id/audio_area"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
       android:layout_gravity="bottom"
+      android:visibility="gone"
+      />
+
+  <androidx.compose.ui.platform.ComposeView
+      android:id="@+id/modern_ayah_action_sheet"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_gravity="bottom"
+      android:elevation="20dp"
       android:visibility="gone"
       />
 </FrameLayout>

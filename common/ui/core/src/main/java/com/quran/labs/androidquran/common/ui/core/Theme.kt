@@ -103,6 +103,11 @@ object QuranIcons {
   val List: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.List
   val KeyboardArrowUp: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.KeyboardArrowUp
   val KeyboardArrowDown: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.KeyboardArrowDown
+  val BookmarkFilled: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.BookmarkFilled
+  val DarkMode: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.DarkMode
+  val Translate: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Translate
+  val Share: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Share
+  val ContentCopy: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.ContentCopy
 }
 
 @Composable

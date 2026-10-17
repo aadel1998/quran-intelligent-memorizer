@@ -45,6 +45,17 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
+import com.quran.mobile.common.ui.core.R as UiCoreR
+import com.quran.labs.androidquran.ui.modern.ModernAyahActionSheet
+import com.quran.labs.androidquran.ui.modern.ModernPageScrubber
+import com.quran.labs.androidquran.ui.modern.ModernReaderTopBar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -285,6 +296,14 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   private val foregroundDisposable = CompositeDisposable()
   private val scope = MainScope()
 
+  private var modernTopBar: ComposeView? = null
+  private var modernBottomBar: ComposeView? = null
+  private var modernAyahActionSheet: ComposeView? = null
+  private var isModernUi = false
+  private var readerTopBarState by mutableStateOf(ModernReaderTopBarState())
+  private var readerBottomBarState by mutableStateOf(ModernReaderBottomBarState())
+  private var ayahActionSheetState by mutableStateOf(ModernAyahActionSheetState())
+
   val pagerActivityComponent: PagerActivityComponent by lazy {
     (application as QuranApplication)
       .applicationComponent
@@ -512,6 +531,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     toolBarArea = findViewById(R.id.toolbar_area)
     translationsSpinner = findViewById(R.id.spinner)
     overlay = findViewById(R.id.overlay)
+    modernTopBar = findViewById(R.id.modern_reader_top_bar)
+    modernBottomBar = findViewById(R.id.modern_reader_bottom_bar)
+    isModernUi = quranSettings.isModernUiEnabled
 
     ViewCompat.setOnApplyWindowInsetsListener(toolBarArea) { view, windowInsets ->
       val insets = windowInsets.getInsets(
@@ -526,8 +548,13 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     val toolbar = findViewById<Toolbar>(R.id.toolbar)
     setSupportActionBar(toolbar)
 
-    supportActionBar?.setDisplayShowHomeEnabled(true)
-    supportActionBar?.setDisplayHomeAsUpEnabled(true)
+    if (isModernUi) {
+      toolbar.visibility = View.GONE
+      toolBarArea.background = null
+    } else {
+      supportActionBar?.setDisplayShowHomeEnabled(true)
+      supportActionBar?.setDisplayHomeAsUpEnabled(true)
+    }
 
     initAyahActionPanel()
 
@@ -571,6 +598,10 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     viewPager.setAdapter(pagerAdapter)
 
     ayahToolBar.setOnItemSelectedListener(AyahMenuItemSelectionHandler())
+
+    if (isModernUi) {
+      setupModernReaderChrome()
+    }
     val onPageChangeListener: OnPageChangeListener = object : OnPageChangeListener {
       override fun onPageScrollStateChanged(state: Int) {
       }
@@ -818,6 +849,30 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       val startPosition = startPosition(ayahSelection)
       updateLocalTranslations(startPosition)
       onClearAyahModeBackCallback.isEnabled = selectionStart != null
+
+      if (isModernUi && startPosition != null) {
+        val endPosition = when (ayahSelection) {
+          is AyahRange -> ayahSelection.endSuraAyah
+          else -> startPosition
+        }
+        val suraNumber = startPosition.sura
+        val sura = quranDisplayData.getSuraName(this, suraNumber, true)
+        val arabicSuraNames = resources.getStringArray(UiCoreR.array.sura_names_arabic)
+        val arabicName = if (suraNumber in 1..114) arabicSuraNames[suraNumber - 1] else ""
+        lifecycleScope.launch {
+          val isBookmarked = withContext(Dispatchers.IO) {
+            bookmarksDao.isSuraAyahBookmarked(startPosition)
+          }
+          ayahActionSheetState = ModernAyahActionSheetState(
+            visible = true,
+            suraName = sura,
+            arabicSuraName = arabicName,
+            startAyah = startPosition.ayah,
+            endAyah = endPosition.ayah,
+            isBookmarked = isBookmarked
+          )
+        }
+      }
     } else {
       endAyahMode()
       onClearAyahModeBackCallback.isEnabled = false
@@ -920,6 +975,18 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       .translationY((if (visible) 0 else -toolBarArea.height).toFloat())
       .setDuration(250)
       .start()
+
+    if (isModernUi && modernBottomBar != null) {
+      val bottomHeight = if (modernBottomBar!!.height > 0) modernBottomBar!!.height else 250
+      val shouldShowAudioBar = visible || memorizationEngine.state.value.isActive
+      val audioOffset = if (shouldShowAudioBar && ::audioStatusBar.isInitialized && audioStatusBar.height > 0) {
+        -audioStatusBar.height.toFloat()
+      } else 0f
+      modernBottomBar?.animate()
+        ?.translationY(if (visible) audioOffset else (bottomHeight + 100).toFloat())
+        ?.setDuration(250)
+        ?.start()
+    }
 
     // and audio bar: keep visible during memorization
     val shouldShowAudioBar = visible || memorizationEngine.state.value.isActive
@@ -1388,6 +1455,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       val desc = quranDisplayData.getPageSubtitle(this, page)
       actionBar.subtitle = desc
     }
+    if (isModernUi) {
+      updateModernReaderUi(page)
+    }
   }
 
   private fun refreshActionBarSpinner() {
@@ -1525,6 +1595,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   override fun setPageReadingBookmarkSelected(isBookmarked: Boolean) {
     isCurrentPageReadingBookmarked = isBookmarked
     refreshBookmarksMenu(isBookmarked)
+    if (isModernUi) {
+      updateModernReaderUi(currentPage)
+    }
   }
 
   override fun showReadingBookmarkChangedToast(
@@ -2211,6 +2284,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     get() = audioStatusRepositoryBridge.audioRequest()
 
   fun endAyahMode() {
+    if (isModernUi) {
+      ayahActionSheetState = ayahActionSheetState.copy(visible = false)
+    }
     readingEventPresenterBridge.clearSelectedAyah()
     slidingPanel.collapsePane()
   }
@@ -2521,6 +2597,202 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     }
   }
 
+  private fun setupModernReaderChrome() {
+    val topBarView = modernTopBar ?: return
+    val bottomBarView = modernBottomBar ?: return
+
+    topBarView.visibility = View.VISIBLE
+    bottomBarView.visibility = View.VISIBLE
+
+    topBarView.setContent {
+      QuranTheme {
+        ModernReaderTopBar(
+          suraName = readerTopBarState.suraName,
+          arabicSuraName = readerTopBarState.arabicSuraName,
+          pageNumber = readerTopBarState.page,
+          juzNumber = readerTopBarState.juzNumber,
+          hizbNumber = readerTopBarState.hizbNumber,
+          rubNumber = readerTopBarState.rubNumber,
+          isReadingBookmarked = readerTopBarState.isReadingBookmarked,
+          isNightMode = readerTopBarState.isNightMode,
+          isTranslationMode = readerTopBarState.isTranslationMode,
+          onBackClick = {
+            onSessionEnd()
+            finish()
+          },
+          onBookmarkClick = {
+            showReadingBookmarkSheet(ReadingBookmarkTarget.Page(currentPage))
+          },
+          onTranslationClick = {
+            if (showingTranslation) {
+              switchToQuran()
+            } else {
+              if (translations != null) {
+                quranEventLogger.switchToTranslationMode(translations!!.size)
+                switchToTranslation()
+              }
+            }
+          },
+          onNightModeToggle = {
+            val prefs = PreferenceManager.getDefaultSharedPreferences(this@PagerActivity)
+            val isNight = prefs.getBoolean(Constants.PREF_NIGHT_MODE, false)
+            val nextNight = !isNight
+            prefs.edit().putBoolean(Constants.PREF_NIGHT_MODE, nextNight).apply()
+            refreshQuranPages()
+            updateModernReaderUi(currentPage)
+          },
+          onJumpClick = {
+            val fm = supportFragmentManager
+            val jumpDialog = JumpFragment()
+            jumpDialog.show(fm, JumpFragment.TAG)
+          },
+          onSettingsClick = {
+            startActivity(Intent(this@PagerActivity, QuranPreferenceActivity::class.java))
+          }
+        )
+      }
+    }
+
+    bottomBarView.setContent {
+      QuranTheme {
+        ModernPageScrubber(
+          currentPage = readerBottomBarState.page,
+          totalPages = readerBottomBarState.totalPages,
+          currentSuraName = readerBottomBarState.suraName,
+          onPageChanged = { targetPage ->
+            val position = quranInfo.getPositionFromPage(targetPage, isDualPageVisible)
+            viewPager.currentItem = position
+          },
+          onJumpClick = {
+            val fm = supportFragmentManager
+            val jumpDialog = JumpFragment()
+            jumpDialog.show(fm, JumpFragment.TAG)
+          }
+        )
+      }
+    }
+
+    val ayahSheetView = findViewById<ComposeView>(R.id.modern_ayah_action_sheet)
+    modernAyahActionSheet = ayahSheetView
+    ayahSheetView.visibility = View.VISIBLE
+    ayahSheetView.setContent {
+      QuranTheme {
+        ModernAyahActionSheet(
+          visible = ayahActionSheetState.visible,
+          suraName = ayahActionSheetState.suraName,
+          arabicSuraName = ayahActionSheetState.arabicSuraName,
+          startAyah = ayahActionSheetState.startAyah,
+          endAyah = ayahActionSheetState.endAyah,
+          isBookmarked = ayahActionSheetState.isBookmarked,
+          onPlayClick = {
+            val start = selectionStart
+            if (start != null) {
+              quranEventLogger.logAudioPlayback(
+                QuranEventLogger.AudioPlaybackSource.AYAH,
+                currentQariItem(), isDualPages, showingTranslation, isSplitScreen
+              )
+              playFromAyah(start.sura, start.ayah)
+              toggleActionBarVisibility(true)
+            }
+            endAyahMode()
+          },
+          onMemorizeClick = {
+            openMemorizationSetup()
+            endAyahMode()
+          },
+          onBookmarkClick = {
+            val start = selectionStart
+            if (start != null) {
+              showAyahBookmarkSheet(start)
+            }
+            endAyahMode()
+          },
+          onTranslateClick = {
+            val sliderPage = slidingPagerAdapter.getPagePosition(SlidingPagerAdapter.TRANSLATION_PAGE)
+            showSlider(sliderPage)
+            endAyahMode()
+          },
+          onCopyClick = {
+            val start = selectionStart
+            val end = selectionEnd ?: start
+            if (start != null) {
+              shareAyah(start, end, true)
+            }
+            endAyahMode()
+          },
+          onShareClick = {
+            val start = selectionStart
+            val end = selectionEnd ?: start
+            if (start != null) {
+              shareAyah(start, end, false)
+            }
+            endAyahMode()
+          },
+          onDismiss = {
+            endAyahMode()
+          }
+        )
+      }
+    }
+
+    ayahToolBar.viewTreeObserver.addOnPreDrawListener {
+      if (isModernUi && ayahToolBar.visibility != View.GONE) {
+        ayahToolBar.visibility = View.GONE
+      }
+      true
+    }
+
+    if (isActionBarHidden) {
+      toolBarArea.post {
+        toolBarArea.translationY = -toolBarArea.height.toFloat()
+      }
+      bottomBarView.post {
+        val h = if (bottomBarView.height > 0) bottomBarView.height else 250
+        bottomBarView.translationY = (h + 100).toFloat()
+      }
+    }
+  }
+
+  private fun updateModernReaderUi(page: Int) {
+    if (!isModernUi) return
+    val suraNumber = quranInfo.getSuraNumberFromPage(page)
+    val sura = quranDisplayData.getSuraNameFromPage(this, page, true)
+    val arabicSuraNames = resources.getStringArray(UiCoreR.array.sura_names_arabic)
+    val arabicName = if (suraNumber in 1..114) arabicSuraNames[suraNumber - 1] else ""
+    val juz = quranInfo.getJuzForDisplayFromPage(page)
+    val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+    val isNight = prefs.getBoolean(Constants.PREF_NIGHT_MODE, false)
+
+    var activeRub = 0
+    for (p in page downTo 1) {
+      val r = quranInfo.getRub3FromPage(p)
+      if (r != -1) {
+        activeRub = r
+        break
+      }
+    }
+    val hizb = (activeRub / 4) + 1
+    val rub = (activeRub % 4) + 1
+
+    readerTopBarState = ModernReaderTopBarState(
+      page = page,
+      suraName = sura,
+      arabicSuraName = arabicName,
+      juzNumber = juz,
+      hizbNumber = hizb,
+      rubNumber = rub,
+      isReadingBookmarked = isCurrentPageReadingBookmarked,
+      isNightMode = isNight,
+      isTranslationMode = showingTranslation
+    )
+
+    readerBottomBarState = ModernReaderBottomBarState(
+      page = page,
+      totalPages = quranInfo.numberOfPages,
+      suraName = sura
+    )
+  }
+
   companion object {
     private const val AUDIO_DOWNLOAD_KEY = "AUDIO_DOWNLOAD_KEY"
     private const val LAST_READ_PAGE = "LAST_READ_PAGE"
@@ -2546,3 +2818,31 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     private const val PANEL_MAX_HEIGHT = 0.6f
   }
 }
+
+data class ModernReaderTopBarState(
+  val page: Int = 1,
+  val suraName: String = "",
+  val arabicSuraName: String = "",
+  val juzNumber: Int = 1,
+  val hizbNumber: Int = 1,
+  val rubNumber: Int = 1,
+  val isReadingBookmarked: Boolean = false,
+  val isNightMode: Boolean = false,
+  val isTranslationMode: Boolean = false
+)
+
+data class ModernReaderBottomBarState(
+  val page: Int = 1,
+  val totalPages: Int = 604,
+  val suraName: String = ""
+)
+
+data class ModernAyahActionSheetState(
+  val visible: Boolean = false,
+  val suraName: String = "",
+  val arabicSuraName: String = "",
+  val startAyah: Int = 1,
+  val endAyah: Int = 1,
+  val isBookmarked: Boolean = false
+)
+
