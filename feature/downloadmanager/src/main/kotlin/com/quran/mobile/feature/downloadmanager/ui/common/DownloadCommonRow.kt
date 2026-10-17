@@ -35,7 +35,7 @@ fun DownloadCommonRow(
   onRowLongPressed: (() -> Unit)? = null,
   icon: @Composable RowScope.() -> Unit
 ) {
-  val baseModifier = modifier.fillMaxWidth()
+  val baseModifier = Modifier.fillMaxWidth()
   val clickModifier =
     if (onRowLongPressed != null) {
       baseModifier
@@ -48,26 +48,39 @@ fun DownloadCommonRow(
         .clickable { onRowPressed() }
     }
 
-  Row(
-    modifier = clickModifier
-      .padding(16.dp)
+  Surface(
+    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    border = androidx.compose.foundation.BorderStroke(
+      0.5.dp,
+      MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+    ),
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(horizontal = 16.dp, vertical = 4.dp)
   ) {
-    icon()
-    Column(
-      modifier = Modifier
-        .padding(start = 8.dp)
-        .align(Alignment.CenterVertically)
+    Row(
+      modifier = clickModifier
+        .padding(horizontal = 14.dp, vertical = 12.dp),
+      verticalAlignment = Alignment.CenterVertically
     ) {
-      Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface
-      )
-      Text(
-        text = subtitle,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
+      icon()
+      Column(
+        modifier = Modifier
+          .padding(start = 12.dp)
+          .weight(1f)
+      ) {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+          text = subtitle,
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
     }
   }
 }

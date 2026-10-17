@@ -58,5 +58,4 @@
       android:scaleType="center"
       tools:ignore="ContentDescription"
       app:tint="@color/icon_tint" />
-      />
 </LinearLayout>

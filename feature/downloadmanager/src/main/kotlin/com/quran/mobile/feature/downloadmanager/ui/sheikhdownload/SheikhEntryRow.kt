@@ -33,7 +33,7 @@ fun SheikhEntryRow(
   onEntryLongClicked: ((EntryForQari) -> Unit)
 ) {
   val modifier = if (isSelected) {
-    Modifier.background(MaterialTheme.colorScheme.tertiaryContainer)
+    Modifier.background(androidx.compose.ui.graphics.Color(0x3310B981))
   } else { Modifier }
 
   val title = when (sheikhEntryUiModel) {
@@ -52,11 +52,11 @@ fun SheikhEntryRow(
       Image(
         imageVector = QuranIcons.Close,
         contentDescription = stringResource(deleteEntryResourceId),
-        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onError),
+        colorFilter = ColorFilter.tint(androidx.compose.ui.graphics.Color.White),
         modifier = Modifier
           .align(Alignment.CenterVertically)
           .clip(CircleShape)
-          .background(MaterialTheme.colorScheme.error)
+          .background(androidx.compose.ui.graphics.Color(0xFFEF4444).copy(alpha = 0.85f))
           .padding(8.dp)
       )
     }
@@ -71,11 +71,11 @@ fun SheikhEntryRow(
       Image(
         painterResource(id = R.drawable.ic_download),
         contentDescription = stringResource(downloadEntryResourceId),
-        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onTertiary),
+        colorFilter = ColorFilter.tint(androidx.compose.ui.graphics.Color(0xFF10B981)),
         modifier = Modifier
           .align(Alignment.CenterVertically)
           .clip(CircleShape)
-          .background(MaterialTheme.colorScheme.tertiary)
+          .background(androidx.compose.ui.graphics.Color(0xFF10B981).copy(alpha = 0.15f))
           .padding(8.dp)
       )
     }

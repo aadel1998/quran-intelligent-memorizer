@@ -10,15 +10,19 @@
       android:id="@+id/separator_txt"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:textColor="@color/accent_color"
-      android:paddingBottom="4dp"
+      android:textColor="#10B981"
+      android:paddingStart="8dp"
+      android:paddingEnd="8dp"
+      android:paddingBottom="6dp"
+      android:paddingTop="8dp"
       android:gravity="bottom"
-      android:textSize="14sp"
+      android:textStyle="bold"
+      android:textSize="13sp"
       />
   <View
       android:id="@+id/line"
       android:layout_width="match_parent"
-      android:layout_height="1dp"
-      android:background="@color/accent_color"
+      android:layout_height="0.5dp"
+      android:background="#27272A"
       />
 </LinearLayout>

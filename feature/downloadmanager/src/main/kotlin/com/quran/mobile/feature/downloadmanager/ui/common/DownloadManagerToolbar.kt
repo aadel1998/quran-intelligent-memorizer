@@ -11,6 +11,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.modifier.autoMirror
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+
 @Composable
 fun DownloadManagerToolbar(
   title: String,
@@ -21,6 +26,7 @@ fun DownloadManagerToolbar(
     title = {
       Text(
         text = title,
+        fontWeight = FontWeight.SemiBold,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
       )
@@ -29,11 +35,17 @@ fun DownloadManagerToolbar(
       IconButton(onClick = onBackPressed) {
         Icon(
           imageVector = QuranIcons.ArrowBack,
-          contentDescription = "",
+          contentDescription = "Back",
+          tint = Color(0xFF10B981),
           modifier = Modifier.autoMirror()
         )
       }
     },
+    colors = TopAppBarDefaults.topAppBarColors(
+      containerColor = MaterialTheme.colorScheme.surface,
+      titleContentColor = MaterialTheme.colorScheme.onSurface,
+      actionIconContentColor = Color(0xFF10B981)
+    ),
     actions = actions
   )
 }

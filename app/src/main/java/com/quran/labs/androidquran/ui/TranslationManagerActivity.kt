@@ -7,11 +7,13 @@ import android.util.SparseIntArray
 import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.Toolbar
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
@@ -22,6 +24,8 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.snackbar.Snackbar
 import com.quran.labs.androidquran.QuranApplication
 import com.quran.labs.androidquran.R
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
+import com.quran.labs.androidquran.ui.modern.ModernTranslationScreen
 import com.quran.labs.androidquran.dao.translation.TranslationHeader
 import com.quran.labs.androidquran.dao.translation.TranslationItem
 import com.quran.labs.androidquran.dao.translation.TranslationRowData
@@ -70,15 +74,19 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
   @Inject
   lateinit var quranSettings: QuranSettings
 
-  private lateinit var adapter: TranslationsAdapter
-  private lateinit var selectionListener: TranslationSelectionListener
-  private lateinit var onClickDownloadDisposable: Disposable
-  private lateinit var onClickRemoveDisposable: Disposable
-  private lateinit var onClickRankUpDisposable: Disposable
-  private lateinit var onClickRankDownDisposable: Disposable
+  private var adapter: TranslationsAdapter? = null
+  private var selectionListener: TranslationSelectionListener? = null
+  private var onClickDownloadDisposable: Disposable? = null
+  private var onClickRemoveDisposable: Disposable? = null
+  private var onClickRankUpDisposable: Disposable? = null
+  private var onClickRankDownDisposable: Disposable? = null
 
-  private lateinit var translationSwipeRefresh: SwipeRefreshLayout
-  private lateinit var translationRecycler: RecyclerView
+  private var translationSwipeRefresh: SwipeRefreshLayout? = null
+  private var translationRecycler: RecyclerView? = null
+
+  private val modernItems = mutableStateOf<List<TranslationItem>>(emptyList())
+  private val modernDownloadingId = mutableStateOf<Int?>(null)
+  private val modernIsRefreshing = mutableStateOf(false)
 
   private val scope = MainScope()
 
@@ -87,66 +95,87 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
     enableEdgeToEdge()
 
     (application as QuranApplication).applicationComponent.inject(this)
-    setContentView(R.layout.translation_manager)
-    translationSwipeRefresh = findViewById(R.id.translation_swipe_refresh)
-
-    val toolbar = findViewById<Toolbar>(R.id.toolbar)
-    toolbar.setTitle(R.string.menu_translation)
-    setSupportActionBar(toolbar)
-    val ab = supportActionBar
-    ab?.setDisplayHomeAsUpEnabled(true)
-
-    val root = findViewById<ViewGroup>(R.id.root)
-    ViewCompat.setOnApplyWindowInsetsListener(root) { _, windowInsets ->
-      val insets = windowInsets.getInsets(
-        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-      )
-      root.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-        topMargin = insets.top
-        leftMargin = insets.left
-        rightMargin = insets.right
-      }
-
-      windowInsets
-    }
-
-    translationRecycler = findViewById(R.id.translation_recycler)
-    val layoutManager: RecyclerView.LayoutManager = LinearLayoutManager(this)
-    translationRecycler.setLayoutManager(layoutManager)
-    adapter = TranslationsAdapter(this)
-    translationRecycler.setAdapter(adapter)
-
-    ViewCompat.setOnApplyWindowInsetsListener(translationRecycler) { view, windowInsets ->
-      val insets = windowInsets.getInsets(
-        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-      )
-      translationRecycler.updateLayoutParams<ViewGroup.LayoutParams> {
-        // top, left, right are handled by QuranActivity
-        view.setPadding(0, 0, 0, insets.bottom)
-      }
-
-      windowInsets
-    }
-
-    selectionListener = TranslationSelectionListener(adapter)
     databaseDirectory = quranFileUtils.getQuranDatabaseDirectory()
 
-    val actionBar = supportActionBar
-    if (actionBar != null) {
-      actionBar.setDisplayHomeAsUpEnabled(true)
-      actionBar.setTitle(R.string.prefs_translations)
+    if (quranSettings.isModernUiEnabled) {
+      setContent {
+        QuranTheme {
+          ModernTranslationScreen(
+            items = modernItems.value,
+            isRefreshing = modernIsRefreshing.value,
+            downloadingItemId = modernDownloadingId.value,
+            onRefresh = { onRefresh() },
+            onBack = { finish() },
+            onDownload = { downloadItem(it) },
+            onRemove = { removeItem(it) },
+            onMoveUp = { moveItemUp(it) },
+            onMoveDown = { moveItemDown(it) }
+          )
+        }
+      }
+    } else {
+      setContentView(R.layout.translation_manager)
+      val swipeRefresh = findViewById<SwipeRefreshLayout>(R.id.translation_swipe_refresh)
+      translationSwipeRefresh = swipeRefresh
+
+      val toolbar = findViewById<Toolbar>(R.id.toolbar)
+      toolbar.setTitle(R.string.menu_translation)
+      setSupportActionBar(toolbar)
+      val ab = supportActionBar
+      ab?.setDisplayHomeAsUpEnabled(true)
+
+      val root = findViewById<ViewGroup>(R.id.root)
+      ViewCompat.setOnApplyWindowInsetsListener(root) { _, windowInsets ->
+        val insets = windowInsets.getInsets(
+          WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
+        root.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+          topMargin = insets.top
+          leftMargin = insets.left
+          rightMargin = insets.right
+        }
+
+        windowInsets
+      }
+
+      val recycler = findViewById<RecyclerView>(R.id.translation_recycler)
+      translationRecycler = recycler
+      recycler.layoutManager = LinearLayoutManager(this)
+      val newAdapter = TranslationsAdapter(this)
+      adapter = newAdapter
+      recycler.adapter = newAdapter
+
+      ViewCompat.setOnApplyWindowInsetsListener(recycler) { view, windowInsets ->
+        val insets = windowInsets.getInsets(
+          WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
+        recycler.updateLayoutParams<ViewGroup.LayoutParams> {
+          view.setPadding(0, 0, 0, insets.bottom)
+        }
+
+        windowInsets
+      }
+
+      selectionListener = TranslationSelectionListener(newAdapter)
+
+      val actionBar = supportActionBar
+      if (actionBar != null) {
+        actionBar.setDisplayHomeAsUpEnabled(true)
+        actionBar.setTitle(R.string.prefs_translations)
+      }
+
+      onClickDownloadDisposable = newAdapter.getOnClickDownloadSubject()
+        .subscribe { translationRowData: TranslationRowData -> downloadItem(translationRowData) }
+      onClickRemoveDisposable = newAdapter.getOnClickRemoveSubject()
+        .subscribe { translationRowData: TranslationRowData -> removeItem(translationRowData) }
+      onClickRankUpDisposable = newAdapter.getOnClickRankUpSubject()
+        .subscribe { targetRow: TranslationRowData -> rankUpItem(targetRow) }
+      onClickRankDownDisposable = newAdapter.getOnClickRankDownSubject()
+        .subscribe { targetRow: TranslationRowData -> rankDownItem(targetRow) }
+      swipeRefresh.setOnRefreshListener { onRefresh() }
+      swipeRefresh.isRefreshing = true
     }
 
-    onClickDownloadDisposable = adapter.getOnClickDownloadSubject()
-      .subscribe { translationRowData: TranslationRowData -> downloadItem(translationRowData) }
-    onClickRemoveDisposable = adapter.getOnClickRemoveSubject()
-      .subscribe { translationRowData: TranslationRowData -> removeItem(translationRowData) }
-    onClickRankUpDisposable = adapter.getOnClickRankUpSubject()
-      .subscribe { targetRow: TranslationRowData -> rankUpItem(targetRow) }
-    onClickRankDownDisposable = adapter.getOnClickRankDownSubject()
-      .subscribe { targetRow: TranslationRowData -> rankDownItem(targetRow) }
-    translationSwipeRefresh.setOnRefreshListener { onRefresh() }
-    translationSwipeRefresh.isRefreshing = true
     refreshTranslations()
   }
 
@@ -163,10 +192,10 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
 
   override fun onDestroy() {
     scope.cancel()
-    onClickDownloadDisposable.dispose()
-    onClickRemoveDisposable.dispose()
-    onClickRankUpDisposable.dispose()
-    onClickRankDownDisposable.dispose()
+    onClickDownloadDisposable?.dispose()
+    onClickRemoveDisposable?.dispose()
+    onClickRankUpDisposable?.dispose()
+    onClickRankDownDisposable?.dispose()
     super.onDestroy()
   }
 
@@ -215,6 +244,7 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
       settings.activeTranslations = activeTranslations
     }
     this.downloadingItem = null
+    modernDownloadingId.value = null
     generateListItems()
   }
 
@@ -237,9 +267,12 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
       }
     }
     this.downloadingItem = null
+    modernDownloadingId.value = null
   }
 
   private fun onRefresh() {
+    modernIsRefreshing.value = true
+    translationSwipeRefresh?.isRefreshing = true
     refreshTranslations(true)
   }
 
@@ -265,31 +298,37 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
   }
 
   private fun updateDownloadedItems() {
-    val translations = adapter.getTranslations().toMutableList()
-    val downloadedItemCount = currentSortedDownloads.size
-    if (downloadedItemCount + 1 <= translations.size) {
-      for (i in 0 until downloadedItemCount) {
-        translations.removeAt(1)
+    adapter?.let { adp ->
+      val translations = adp.getTranslations().toMutableList()
+      val downloadedItemCount = currentSortedDownloads.size
+      if (downloadedItemCount + 1 <= translations.size) {
+        for (i in 0 until downloadedItemCount) {
+          translations.removeAt(1)
+        }
+        translations.addAll(1, currentSortedDownloads)
+        adp.setTranslations(translations)
+        adp.notifyDataSetChanged()
       }
-      translations.addAll(1, currentSortedDownloads)
-      adapter.setTranslations(translations)
-      adapter.notifyDataSetChanged()
     }
   }
 
   private fun onErrorDownloadTranslations() {
-    translationSwipeRefresh.isRefreshing = false
-    Snackbar
-      .make(
-        translationRecycler,
-        R.string.error_getting_translation_list,
-        Snackbar.LENGTH_SHORT
-      )
-      .show()
+    modernIsRefreshing.value = false
+    translationSwipeRefresh?.isRefreshing = false
+    translationRecycler?.let {
+      Snackbar
+        .make(
+          it,
+          R.string.error_getting_translation_list,
+          Snackbar.LENGTH_SHORT
+        )
+        .show()
+    }
   }
 
   private fun onTranslationsUpdated(items: List<TranslationItem>) {
-    translationSwipeRefresh.isRefreshing = false
+    modernIsRefreshing.value = false
+    translationSwipeRefresh?.isRefreshing = false
     val itemsSparseArray = SparseIntArray(items.size)
     var i = 0
     val itemsSize = items.size
@@ -309,15 +348,6 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
     // sort by display order
     val sortedDownloads = downloaded.sortedBy { it.displayOrder }
 
-    val resultList = buildList {
-      if (downloaded.isNotEmpty()) {
-        add(TranslationHeader(getString(R.string.downloaded_translations)))
-        addAll(sortedDownloads)
-      }
-      add(TranslationHeader(getString(R.string.available_translations)))
-      addAll(notDownloaded)
-    }
-
     val needsUpgrade = sortedDownloads.any { it.needsUpgrade() }
     if (!needsUpgrade) {
       quranSettings.setHaveUpdatedTranslations(false)
@@ -325,8 +355,41 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
 
     originalSortedDownloads = ArrayList(downloaded)
     currentSortedDownloads = ArrayList(downloaded)
-    adapter.setTranslations(resultList)
-    adapter.notifyDataSetChanged()
+
+    modernItems.value = allItems
+    modernDownloadingId.value = downloadingItem?.translation?.id
+
+    adapter?.let { adp ->
+      val resultList = buildList {
+        if (downloaded.isNotEmpty()) {
+          add(TranslationHeader(getString(R.string.downloaded_translations)))
+          addAll(sortedDownloads)
+        }
+        add(TranslationHeader(getString(R.string.available_translations)))
+        addAll(notDownloaded)
+      }
+
+      adp.setTranslations(resultList)
+      adp.notifyDataSetChanged()
+    }
+  }
+
+  private fun moveItemUp(item: TranslationItem) {
+    rankUpItem(item)
+    updateTranslationOrdersIfNecessary()
+    allItems = allItems.map { curr ->
+      currentSortedDownloads.find { it.translation.id == curr.translation.id } ?: curr
+    }
+    modernItems.value = allItems
+  }
+
+  private fun moveItemDown(item: TranslationItem) {
+    rankDownItem(item)
+    updateTranslationOrdersIfNecessary()
+    allItems = allItems.map { curr ->
+      currentSortedDownloads.find { it.translation.id == curr.translation.id } ?: curr
+    }
+    modernItems.value = allItems
   }
 
   private fun downloadItem(translationRowData: TranslationRowData) {
@@ -335,6 +398,7 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
       return
     }
     downloadingItem = selectedItem
+    modernDownloadingId.value = selectedItem.translation.id
     val (_, _, _, _, _, fileName, url) = selectedItem.translation
     clearDatabaseHandlerIfExists(fileName)
     if (downloadReceiver == null) {
@@ -478,26 +542,26 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
     this.downloadedItemActionListener = downloadedItemActionListener
     if (actionMode != null) {
       actionMode!!.finish()
-      selectionListener.clearSelection()
+      selectionListener?.clearSelection()
     } else {
-      selectionListener.handleSelection(item)
+      selectionListener?.handleSelection(item)
       actionMode = startSupportActionMode(ModeCallback())
     }
   }
 
   override fun finishMenuAction() {
     actionMode?.finish()
-    selectionListener.clearSelection()
+    selectionListener?.clearSelection()
     downloadedItemActionListener = null
   }
 
-  internal class TranslationSelectionListener(private val adapter: TranslationsAdapter) {
+  internal class TranslationSelectionListener(private val adapter: TranslationsAdapter?) {
     fun handleSelection(item: TranslationItem?) {
-      adapter.setSelectedItem(item)
+      adapter?.setSelectedItem(item)
     }
 
     fun clearSelection() {
-      adapter.setSelectedItem(null)
+      adapter?.setSelectedItem(null)
     }
   }
 
@@ -531,7 +595,7 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
 
     override fun onDestroyActionMode(mode: ActionMode) {
       if (mode === actionMode) {
-        selectionListener.clearSelection()
+        selectionListener?.clearSelection()
         actionMode = null
         updateTranslationOrdersIfNecessary()
       }
@@ -539,7 +603,7 @@ class TranslationManagerActivity : AppCompatActivity(), SimpleDownloadListener,
 
     private fun endAction() {
       if (actionMode != null) {
-        selectionListener.clearSelection()
+        selectionListener?.clearSelection()
         actionMode!!.finish()
       }
     }
