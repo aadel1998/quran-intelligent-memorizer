@@ -428,9 +428,14 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     memorizationEngine.state
       .onEach { memState ->
         val ayah = memState.currentPlayingAyah
-        if (memState.isActive && ayah != null) {
-          ensurePage(ayah.sura, ayah.ayah)
-          readingEventPresenterBridge.setSelection(ayah.sura, ayah.ayah, true)
+        if (memState.isActive) {
+          handler.removeMessages(MSG_HIDE_ACTIONBAR)
+          audioStatusBar.visibility = View.VISIBLE
+          audioStatusBar.translationY = 0f
+          if (ayah != null) {
+            ensurePage(ayah.sura, ayah.ayah)
+            readingEventPresenterBridge.setSelection(ayah.sura, ayah.ayah, true)
+          }
         }
       }
       .launchIn(scope)
@@ -756,7 +761,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   override fun onWindowFocusChanged(hasFocus: Boolean) {
     super.onWindowFocusChanged(hasFocus)
     if (hasFocus) {
-      handler.sendEmptyMessageDelayed(MSG_HIDE_ACTIONBAR, DEFAULT_HIDE_AFTER_TIME)
+      if (!memorizationEngine.state.value.isActive) {
+        handler.sendEmptyMessageDelayed(MSG_HIDE_ACTIONBAR, DEFAULT_HIDE_AFTER_TIME)
+      }
     } else {
       handler.removeMessages(MSG_HIDE_ACTIONBAR)
     }
@@ -887,9 +894,10 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       .setDuration(250)
       .start()
 
-    // and audio bar
+    // and audio bar: keep visible during memorization
+    val shouldShowAudioBar = visible || memorizationEngine.state.value.isActive
     audioStatusBar.animate()
-      .translationY((if (visible) 0 else audioStatusBar.height).toFloat())
+      .translationY((if (shouldShowAudioBar) 0 else audioStatusBar.height).toFloat())
       .setDuration(250)
       .start()
   }
@@ -1860,6 +1868,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   private fun launchMemorizationPlayback(config: MemorizationConfig, isResume: Boolean) {
     pendingMemorizationConfig = null
     pendingIsResume = false
+    audioStatusBar.visibility = View.VISIBLE
+    audioStatusBar.translationY = 0f
+    handler.removeMessages(MSG_HIDE_ACTIONBAR)
     if (isResume) {
       memorizationEngine.resumeSavedSession()
       val currentAyah = memorizationEngine.state.value.currentPlayingAyah ?: config.startAyah

@@ -1,13 +1,16 @@
 package com.quran.mobile.feature.audiobar.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -85,7 +88,10 @@ fun MemorizationHud(
           else -> MaterialTheme.colorScheme.outline
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = if (onOpenSettings != null) Modifier.clickable { onOpenSettings() } else Modifier
+        ) {
           Surface(
             color = badgeColor,
             shape = MaterialTheme.shapes.extraSmall,
@@ -109,6 +115,28 @@ fun MemorizationHud(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+          if (onOpenSettings != null) {
+            TextButton(
+              onClick = onOpenSettings,
+              contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+            ) {
+              Icon(
+                QuranIcons.Settings,
+                contentDescription = "Tune Settings",
+                modifier = Modifier
+                  .size(16.dp)
+                  .padding(end = 2.dp),
+                tint = MaterialTheme.colorScheme.primary
+              )
+              Text(
+                text = "Tune",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+
           if (state.lastRecitationAudioPath != null && onReplayRecitation != null) {
             TextButton(onClick = onReplayRecitation) {
               Icon(
@@ -149,7 +177,9 @@ fun MemorizationHud(
         color = colors.defaultTextColor,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+          .fillMaxWidth()
+          .clickable(enabled = onOpenSettings != null) { onOpenSettings?.invoke() }
       )
 
       Spacer(modifier = Modifier.height(4.dp))
@@ -202,7 +232,7 @@ fun MemorizationHud(
             Icon(
               QuranIcons.Settings,
               contentDescription = "Tuning Memorization Settings",
-              tint = colors.defaultTextColor
+              tint = MaterialTheme.colorScheme.primary
             )
           }
         }

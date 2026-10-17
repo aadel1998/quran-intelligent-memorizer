@@ -81,7 +81,9 @@ class AudioBarWrapper @JvmOverloads constructor(
         if (memorizationState.isActive && !isDownloading) {
           MemorizationHud(
             state = memorizationState,
-            onPreviousStep = { memorizationEngine.previousStep() },
+            onPreviousStep = {
+              eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Rewind)
+            },
             onPlayPause = {
               if (memorizationState.isPaused) {
                 memorizationEngine.resume()
@@ -91,7 +93,9 @@ class AudioBarWrapper @JvmOverloads constructor(
                 eventListeners.playingPlaybackEventSink(AudioBarUiEvent.PlayingPlaybackEvent.Pause)
               }
             },
-            onSkipStep = { memorizationEngine.skipCurrentStep() },
+            onSkipStep = {
+              eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.FastForward)
+            },
             onStop = {
               memorizationEngine.stopMemorization()
               eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
