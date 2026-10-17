@@ -431,15 +431,15 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       }
     )
 
-    audioStatusBar.onEnterPip = { enterMemorizationPip() }
-
     memorizationEngine.state
       .onEach { memState ->
         val ayah = memState.currentPlayingAyah
         if (memState.isActive) {
           handler.removeMessages(MSG_HIDE_ACTIONBAR)
-          audioStatusBar.visibility = View.VISIBLE
-          audioStatusBar.translationY = 0f
+          if (::audioStatusBar.isInitialized) {
+            audioStatusBar.visibility = View.VISIBLE
+            audioStatusBar.translationY = 0f
+          }
           if (ayah != null) {
             ensurePage(ayah.sura, ayah.ayah)
             readingEventPresenterBridge.setSelection(ayah.sura, ayah.ayah, true)
@@ -490,6 +490,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     compositeDisposable = CompositeDisposable()
 
     audioStatusBar = findViewById(R.id.audio_area)
+    audioStatusBar.onEnterPip = { enterMemorizationPip() }
 
     toolBarArea = findViewById(R.id.toolbar_area)
     translationsSpinner = findViewById(R.id.spinner)
@@ -2419,7 +2420,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
     if (isInPictureInPictureMode) {
       supportActionBar?.hide()
-      audioStatusBar.visibility = View.VISIBLE
+      if (::audioStatusBar.isInitialized) {
+        audioStatusBar.visibility = View.VISIBLE
+      }
     } else {
       supportActionBar?.show()
     }
