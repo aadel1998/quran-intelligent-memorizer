@@ -26,6 +26,16 @@
         android:name="com.quran.mobile.feature.downloadmanager.AudioManagerActivity"
         android:exported="true" />
 
+    <activity
+        android:name=".AboutUsActivity"
+        android:exported="true"
+        tools:replace="android:exported" />
+
+    <activity
+        android:name=".HelpActivity"
+        android:exported="true"
+        tools:replace="android:exported" />
+
     <meta-data
         android:name="firebase_crashlytics_collection_enabled"
         android:value="false" />

@@ -1,21 +1,46 @@
 package com.quran.labs.androidquran
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.ViewGroup
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.labs.androidquran.ui.fragment.AboutFragment
+import com.quran.labs.androidquran.ui.modern.ModernAboutScreen
+import com.quran.labs.androidquran.util.QuranSettings
 
 class AboutUsActivity : AppCompatActivity() {
 
   public override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+
+    val quranSettings = QuranSettings.getInstance(this)
+    if (quranSettings.isModernUiEnabled) {
+      setContent {
+        QuranTheme {
+          ModernAboutScreen(
+            onBackClick = { finish() },
+            onOpenUrl = { url ->
+              try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+              } catch (e: Exception) {
+                // Ignore if browser not found
+              }
+            }
+          )
+        }
+      }
+      return
+    }
 
     setContentView(R.layout.about_us)
 

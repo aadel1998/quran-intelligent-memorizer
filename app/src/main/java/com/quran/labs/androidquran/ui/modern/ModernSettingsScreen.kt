@@ -67,6 +67,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.os.LocaleListCompat
+import com.quran.labs.androidquran.AboutUsActivity
+import com.quran.labs.androidquran.HelpActivity
 import com.quran.labs.androidquran.QuranAdvancedPreferenceActivity
 import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
@@ -558,6 +560,36 @@ fun ModernSettingsScreen(
               valuePill = null,
               onClick = {
                 context.startActivity(Intent(context, QuranAdvancedPreferenceActivity::class.java))
+              }
+            )
+          }
+        }
+
+        // Section 7: About & Support
+        item {
+          ModernSettingsGroup(
+            title = stringResource(R.string.menu_about),
+            icon = QuranIcons.MenuBook
+          ) {
+            ModernSettingsActionItem(
+              title = stringResource(R.string.menu_help),
+              subtitle = stringResource(R.string.help_title),
+              valuePill = null,
+              onClick = {
+                context.startActivity(Intent(context, HelpActivity::class.java))
+              }
+            )
+            HorizontalDivider(
+              modifier = Modifier.padding(horizontal = 16.dp),
+              thickness = 0.5.dp,
+              color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+            )
+            ModernSettingsActionItem(
+              title = stringResource(R.string.menu_about),
+              subtitle = stringResource(R.string.about_description),
+              valuePill = null,
+              onClick = {
+                context.startActivity(Intent(context, AboutUsActivity::class.java))
               }
             )
           }

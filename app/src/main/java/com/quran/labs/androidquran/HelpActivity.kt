@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -11,13 +12,27 @@ import androidx.core.text.HtmlCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
+import com.quran.labs.androidquran.ui.modern.ModernHelpScreen
+import com.quran.labs.androidquran.util.QuranSettings
 
 class HelpActivity : AppCompatActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
     enableEdgeToEdge()
 
-    super.onCreate(savedInstanceState)
+    val quranSettings = QuranSettings.getInstance(this)
+    if (quranSettings.isModernUiEnabled) {
+      setContent {
+        QuranTheme {
+          ModernHelpScreen(
+            onBackClick = { finish() }
+          )
+        }
+      }
+      return
+    }
 
     setContentView(R.layout.help)
 
