@@ -54,6 +54,7 @@ import com.quran.mobile.common.ui.core.R as UiCoreR
 import com.quran.labs.androidquran.ui.modern.ModernAyahActionSheet
 import com.quran.labs.androidquran.ui.modern.ModernPageScrubber
 import com.quran.labs.androidquran.ui.modern.ModernReaderTopBar
+import com.quran.labs.androidquran.ui.modern.ModernTranslationPickerSheet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.Lifecycle
@@ -299,10 +300,13 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   private var modernTopBar: ComposeView? = null
   private var modernBottomBar: ComposeView? = null
   private var modernAyahActionSheet: ComposeView? = null
+  private var modernModalLayer: ComposeView? = null
   private var isModernUi = false
   private var readerTopBarState by mutableStateOf(ModernReaderTopBarState())
   private var readerBottomBarState by mutableStateOf(ModernReaderBottomBarState())
   private var ayahActionSheetState by mutableStateOf(ModernAyahActionSheetState())
+  private var isTranslationPickerVisible by mutableStateOf(false)
+  private var onDismissTranslationPickerBackCallback: OnBackPressedCallback? = null
 
   val pagerActivityComponent: PagerActivityComponent by lazy {
     (application as QuranApplication)
@@ -743,6 +747,15 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       }
     }
     onBackPressedDispatcher.addCallback(this, onClearAyahModeBackCallback)
+
+    onDismissTranslationPickerBackCallback = object : OnBackPressedCallback(false) {
+      override fun handleOnBackPressed() {
+        isTranslationPickerVisible = false
+        modernModalLayer?.visibility = View.GONE
+        isEnabled = false
+      }
+    }
+    onBackPressedDispatcher.addCallback(this, onDismissTranslationPickerBackCallback!!)
   }
 
   override fun onRequestPermissionsResult(
@@ -1021,6 +1034,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   public override fun onResume() {
     super.onResume()
 
+    requestTranslationsList()
     audioPresenter.bind(this)
     recentPagePresenter.bind(currentPageFlow)
     readingBookmarkPresenter.bind(currentPageFlow, this)
@@ -1390,6 +1404,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
 
     supportInvalidateOptionsMenu()
     updateActionBarTitle(page)
+    if (isModernUi) {
+      updateModernReaderUi(page)
+    }
   }
 
   private fun switchToTranslation() {
@@ -1397,7 +1414,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       endAyahMode()
     }
 
-    if (translations!!.isEmpty()) {
+    if (translations.isNullOrEmpty()) {
       startTranslationManager()
     } else {
       val page = currentPage
@@ -1410,6 +1427,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       }
       supportInvalidateOptionsMenu()
       updateActionBarSpinner()
+      if (isModernUi) {
+        updateModernReaderUi(page)
+      }
     }
 
     if (!quranFileUtils.hasArabicSearchDatabase() && !promptedForExtraDownload) {
@@ -1575,6 +1595,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         if (showingTranslation) {
           // Since translation items have changed, need to
           updateActionBarSpinner()
+        }
+        if (isModernUi) {
+          updateModernReaderUi(currentPage)
         }
       }
   }
@@ -2616,6 +2639,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
           isReadingBookmarked = readerTopBarState.isReadingBookmarked,
           isNightMode = readerTopBarState.isNightMode,
           isTranslationMode = readerTopBarState.isTranslationMode,
+          activeTranslationName = readerTopBarState.activeTranslationName,
           onBackClick = {
             onSessionEnd()
             finish()
@@ -2627,11 +2651,17 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
             if (showingTranslation) {
               switchToQuran()
             } else {
-              if (translations != null) {
-                quranEventLogger.switchToTranslationMode(translations!!.size)
+              val currentTranslations = translations
+              if (currentTranslations != null && currentTranslations.isNotEmpty()) {
+                quranEventLogger.switchToTranslationMode(currentTranslations.size)
                 switchToTranslation()
+              } else {
+                startTranslationManager()
               }
             }
+          },
+          onTranslationOptionsClick = {
+            showModernTranslationPicker()
           },
           onNightModeToggle = {
             val prefs = PreferenceManager.getDefaultSharedPreferences(this@PagerActivity)
@@ -2735,6 +2765,39 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       }
     }
 
+    val modalLayer = findViewById<ComposeView>(R.id.modern_modal_layer)
+    modernModalLayer = modalLayer
+    modalLayer.setContent {
+      QuranTheme {
+        ModernTranslationPickerSheet(
+          visible = isTranslationPickerVisible,
+          translations = translations ?: emptyList(),
+          activeTranslations = quranSettings.activeTranslations,
+          onSelectTranslation = { selected ->
+            quranSettings.activeTranslations = setOf(selected.filename)
+            isTranslationPickerVisible = false
+            onDismissTranslationPickerBackCallback?.isEnabled = false
+            modalLayer.visibility = View.GONE
+            pagerAdapter.setTranslationMode()
+            pagerAdapter.notifyDataSetChanged()
+            refreshQuranPages()
+            updateModernReaderUi(currentPage)
+          },
+          onManageTranslations = {
+            isTranslationPickerVisible = false
+            onDismissTranslationPickerBackCallback?.isEnabled = false
+            modalLayer.visibility = View.GONE
+            startTranslationManager()
+          },
+          onDismiss = {
+            isTranslationPickerVisible = false
+            onDismissTranslationPickerBackCallback?.isEnabled = false
+            modalLayer.visibility = View.GONE
+          }
+        )
+      }
+    }
+
     ayahToolBar.viewTreeObserver.addOnPreDrawListener {
       if (isModernUi && ayahToolBar.visibility != View.GONE) {
         ayahToolBar.visibility = View.GONE
@@ -2751,6 +2814,13 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         bottomBarView.translationY = (h + 100).toFloat()
       }
     }
+  }
+
+  private fun showModernTranslationPicker() {
+    val modalLayer = modernModalLayer ?: return
+    modalLayer.visibility = View.VISIBLE
+    isTranslationPickerVisible = true
+    onDismissTranslationPickerBackCallback?.isEnabled = true
   }
 
   private fun updateModernReaderUi(page: Int) {
@@ -2774,6 +2844,13 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     val hizb = (activeRub / 4) + 1
     val rub = (activeRub % 4) + 1
 
+    val activeFiles = quranSettings.activeTranslations
+    val activeName = if (!activeFiles.isNullOrEmpty()) {
+      translations?.firstOrNull { activeFiles.contains(it.filename) }?.resolveTranslatorName()
+    } else {
+      translations?.firstOrNull()?.resolveTranslatorName()
+    } ?: ""
+
     readerTopBarState = ModernReaderTopBarState(
       page = page,
       suraName = sura,
@@ -2783,7 +2860,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       rubNumber = rub,
       isReadingBookmarked = isCurrentPageReadingBookmarked,
       isNightMode = isNight,
-      isTranslationMode = showingTranslation
+      isTranslationMode = showingTranslation,
+      activeTranslationName = activeName
     )
 
     readerBottomBarState = ModernReaderBottomBarState(
@@ -2828,7 +2906,8 @@ data class ModernReaderTopBarState(
   val rubNumber: Int = 1,
   val isReadingBookmarked: Boolean = false,
   val isNightMode: Boolean = false,
-  val isTranslationMode: Boolean = false
+  val isTranslationMode: Boolean = false,
+  val activeTranslationName: String = ""
 )
 
 data class ModernReaderBottomBarState(

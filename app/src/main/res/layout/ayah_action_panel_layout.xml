@@ -7,10 +7,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
     android:background="@color/panel_background_color"
     tools:ignore="Overdraw"
     >
+  <View
+      android:layout_width="38dp"
+      android:layout_height="4dp"
+      android:layout_gravity="center_horizontal"
+      android:layout_marginTop="8dp"
+      android:layout_marginBottom="4dp"
+      android:background="@drawable/modern_drag_handle_pill"
+      />
   <LinearLayout
       android:id="@+id/ayah_action_bar"
       android:layout_width="match_parent"

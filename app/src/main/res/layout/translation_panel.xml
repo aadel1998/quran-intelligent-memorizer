@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
              android:orientation="vertical"
              android:layout_width="match_parent"
@@ -34,14 +33,19 @@
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
       android:layout_gravity="bottom"
+      android:paddingLeft="20dp"
+      android:paddingRight="20dp"
+      android:paddingBottom="12dp"
+      android:paddingTop="8dp"
       >
     <ImageButton
         android:id="@+id/next_ayah"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:src="@drawable/ic_translation_next"
+        android:background="@drawable/modern_nav_button_bg"
         android:contentDescription="@string/next"
-        android:padding="12dp"
+        android:padding="10dp"
         />
     <Space
         android:layout_width="0dp"
@@ -50,11 +54,12 @@
         />
     <ImageButton
         android:id="@+id/previous_ayah"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:src="@drawable/ic_translation_previous"
+        android:background="@drawable/modern_nav_button_bg"
         android:contentDescription="@string/previous"
-        android:padding="12dp"
+        android:padding="10dp"
         />
   </com.quran.labs.androidquran.view.LeftToRightLinearLayout>
 
@@ -62,21 +67,26 @@
       android:id="@+id/empty_state"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:padding="8dp"
+      android:padding="20dp"
       android:orientation="vertical"
+      android:gravity="center"
       android:visibility="gone"
       >
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="12dp"
         android:gravity="center_horizontal"
         android:text="@string/need_translation"
+        android:textSize="15sp"
         />
     <Button
         android:id="@+id/get_translations_button"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:paddingLeft="24dp"
+        android:paddingRight="24dp"
         android:text="@string/get_translations"
         />
   </LinearLayout>

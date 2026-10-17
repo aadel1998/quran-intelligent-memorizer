@@ -7,6 +7,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,9 +66,11 @@ fun ModernReaderTopBar(
   isReadingBookmarked: Boolean,
   isNightMode: Boolean,
   isTranslationMode: Boolean,
+  activeTranslationName: String = "",
   onBackClick: () -> Unit,
   onBookmarkClick: () -> Unit,
   onTranslationClick: () -> Unit,
+  onTranslationOptionsClick: () -> Unit = {},
   onNightModeToggle: () -> Unit,
   onJumpClick: () -> Unit,
   onSettingsClick: () -> Unit,
@@ -184,6 +187,49 @@ fun ModernReaderTopBar(
               )
             }
           }
+
+          // Active translation selector pill when in translation mode
+          if (isTranslationMode && activeTranslationName.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Surface(
+              modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { onTranslationOptionsClick() },
+              shape = RoundedCornerShape(10.dp),
+              color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+              border = androidx.compose.foundation.BorderStroke(
+                0.5.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+              )
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+              ) {
+                Icon(
+                  imageVector = QuranIcons.Translate,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(11.dp)
+                )
+                Text(
+                  text = activeTranslationName,
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  color = MaterialTheme.colorScheme.primary,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                  imageVector = QuranIcons.KeyboardArrowDown,
+                  contentDescription = "Switch translation",
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(13.dp)
+                )
+              }
+            }
+          }
         }
 
         // Right action buttons
@@ -205,16 +251,24 @@ fun ModernReaderTopBar(
           }
 
           // Translation toggle
-          IconButton(
-            onClick = onTranslationClick,
-            modifier = Modifier.size(36.dp)
+          Box(
+            modifier = Modifier
+              .size(36.dp)
+              .clip(CircleShape)
+              .background(if (isTranslationMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent),
+            contentAlignment = Alignment.Center
           ) {
-            Icon(
-              imageVector = QuranIcons.Translate,
-              contentDescription = "Translation",
-              tint = if (isTranslationMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(20.dp)
-            )
+            IconButton(
+              onClick = onTranslationClick,
+              modifier = Modifier.size(36.dp)
+            ) {
+              Icon(
+                imageVector = QuranIcons.Translate,
+                contentDescription = "Translation",
+                tint = if (isTranslationMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+              )
+            }
           }
 
           // Night Mode toggle

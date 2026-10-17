@@ -225,6 +225,11 @@ internal class TranslationAdapter(
       this.inlineAyahColor = ContextCompat.getColor(context, R.color.translation_inline_ayah_highlight_color)
     }
 
+    if (quranSettings.isModernUiEnabled) {
+      this.dividerColor = if (isNightMode) Color.argb(35, 255, 255, 255) else Color.argb(25, 0, 0, 0)
+      this.ayahSelectionColor = if (isNightMode) Color.argb(45, 16, 185, 129) else Color.argb(35, 16, 185, 129)
+    }
+
     if (this.data.isNotEmpty()) {
       notifyDataSetChanged()
     }
@@ -315,7 +320,16 @@ internal class TranslationAdapter(
         val text: CharSequence?
         if (row.type == TranslationViewRow.Type.SURA_HEADER) {
           text = row.data
-          holder.text.setBackgroundColor(suraHeaderColor)
+          if (QuranSettings.getInstance(context).isModernUiEnabled) {
+            holder.text.setBackgroundResource(
+              if (isNightMode) R.drawable.modern_sura_header_bg_night else R.drawable.modern_sura_header_bg
+            )
+            holder.text.setTextColor(
+              if (isNightMode) ContextCompat.getColor(context, R.color.accent_color) else Color.parseColor("#0F172A")
+            )
+          } else {
+            holder.text.setBackgroundColor(suraHeaderColor)
+          }
         } else if (row.type == TranslationViewRow.Type.BASMALLAH || row.type == TranslationViewRow.Type.QURAN_TEXT) {
           val str = SpannableString(
             if (row.type == TranslationViewRow.Type.BASMALLAH) {

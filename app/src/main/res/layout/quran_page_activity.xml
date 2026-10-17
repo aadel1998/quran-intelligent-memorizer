@@ -77,4 +77,12 @@
       android:elevation="20dp"
       android:visibility="gone"
       />
+
+  <androidx.compose.ui.platform.ComposeView
+      android:id="@+id/modern_modal_layer"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:elevation="25dp"
+      android:visibility="gone"
+      />
 </FrameLayout>

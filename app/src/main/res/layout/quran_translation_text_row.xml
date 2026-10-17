@@ -4,6 +4,9 @@
     android:id="@+id/text"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="16dp"
-    android:lineSpacingMultiplier="1.1"
+    android:paddingLeft="20dp"
+    android:paddingRight="20dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="12dp"
+    android:lineSpacingMultiplier="1.25"
     />

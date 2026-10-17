@@ -4,7 +4,10 @@
     android:id="@+id/text"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="16dp"
+    android:paddingLeft="20dp"
+    android:paddingRight="20dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="8dp"
     android:lineSpacingMultiplier="@dimen/arabic_text_line_spacing_multiplier"
     android:lineSpacingExtra="@dimen/arabic_text_line_spacing_extra"
     />

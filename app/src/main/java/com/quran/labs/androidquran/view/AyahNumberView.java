@@ -48,7 +48,7 @@ public class AyahNumberView extends View {
       ta.recycle();
     }
 
-    boxPaint = new Paint();
+    boxPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     boxPaint.setColor(boxColor);
     textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     textPaint.setColor(textColor);
@@ -92,12 +92,13 @@ public class AyahNumberView extends View {
 
   @Override
   protected void onDraw(Canvas canvas) {
-    canvas.drawRect(padding, padding, padding + boxWidth, padding + boxHeight, boxPaint);
+    float cornerRadius = boxHeight * 0.28f;
+    canvas.drawRoundRect(padding, padding, padding + boxWidth, padding + boxHeight, cornerRadius, cornerRadius, boxPaint);
     if (this.textLayout != null) {
       int startY = padding + ((boxHeight - this.textLayout.getHeight()) / 2);
       canvas.translate(padding, startY);
       this.textLayout.draw(canvas);
-      canvas.translate(padding, -startY);
+      canvas.translate(-padding, -startY);
     }
   }
 }
