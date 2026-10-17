@@ -46,11 +46,15 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.mobile.common.ui.core.R as UiCoreR
+import com.quran.labs.androidquran.ui.modern.ModernAudioSettingsSheet
 import com.quran.labs.androidquran.ui.modern.ModernAyahActionSheet
 import com.quran.labs.androidquran.ui.modern.ModernPageScrubber
 import com.quran.labs.androidquran.ui.modern.ModernReaderTopBar
@@ -306,6 +310,16 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   private var readerBottomBarState by mutableStateOf(ModernReaderBottomBarState())
   private var ayahActionSheetState by mutableStateOf(ModernAyahActionSheetState())
   private var isTranslationPickerVisible by mutableStateOf(false)
+  private var isAudioSettingsVisible by mutableStateOf(false)
+  private var audioSettingsStartSura by mutableIntStateOf(1)
+  private var audioSettingsStartAyah by mutableIntStateOf(1)
+  private var audioSettingsEndSura by mutableIntStateOf(1)
+  private var audioSettingsEndAyah by mutableIntStateOf(7)
+  private var audioSettingsVerseRepeat by mutableIntStateOf(0)
+  private var audioSettingsRangeRepeat by mutableIntStateOf(0)
+  private var audioSettingsRestrictToRange by mutableStateOf(false)
+  private var audioSettingsSpeed by mutableFloatStateOf(1.0f)
+  private var audioSettingsIsPlaying by mutableStateOf(false)
   private var onDismissTranslationPickerBackCallback: OnBackPressedCallback? = null
 
   val pagerActivityComponent: PagerActivityComponent by lazy {
@@ -751,6 +765,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     onDismissTranslationPickerBackCallback = object : OnBackPressedCallback(false) {
       override fun handleOnBackPressed() {
         isTranslationPickerVisible = false
+        isAudioSettingsVisible = false
         modernModalLayer?.visibility = View.GONE
         isEnabled = false
       }
@@ -1849,7 +1864,11 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   }
 
   override fun onAudioSettingsPressed() {
-    showSlider(slidingPagerAdapter.getPagePosition(SlidingPagerAdapter.AUDIO_PAGE))
+    if (quranSettings.isModernUiEnabled) {
+      showModernAudioSettings()
+    } else {
+      showSlider(slidingPagerAdapter.getPagePosition(SlidingPagerAdapter.AUDIO_PAGE))
+    }
   }
 
   override fun onShowQariList() {
@@ -2792,7 +2811,36 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
           onDismiss = {
             isTranslationPickerVisible = false
             onDismissTranslationPickerBackCallback?.isEnabled = false
-            modalLayer.visibility = View.GONE
+            if (!isAudioSettingsVisible) modalLayer.visibility = View.GONE
+          }
+        )
+
+        val suraNames = remember {
+          resources.getStringArray(UiCoreR.array.sura_names).toList()
+        }
+
+        ModernAudioSettingsSheet(
+          visible = isAudioSettingsVisible,
+          startSura = audioSettingsStartSura,
+          startAyah = audioSettingsStartAyah,
+          endSura = audioSettingsEndSura,
+          endAyah = audioSettingsEndAyah,
+          suraNames = suraNames,
+          verseRepeat = audioSettingsVerseRepeat,
+          rangeRepeat = audioSettingsRangeRepeat,
+          restrictToRange = audioSettingsRestrictToRange,
+          currentSpeed = audioSettingsSpeed,
+          isPlaying = audioSettingsIsPlaying,
+          numberOfAyahsForSura = { s -> quranInfo.getNumberOfAyahs(s) },
+          onApply = { newStart, newEnd, newVerseRepeat, newRangeRepeat, newRestrictToRange, newSpeed ->
+            applyModernAudioSettings(
+              newStart, newEnd, newVerseRepeat, newRangeRepeat, newRestrictToRange, newSpeed
+            )
+          },
+          onDismiss = {
+            isAudioSettingsVisible = false
+            onDismissTranslationPickerBackCallback?.isEnabled = false
+            if (!isTranslationPickerVisible) modalLayer.visibility = View.GONE
           }
         )
       }
@@ -2821,6 +2869,74 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     modalLayer.visibility = View.VISIBLE
     isTranslationPickerVisible = true
     onDismissTranslationPickerBackCallback?.isEnabled = true
+  }
+
+  private fun showModernAudioSettings() {
+    val modalLayer = modernModalLayer ?: return
+    val lastRequest = audioStatusRepositoryBridge.audioRequest()
+    audioSettingsIsPlaying = lastRequest != null
+    if (lastRequest != null) {
+      audioSettingsStartSura = lastRequest.start.sura
+      audioSettingsStartAyah = lastRequest.start.ayah
+      audioSettingsEndSura = lastRequest.end.sura
+      audioSettingsEndAyah = lastRequest.end.ayah
+      audioSettingsVerseRepeat = lastRequest.repeatInfo
+      audioSettingsRangeRepeat = lastRequest.rangeRepeatInfo
+      audioSettingsRestrictToRange = lastRequest.enforceBounds
+      audioSettingsSpeed = lastRequest.playbackSpeed
+    } else {
+      val page = currentPage
+      val start = selectionStart
+      val end = selectionEnd
+      val startSura = start?.sura ?: quranDisplayData.safelyGetSuraOnPage(page)
+      val startAyah = start?.ayah ?: quranInfo.getFirstAyahOnPage(page)
+      val ending = end ?: audioUtils.getLastAyahToPlay(
+        SuraAyah(startSura, startAyah), page,
+        quranSettings.preferredDownloadAmount, isDualPageVisible
+      ) ?: SuraAyah(startSura, quranInfo.getNumberOfAyahs(startSura))
+
+      audioSettingsStartSura = startSura
+      audioSettingsStartAyah = startAyah
+      audioSettingsEndSura = ending.sura
+      audioSettingsEndAyah = ending.ayah
+      audioSettingsVerseRepeat = 0
+      audioSettingsRangeRepeat = 0
+      audioSettingsRestrictToRange = end != null
+      audioSettingsSpeed = 1.0f
+    }
+
+    modalLayer.visibility = View.VISIBLE
+    isAudioSettingsVisible = true
+    onDismissTranslationPickerBackCallback?.isEnabled = true
+  }
+
+  private fun applyModernAudioSettings(
+    newStart: SuraAyah,
+    newEnd: SuraAyah,
+    newVerseRepeat: Int,
+    newRangeRepeat: Int,
+    newRestrictToRange: Boolean,
+    newSpeed: Float
+  ) {
+    val lastRequest = audioStatusRepositoryBridge.audioRequest()
+    val isPlaying = lastRequest != null
+    val rangeChanged = lastRequest == null || lastRequest.start != newStart || lastRequest.end != newEnd
+
+    if (!rangeChanged && isPlaying) {
+      updatePlayOptions(newRangeRepeat, newVerseRepeat, newRestrictToRange, newSpeed)
+    } else {
+      val page = quranInfo.getPageFromSuraAyah(newStart.sura, newStart.ayah)
+      playFromAyah(
+        newStart, newEnd, page, newVerseRepeat, newRangeRepeat, newRestrictToRange, newSpeed
+      )
+    }
+
+    isAudioSettingsVisible = false
+    onDismissTranslationPickerBackCallback?.isEnabled = false
+    if (!isTranslationPickerVisible) {
+      modernModalLayer?.visibility = View.GONE
+    }
+    toggleActionBarVisibility(true)
   }
 
   private fun updateModernReaderUi(page: Int) {
