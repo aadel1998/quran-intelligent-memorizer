@@ -17,16 +17,18 @@ import kotlinx.coroutines.flow.StateFlow
 internal fun AudioBar(
   flow: StateFlow<AudioBarState>,
   eventListeners: AudioBarUiEvents,
+  isModernUi: Boolean = false,
   modifier: Modifier = Modifier
 ) {
   val state = flow.collectAsState()
-  AudioBar(audioBarState = state.value, eventListeners, modifier = modifier)
+  AudioBar(audioBarState = state.value, eventListeners, isModernUi = isModernUi, modifier = modifier)
 }
 
 @Composable
 internal fun AudioBar(
   audioBarState: AudioBarState,
   eventListeners: AudioBarUiEvents,
+  isModernUi: Boolean = false,
   modifier: Modifier = Modifier
 ) {
   val updatedModifier = modifier
@@ -34,6 +36,7 @@ internal fun AudioBar(
   when (audioBarState) {
     is AudioBarState.Paused -> PausedAudioBar(
       state = audioBarState,
+      isModernUi = isModernUi,
       modifier = updatedModifier,
       eventSink = eventListeners.commonPlaybackEventSink,
       pausedEventSink = eventListeners.pausedPlaybackEventSink
@@ -41,6 +44,7 @@ internal fun AudioBar(
 
     is AudioBarState.Playing -> PlayingAudioBar(
       state = audioBarState,
+      isModernUi = isModernUi,
       modifier = updatedModifier,
       eventSink = eventListeners.commonPlaybackEventSink,
       playbackEventSink = eventListeners.playingPlaybackEventSink
@@ -54,12 +58,14 @@ internal fun AudioBar(
 
     is AudioBarState.Loading -> LoadingAudioBar(
       state = audioBarState,
+      isModernUi = isModernUi,
       modifier = updatedModifier,
       eventSink = eventListeners.cancelableEventSink
     )
 
     is AudioBarState.Downloading -> DownloadingAudioBar(
       state = audioBarState,
+      isModernUi = isModernUi,
       modifier = updatedModifier,
       eventSink = eventListeners.downloadingEventSink
     )
@@ -90,6 +96,7 @@ internal fun AudioBar(
 
     is AudioBarState.Stopped -> StoppedAudioBar(
       state = audioBarState,
+      isModernUi = isModernUi,
       modifier = updatedModifier,
       eventSink = eventListeners.stoppedEventSink
     )

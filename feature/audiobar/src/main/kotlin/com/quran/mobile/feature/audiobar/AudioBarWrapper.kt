@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -86,74 +88,164 @@ class AudioBarWrapper @JvmOverloads constructor(
       var showLiveSettingsSheet by remember { mutableStateOf(false) }
       var showTrackerSheet by remember { mutableStateOf(false) }
 
-      Card(
-        shape = CardDefaults.shape.topOnly(),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        if (memorizationState.isActive && !isDownloading) {
-          MemorizationHud(
-            state = memorizationState,
-            onPreviousStep = {
-              eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Rewind)
-            },
-            onPlayPause = {
-              if (memorizationState.isPaused) {
-                memorizationEngine.resume()
-                eventListeners.pausedPlaybackEventSink(AudioBarUiEvent.PausedPlaybackEvent.Play)
-              } else {
-                memorizationEngine.pause()
-                eventListeners.playingPlaybackEventSink(AudioBarUiEvent.PlayingPlaybackEvent.Pause)
-              }
-            },
-            onSkipStep = {
-              eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.FastForward)
-            },
-            onStop = {
-              memorizationEngine.stopMemorization()
-              eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
-            },
-            onToggleMask = { memorizationEngine.toggleTextMask() },
-            onOpenSettings = { showLiveSettingsSheet = true },
-            onOpenTracker = { showTrackerSheet = true },
-            onEnterPip = onEnterPip,
-            onReplayRecitation = {
-              val path = memorizationState.lastRecitationAudioPath
-              if (path != null) {
-                try {
-                  android.media.MediaPlayer().apply {
-                    setDataSource(path)
-                    setOnCompletionListener { it.release() }
-                    prepare()
-                    start()
-                  }
-                } catch (e: Exception) {
-                  android.util.Log.e("AudioBarWrapper", "Error playing recorded recitation", e)
+      val isModernUi = remember {
+        try {
+          val prefs = context.getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE)
+          prefs.getBoolean("pref_use_modern_ui", true)
+        } catch (_: Exception) {
+          true
+        }
+      }
+
+      if (isModernUi) {
+        Surface(
+          shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+          border = androidx.compose.foundation.BorderStroke(
+            0.5.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)
+          ),
+          shadowElevation = 14.dp,
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          if (memorizationState.isActive && !isDownloading) {
+            MemorizationHud(
+              state = memorizationState,
+              onPreviousStep = {
+                eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Rewind)
+              },
+              onPlayPause = {
+                if (memorizationState.isPaused) {
+                  memorizationEngine.resume()
+                  eventListeners.pausedPlaybackEventSink(AudioBarUiEvent.PausedPlaybackEvent.Play)
+                } else {
+                  memorizationEngine.pause()
+                  eventListeners.playingPlaybackEventSink(AudioBarUiEvent.PlayingPlaybackEvent.Pause)
                 }
-              }
-            },
-            modifier = Modifier
-              .padding(
-                WindowInsets.navigationBars.add(WindowInsets.displayCutout)
-                    .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
-                  .asPaddingValues()
-              )
-              .padding(top = 4.dp)
-              .padding(horizontal = 8.dp)
-          )
-        } else {
-          AudioBar(
-            flow,
-            eventListeners,
-            modifier = Modifier
-              .padding(
-                WindowInsets.navigationBars.add(WindowInsets.displayCutout)
-                    .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
-                  .asPaddingValues()
-              )
-              .padding(top = 8.dp)
-              .padding(horizontal = 16.dp)
-              .heightIn(min = dimensionResource(id = R.dimen.audiobar_height))
-          )
+              },
+              onSkipStep = {
+                eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.FastForward)
+              },
+              onStop = {
+                memorizationEngine.stopMemorization()
+                eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
+              },
+              onToggleMask = { memorizationEngine.toggleTextMask() },
+              onOpenSettings = { showLiveSettingsSheet = true },
+              onOpenTracker = { showTrackerSheet = true },
+              onEnterPip = onEnterPip,
+              onReplayRecitation = {
+                val path = memorizationState.lastRecitationAudioPath
+                if (path != null) {
+                  try {
+                    android.media.MediaPlayer().apply {
+                      setDataSource(path)
+                      setOnCompletionListener { it.release() }
+                      prepare()
+                      start()
+                    }
+                  } catch (e: Exception) {
+                    android.util.Log.e("AudioBarWrapper", "Error playing recorded recitation", e)
+                  }
+                }
+              },
+              modifier = Modifier
+                .padding(
+                  WindowInsets.navigationBars.add(WindowInsets.displayCutout)
+                      .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
+                    .asPaddingValues()
+                )
+                .padding(top = 4.dp)
+                .padding(horizontal = 8.dp)
+            )
+          } else {
+            AudioBar(
+              flow = flow,
+              eventListeners = eventListeners,
+              isModernUi = true,
+              modifier = Modifier
+                .padding(
+                  WindowInsets.navigationBars.add(WindowInsets.displayCutout)
+                      .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
+                    .asPaddingValues()
+                )
+                .padding(top = 8.dp, bottom = 4.dp)
+                .padding(horizontal = 14.dp)
+                .heightIn(min = dimensionResource(id = R.dimen.audiobar_height))
+            )
+          }
+        }
+      } else {
+        Card(
+          shape = CardDefaults.shape.topOnly(),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          if (memorizationState.isActive && !isDownloading) {
+            MemorizationHud(
+              state = memorizationState,
+              onPreviousStep = {
+                eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Rewind)
+              },
+              onPlayPause = {
+                if (memorizationState.isPaused) {
+                  memorizationEngine.resume()
+                  eventListeners.pausedPlaybackEventSink(AudioBarUiEvent.PausedPlaybackEvent.Play)
+                } else {
+                  memorizationEngine.pause()
+                  eventListeners.playingPlaybackEventSink(AudioBarUiEvent.PlayingPlaybackEvent.Pause)
+                }
+              },
+              onSkipStep = {
+                eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.FastForward)
+              },
+              onStop = {
+                memorizationEngine.stopMemorization()
+                eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
+              },
+              onToggleMask = { memorizationEngine.toggleTextMask() },
+              onOpenSettings = { showLiveSettingsSheet = true },
+              onOpenTracker = { showTrackerSheet = true },
+              onEnterPip = onEnterPip,
+              onReplayRecitation = {
+                val path = memorizationState.lastRecitationAudioPath
+                if (path != null) {
+                  try {
+                    android.media.MediaPlayer().apply {
+                      setDataSource(path)
+                      setOnCompletionListener { it.release() }
+                      prepare()
+                      start()
+                    }
+                  } catch (e: Exception) {
+                    android.util.Log.e("AudioBarWrapper", "Error playing recorded recitation", e)
+                  }
+                }
+              },
+              modifier = Modifier
+                .padding(
+                  WindowInsets.navigationBars.add(WindowInsets.displayCutout)
+                      .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
+                    .asPaddingValues()
+                )
+                .padding(top = 4.dp)
+                .padding(horizontal = 8.dp)
+            )
+          } else {
+            AudioBar(
+              flow = flow,
+              eventListeners = eventListeners,
+              isModernUi = false,
+              modifier = Modifier
+                .padding(
+                  WindowInsets.navigationBars.add(WindowInsets.displayCutout)
+                      .only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Bottom))
+                    .asPaddingValues()
+                )
+                .padding(top = 8.dp)
+                .padding(horizontal = 16.dp)
+                .heightIn(min = dimensionResource(id = R.dimen.audiobar_height))
+            )
+          }
         }
       }
 

@@ -13,17 +13,23 @@ fun QariList(
   qaris: ImmutableList<QariUiModel>,
   selectedQariId: Int,
   onQariSelected: ((QariItem) -> Unit),
+  isModernUi: Boolean = false,
   modifier: Modifier = Modifier
 ) {
   val qarisBySection = qaris.groupBy { it.sectionHeader }
   LazyColumn(modifier = modifier) {
     qarisBySection.forEach { (section, sectionQaris) ->
       stickyHeader {
-        QariSection(section)
+        QariSection(section, isModernUi = isModernUi)
       }
 
       items(sectionQaris) { qariUiModel ->
-        QariRow(qariUiModel.qariItem, selectedQariId == qariUiModel.qariItem.id, onQariSelected)
+        QariRow(
+          qariItem = qariUiModel.qariItem,
+          isSelected = selectedQariId == qariUiModel.qariItem.id,
+          onItemSelected = onQariSelected,
+          isModernUi = isModernUi
+        )
       }
     }
   }
