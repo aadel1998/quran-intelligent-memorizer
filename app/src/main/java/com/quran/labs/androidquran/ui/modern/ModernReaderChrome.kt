@@ -15,13 +15,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -76,7 +80,11 @@ fun ModernReaderTopBar(
   onSettingsClick: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+  val layoutDirection = LocalLayoutDirection.current
+  val systemBars = WindowInsets.systemBars.asPaddingValues()
+  val statusBarTop = systemBars.calculateTopPadding()
+  val horizontalInsetLeft = systemBars.calculateStartPadding(layoutDirection)
+  val horizontalInsetRight = systemBars.calculateEndPadding(layoutDirection)
 
   Column(
     modifier = modifier
@@ -96,7 +104,12 @@ fun ModernReaderTopBar(
     Surface(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 12.dp, vertical = 6.dp)
+        .padding(
+          start = 12.dp + horizontalInsetLeft,
+          end = 12.dp + horizontalInsetRight,
+          top = 6.dp,
+          bottom = 6.dp
+        )
         .shadow(elevation = 12.dp, shape = RoundedCornerShape(22.dp)),
       shape = RoundedCornerShape(22.dp),
       color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
@@ -330,15 +343,23 @@ fun ModernPageScrubber(
 ) {
   var sliderPosition by remember(currentPage) { mutableFloatStateOf(currentPage.toFloat()) }
   var isDragging by remember { mutableStateOf(false) }
-  val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+  val layoutDirection = LocalLayoutDirection.current
+  val systemBars = WindowInsets.systemBars.asPaddingValues()
+  val navBarBottom = systemBars.calculateBottomPadding()
+  val horizontalInsetLeft = systemBars.calculateStartPadding(layoutDirection)
+  val horizontalInsetRight = systemBars.calculateEndPadding(layoutDirection)
 
   val displayPage = if (isDragging) sliderPosition.toInt().coerceIn(1, totalPages) else currentPage
 
   Box(
     modifier = modifier
       .fillMaxWidth()
-      .padding(horizontal = 16.dp, vertical = 8.dp)
-      .padding(bottom = navBarBottom)
+      .padding(
+        start = 16.dp + horizontalInsetLeft,
+        end = 16.dp + horizontalInsetRight,
+        top = 8.dp,
+        bottom = 8.dp + navBarBottom
+      )
   ) {
     Surface(
       modifier = Modifier

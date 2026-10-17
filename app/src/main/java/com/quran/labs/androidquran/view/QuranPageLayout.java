@@ -236,7 +236,9 @@ public abstract class QuranPageLayout extends QuranPageWrapperLayout
     int lineColor = Color.BLACK;
     final int nightModeTextBrightness = nightMode ?
         quranSettings.getNightModeTextBrightness() : Constants.DEFAULT_NIGHT_MODE_TEXT_BRIGHTNESS;
-    if (nightMode) {
+    if (quranSettings.isModernUiEnabled()) {
+      lineColor = nightMode ? Color.argb(35, 255, 255, 255) : Color.argb(25, 0, 0, 0);
+    } else if (nightMode) {
       lineColor = Color.argb(nightModeTextBrightness, 255, 255, 255);
     }
 
