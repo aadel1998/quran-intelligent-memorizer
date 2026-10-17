@@ -75,6 +75,13 @@ class QuranSettingsFragment : PreferenceFragmentCompat() {
       true
     }
 
+    // handle modern UI preference
+    val modernUiPref: Preference? = findPreference(getString(R.string.prefs_use_modern_ui))
+    modernUiPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, _ ->
+      (activity as? com.quran.labs.androidquran.QuranPreferenceActivity)?.restartActivity()
+      true
+    }
+
     // handle translation manager click
     val translationPref: Preference? = findPreference(Constants.PREF_TRANSLATION_MANAGER)
     translationPref?.setOnPreferenceClickListener {

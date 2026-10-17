@@ -3,19 +3,36 @@ package com.quran.labs.androidquran
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.ViewGroup
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
+import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.labs.androidquran.ui.fragment.QuranSettingsFragment
+import com.quran.labs.androidquran.ui.modern.ModernSettingsScreen
+import com.quran.labs.androidquran.util.QuranSettings
 
 class QuranPreferenceActivity : AppCompatActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    val quranSettings = QuranSettings.getInstance(this)
+    if (quranSettings.isModernUiEnabled) {
+      setContent {
+        QuranTheme {
+          ModernSettingsScreen(
+            onNavigateBack = { finish() },
+            onRestartSettings = { restartActivity() }
+          )
+        }
+      }
+      return
+    }
+
     setContentView(R.layout.preferences)
 
     val root = findViewById<ViewGroup>(R.id.root)
