@@ -30,6 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -73,10 +74,16 @@ fun ModernRevisionDashboardScreen(
   onStartRevision: (List<Int>) -> Unit,
   onBackClick: () -> Unit,
   onQuizResult: ((sura: Int, passed: Boolean) -> Unit)? = null,
+  dailyGoal: Int = 5,
+  ayahsToday: Int = 0,
+  currentStreak: Int = 0,
+  bestStreak: Int = 0,
+  onUpdateDailyGoal: ((Int) -> Unit)? = null,
+  flaggedSurahs: Set<Int> = emptySet(),
   modifier: Modifier = Modifier
 ) {
   var searchQuery by remember { mutableStateOf("") }
-  // 0: All, 1: Due, 2: Memorized, 3: In Queue
+  // 0: All, 1: Due, 2: Memorized, 3: In Queue, 4: Flagged
   var selectedFilterTab by remember { mutableIntStateOf(0) }
   var quizSura by remember { mutableStateOf<SuraItemModel?>(null) }
 
@@ -84,13 +91,14 @@ fun ModernRevisionDashboardScreen(
   val dueCount = surahs.count { memorizedInfos[it.number]?.isDue == true }
 
   // Filter surahs based on tab & query
-  val filteredSurahs = remember(surahs, memorizedInfos, selectedQueue, searchQuery, selectedFilterTab) {
+  val filteredSurahs = remember(surahs, memorizedInfos, selectedQueue, searchQuery, selectedFilterTab, flaggedSurahs) {
     surahs.filter { sura ->
       val info = memorizedInfos[sura.number]
       val matchesTab = when (selectedFilterTab) {
         1 -> info?.isDue == true
         2 -> info?.isMemorized == true
         3 -> selectedQueue.contains(sura.number)
+        4 -> flaggedSurahs.contains(sura.number) || (info?.flaggedAyahsCount ?: 0) > 0
         else -> true
       }
       val matchesQuery = if (searchQuery.isBlank()) {
@@ -244,6 +252,103 @@ fun ModernRevisionDashboardScreen(
         }
       }
 
+      // Daily Goal & Streak Hero Card (Easy Quran Memorizer Pro)
+      ModernCard(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+        borderWidth = 1.dp,
+        contentPadding = 12.dp
+      ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = "🔥 ${if (currentStreak > 0) "$currentStreak Day Streak" else "Start Streak"}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFF59E0B)
+              )
+              if (bestStreak > 0) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = "Best: $bestStreak d",
+                  fontSize = 11.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+
+            // Quick goal change chips (3, 5, 10, 20)
+            if (onUpdateDailyGoal != null) {
+              Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(3, 5, 10, 20).forEach { goalOpt ->
+                  Box(
+                    modifier = Modifier
+                      .clip(RoundedCornerShape(8.dp))
+                      .background(
+                        if (dailyGoal == goalOpt) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                      )
+                      .clickable { onUpdateDailyGoal(goalOpt) }
+                      .padding(horizontal = 7.dp, vertical = 2.dp)
+                  ) {
+                    Text(
+                      text = "${goalOpt}v",
+                      fontSize = 10.sp,
+                      fontWeight = if (dailyGoal == goalOpt) FontWeight.Bold else FontWeight.Normal,
+                      color = if (dailyGoal == goalOpt) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                  }
+                }
+              }
+            }
+          }
+
+          Spacer(modifier = Modifier.height(8.dp))
+
+          val safeGoal = if (dailyGoal > 0) dailyGoal else 5
+          val progress = (ayahsToday.toFloat() / safeGoal.toFloat()).coerceIn(0f, 1f)
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(
+              text = "Daily Goal: $ayahsToday / $safeGoal Ayahs",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+              text = if (ayahsToday >= safeGoal) "Achieved! ✨" else "${(progress * 100).toInt()}%",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Bold,
+              color = if (ayahsToday >= safeGoal) Color(0xFF10B981) else MaterialTheme.colorScheme.primary
+            )
+          }
+
+          Spacer(modifier = Modifier.height(6.dp))
+
+          LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(5.dp)
+              .clip(RoundedCornerShape(3.dp)),
+            color = Color(0xFF10B981),
+            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+          )
+        }
+      }
+
       // Search Box
       Box(
         modifier = Modifier
@@ -344,6 +449,19 @@ fun ModernRevisionDashboardScreen(
             shape = RoundedCornerShape(10.dp)
           )
         }
+
+        if (flaggedSurahs.isNotEmpty()) {
+          FilterChip(
+            selected = selectedFilterTab == 4,
+            onClick = { selectedFilterTab = 4 },
+            label = { Text("Flagged (${flaggedSurahs.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+            colors = FilterChipDefaults.filterChipColors(
+              selectedContainerColor = Color(0xFFEF4444).copy(alpha = 0.2f),
+              selectedLabelColor = Color(0xFFEF4444)
+            ),
+            shape = RoundedCornerShape(10.dp)
+          )
+        }
       }
 
       // Quick action bar (e.g. Select All Due)
@@ -403,6 +521,7 @@ fun ModernRevisionDashboardScreen(
               1 -> "Great job! None of your memorized Surahs are currently due for revision."
               2 -> "You haven't marked any Surahs as memorized yet. Tap the checkmark icon on any Surah to track it here."
               3 -> "Your revision queue is empty. Select Surahs to start an audio revision session."
+              4 -> "No flagged Ayahs found. Flag difficult Ayahs during memorization to review them here."
               else -> "No Surahs match '$searchQuery'."
             },
             fontSize = 13.sp,
@@ -430,6 +549,7 @@ fun ModernRevisionDashboardScreen(
               isMemorized = isMemorized,
               isDue = isDue,
               lastRevised = info?.lastRevised ?: 0L,
+              flaggedAyahsCount = info?.flaggedAyahsCount ?: 0,
               isSelected = isSelectedInQueue,
               onToggleQueue = { onToggleQueueSelection(sura.number) },
               onToggleMemorized = { onToggleMemorized(sura.number, !isMemorized) },
@@ -463,6 +583,7 @@ private fun RevisionSurahCard(
   onToggleQueue: () -> Unit,
   onToggleMemorized: () -> Unit,
   onStartQuiz: () -> Unit,
+  flaggedAyahsCount: Int = 0,
   modifier: Modifier = Modifier
 ) {
   val backgroundColor = if (isSelected) {
@@ -547,6 +668,22 @@ private fun RevisionSurahCard(
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFF59E0B)
+              )
+            }
+          }
+
+          if (flaggedAyahsCount > 0) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+              modifier = Modifier
+                .background(Color(0xFFEF4444).copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+              Text(
+                text = "⚠️ $flaggedAyahsCount flagged",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFEF4444)
               )
             }
           }

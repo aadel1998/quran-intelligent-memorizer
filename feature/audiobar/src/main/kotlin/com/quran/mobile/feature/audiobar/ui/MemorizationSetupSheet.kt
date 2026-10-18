@@ -462,6 +462,56 @@ fun MemorizationSetupSheet(
           fontWeight = FontWeight.SemiBold
         )
 
+        // Quick Range Presets
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          FilterChip(
+            selected = startAyahNum == 1 && endAyahNum == maxAyahsForSura,
+            onClick = {
+              startAyahNum = 1
+              endAyahNum = maxAyahsForSura
+            },
+            label = { Text("Full Surah", fontSize = 11.sp) }
+          )
+
+          if (maxAyahsForSura >= 5) {
+            FilterChip(
+              selected = startAyahNum == 1 && endAyahNum == 5,
+              onClick = {
+                startAyahNum = 1
+                endAyahNum = 5
+              },
+              label = { Text("1–5", fontSize = 11.sp) }
+            )
+          }
+
+          if (maxAyahsForSura >= 10) {
+            FilterChip(
+              selected = startAyahNum == 1 && endAyahNum == 10,
+              onClick = {
+                startAyahNum = 1
+                endAyahNum = 10
+              },
+              label = { Text("1–10", fontSize = 11.sp) }
+            )
+          }
+
+          if (maxAyahsForSura >= 20) {
+            FilterChip(
+              selected = startAyahNum == 1 && endAyahNum == 20,
+              onClick = {
+                startAyahNum = 1
+                endAyahNum = 20
+              },
+              label = { Text("1–20", fontSize = 11.sp) }
+            )
+          }
+        }
+
         Row(
           modifier = Modifier
             .fillMaxWidth()

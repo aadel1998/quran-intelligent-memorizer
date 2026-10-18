@@ -39,6 +39,11 @@ class QuranRevisionActivity : AppCompatActivity() {
 
   private var memorizedInfosState by mutableStateOf<Map<Int, MemorizedSurahInfo>>(emptyMap())
   private var selectedQueueState by mutableStateOf<Set<Int>>(emptySet())
+  private var dailyGoalAyahsState by mutableStateOf(5)
+  private var ayahsTodayState by mutableStateOf(0)
+  private var currentStreakState by mutableStateOf(0)
+  private var bestStreakState by mutableStateOf(0)
+  private var flaggedSurahsState by mutableStateOf<Set<Int>>(emptySet())
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
@@ -95,6 +100,8 @@ class QuranRevisionActivity : AppCompatActivity() {
           onStartRevision = { suraList ->
             if (suraList.isNotEmpty()) {
               memorizationPreferences.setRevisionQueue(suraList)
+              val totalAyahs = suraList.sumOf { surahs.getOrNull(it - 1)?.numberOfAyahs ?: 7 }
+              memorizationPreferences.recordAyahsPracticed(totalAyahs)
               val firstSura = suraList.first()
               val intent = quranNavigator.intentFor(SuraAyah(firstSura, 1))
               intent.putExtra(PagerActivity.EXTRA_START_MEMORIZATION_SURA, firstSura)
@@ -103,8 +110,20 @@ class QuranRevisionActivity : AppCompatActivity() {
           },
           onQuizResult = { sura, passed ->
             memorizationPreferences.recordQuizResult(sura, passed)
+            if (passed) {
+              memorizationPreferences.recordAyahsPracticed(1)
+            }
             refreshState()
           },
+          dailyGoal = dailyGoalAyahsState,
+          ayahsToday = ayahsTodayState,
+          currentStreak = currentStreakState,
+          bestStreak = bestStreakState,
+          onUpdateDailyGoal = { goal ->
+            memorizationPreferences.setDailyGoalAyahs(goal)
+            refreshState()
+          },
+          flaggedSurahs = flaggedSurahsState,
           onBackClick = { finish() }
         )
       }
@@ -119,6 +138,11 @@ class QuranRevisionActivity : AppCompatActivity() {
   private fun refreshState() {
     memorizedInfosState = memorizationPreferences.getAllMemorizedSurahInfo()
     selectedQueueState = memorizationPreferences.getRevisionQueue().toSet()
+    dailyGoalAyahsState = memorizationPreferences.getDailyGoalAyahs()
+    ayahsTodayState = memorizationPreferences.getAyahsMemorizedToday()
+    currentStreakState = memorizationPreferences.getCurrentStreak()
+    bestStreakState = memorizationPreferences.getBestStreak()
+    flaggedSurahsState = memorizationPreferences.getAllFlaggedSurahs()
   }
 
   companion object {

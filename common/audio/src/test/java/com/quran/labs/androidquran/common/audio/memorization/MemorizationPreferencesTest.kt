@@ -206,6 +206,54 @@ class MemorizationPreferencesTest {
     assertThat(remainingSessions[0].sura).isEqualTo(36)
   }
 
+  @Test
+  fun `daily goal and streak tracking works as expected`() {
+    assertThat(memorizationPreferences.getDailyGoalAyahs()).isEqualTo(5)
+    memorizationPreferences.setDailyGoalAyahs(10)
+    assertThat(memorizationPreferences.getDailyGoalAyahs()).isEqualTo(10)
+
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(0)
+    assertThat(memorizationPreferences.getCurrentStreak()).isEqualTo(0)
+
+    memorizationPreferences.recordAyahsPracticed(4)
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(4)
+    assertThat(memorizationPreferences.getCurrentStreak()).isEqualTo(1)
+    assertThat(memorizationPreferences.getBestStreak()).isEqualTo(1)
+
+    // Practice more today
+    memorizationPreferences.recordAyahsPracticed(6)
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(10)
+    assertThat(memorizationPreferences.getCurrentStreak()).isEqualTo(1)
+  }
+
+  @Test
+  fun `flagged ayahs and mistake tracking works as expected`() {
+    assertThat(memorizationPreferences.isAyahFlagged(2, 255)).isFalse()
+    assertThat(memorizationPreferences.getFlaggedAyahsForSura(2)).isEmpty()
+
+    // Flag Ayah 255
+    val flagged = memorizationPreferences.toggleAyahFlagged(2, 255)
+    assertThat(flagged).isTrue()
+    assertThat(memorizationPreferences.isAyahFlagged(2, 255)).isTrue()
+    assertThat(memorizationPreferences.getFlaggedAyahsForSura(2)).containsExactly(255)
+    assertThat(memorizationPreferences.getAllFlaggedSurahs()).containsExactly(2)
+
+    // Flag Ayah 256
+    memorizationPreferences.toggleAyahFlagged(2, 256)
+    assertThat(memorizationPreferences.getFlaggedAyahsForSura(2)).containsExactly(255, 256)
+
+    // Unflag Ayah 255
+    val unflagged = memorizationPreferences.toggleAyahFlagged(2, 255)
+    assertThat(unflagged).isFalse()
+    assertThat(memorizationPreferences.isAyahFlagged(2, 255)).isFalse()
+    assertThat(memorizationPreferences.getFlaggedAyahsForSura(2)).containsExactly(256)
+
+    // Unflag Ayah 256 -> empty
+    memorizationPreferences.toggleAyahFlagged(2, 256)
+    assertThat(memorizationPreferences.getFlaggedAyahsForSura(2)).isEmpty()
+    assertThat(memorizationPreferences.getAllFlaggedSurahs()).isEmpty()
+  }
+
   /**
    * Lightweight in-memory implementation of [SharedPreferences] for unit tests.
    */

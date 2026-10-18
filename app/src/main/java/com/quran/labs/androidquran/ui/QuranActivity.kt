@@ -465,6 +465,9 @@ class QuranActivity : AppCompatActivity(),
             },
             memorizedCount = memorizationPreferences.getMemorizedSurahs().size,
             dueCount = memorizationPreferences.getSurahsDueForRevision().size,
+            dailyGoal = memorizationPreferences.getDailyGoalAyahs(),
+            ayahsToday = memorizationPreferences.getAyahsMemorizedToday(),
+            currentStreak = memorizationPreferences.getCurrentStreak(),
             onOpenSearch = { query ->
               val searchIntent = Intent(this@QuranActivity, SearchActivity::class.java).apply {
                 if (query.isNotBlank()) {

@@ -134,6 +134,9 @@ fun QuranModernHomeScreen(
   onOpenRevisionDashboard: () -> Unit = {},
   memorizedCount: Int = 0,
   dueCount: Int = 0,
+  dailyGoal: Int = 5,
+  ayahsToday: Int = 0,
+  currentStreak: Int = 0,
   onOpenSearch: (String) -> Unit,
   onOpenJump: () -> Unit,
   onOpenPlaylists: () -> Unit,
@@ -234,6 +237,9 @@ fun QuranModernHomeScreen(
             surahs = surahs,
             memorizedCount = memorizedCount,
             dueCount = dueCount,
+            dailyGoal = dailyGoal,
+            ayahsToday = ayahsToday,
+            currentStreak = currentStreak,
             onOpenRevisionDashboard = onOpenRevisionDashboard,
             onResume = onResumeMemorization,
             onStartBeginning = onStartFromBeginningMemorization,
@@ -854,6 +860,9 @@ private fun MemorizerTabContent(
   surahs: List<SuraItemModel>,
   memorizedCount: Int,
   dueCount: Int,
+  dailyGoal: Int = 5,
+  ayahsToday: Int = 0,
+  currentStreak: Int = 0,
   onOpenRevisionDashboard: () -> Unit,
   onResume: (SavedSuraSession) -> Unit,
   onStartBeginning: (SavedSuraSession) -> Unit,
@@ -949,7 +958,28 @@ private fun MemorizerTabContent(
             )
           }
 
-          Spacer(modifier = Modifier.height(14.dp))
+          Spacer(modifier = Modifier.height(10.dp))
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(
+              text = "🔥 ${if (currentStreak > 0) "$currentStreak Day Streak" else "Start Streak"}",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFFF59E0B)
+            )
+            Text(
+              text = "Today: $ayahsToday / $dailyGoal v",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
+          Spacer(modifier = Modifier.height(12.dp))
 
           Button(
             onClick = onOpenRevisionDashboard,

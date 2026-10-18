@@ -29,7 +29,8 @@ data class MemorizedSurahInfo(
   val lastRevised: Long = 0L,
   val intervalDays: Int = 3,
   val isDue: Boolean = false,
-  val inRevisionQueue: Boolean = false
+  val inRevisionQueue: Boolean = false,
+  val flaggedAyahsCount: Int = 0
 )
 
 /**
@@ -324,7 +325,8 @@ class MemorizationPreferences(
       lastRevised = getLastRevised(sura),
       intervalDays = getRevisionIntervalDays(sura),
       isDue = isSurahDueForRevision(sura),
-      inRevisionQueue = getRevisionQueue().contains(sura)
+      inRevisionQueue = getRevisionQueue().contains(sura),
+      flaggedAyahsCount = getFlaggedAyahsForSura(sura).size
     )
   }
 
@@ -338,7 +340,8 @@ class MemorizationPreferences(
         lastRevised = getLastRevised(sura),
         intervalDays = getRevisionIntervalDays(sura),
         isDue = isSurahDueForRevision(sura),
-        inRevisionQueue = queue.contains(sura)
+        inRevisionQueue = queue.contains(sura),
+        flaggedAyahsCount = getFlaggedAyahsForSura(sura).size
       )
     }
   }
@@ -346,6 +349,96 @@ class MemorizationPreferences(
   fun getAllMemorizedSurahInfo(): Map<Int, MemorizedSurahInfo> {
     return getAllMemorizedSurahInfos().associateBy { it.sura }
   }
+
+  // --- Daily Goal & Streak Tracking (Easy Quran Memorizer Pro) ---
+
+  fun getDailyGoalAyahs(): Int = prefs.getInt(KEY_DAILY_GOAL_AYAHS, 5)
+
+  fun setDailyGoalAyahs(goal: Int) {
+    prefs.edit().putInt(KEY_DAILY_GOAL_AYAHS, goal.coerceIn(1, 100)).apply()
+  }
+
+  fun getAyahsMemorizedToday(): Int {
+    val currentEpochDay = (System.currentTimeMillis() / 86_400_000L).toInt()
+    val lastEpochDay = prefs.getInt(KEY_LAST_ACTIVE_EPOCH_DAY, 0)
+    return if (lastEpochDay == currentEpochDay) {
+      prefs.getInt(KEY_AYAHS_MEMORIZED_TODAY, 0)
+    } else {
+      0
+    }
+  }
+
+  fun getCurrentStreak(): Int {
+    val currentEpochDay = (System.currentTimeMillis() / 86_400_000L).toInt()
+    val lastEpochDay = prefs.getInt(KEY_LAST_ACTIVE_EPOCH_DAY, 0)
+    return when {
+      lastEpochDay == currentEpochDay || lastEpochDay == currentEpochDay - 1 -> prefs.getInt(KEY_CURRENT_STREAK, 0)
+      else -> 0
+    }
+  }
+
+  fun getBestStreak(): Int = prefs.getInt(KEY_BEST_STREAK, 0)
+
+  fun recordAyahsPracticed(count: Int) {
+    if (count <= 0) return
+    val currentEpochDay = (System.currentTimeMillis() / 86_400_000L).toInt()
+    val lastEpochDay = prefs.getInt(KEY_LAST_ACTIVE_EPOCH_DAY, 0)
+    val editor = prefs.edit()
+    val newStreak = when {
+      lastEpochDay == currentEpochDay -> prefs.getInt(KEY_CURRENT_STREAK, 1)
+      lastEpochDay == currentEpochDay - 1 -> prefs.getInt(KEY_CURRENT_STREAK, 0) + 1
+      else -> 1
+    }
+    val bestStreak = maxOf(newStreak, prefs.getInt(KEY_BEST_STREAK, 0))
+    val todayAyahs = if (lastEpochDay == currentEpochDay) {
+      prefs.getInt(KEY_AYAHS_MEMORIZED_TODAY, 0) + count
+    } else {
+      count
+    }
+
+    editor.putInt(KEY_LAST_ACTIVE_EPOCH_DAY, currentEpochDay)
+      .putInt(KEY_CURRENT_STREAK, newStreak)
+      .putInt(KEY_BEST_STREAK, bestStreak)
+      .putInt(KEY_AYAHS_MEMORIZED_TODAY, todayAyahs)
+      .apply()
+  }
+
+  // --- Difficult / Flagged Ayahs (Mistake Tracker) ---
+
+  fun toggleAyahFlagged(sura: Int, ayah: Int): Boolean {
+    val current = getFlaggedAyahsForSura(sura).toMutableSet()
+    val isNowFlagged = if (current.contains(ayah)) {
+      current.remove(ayah)
+      false
+    } else {
+      current.add(ayah)
+      true
+    }
+    setFlaggedAyahsForSura(sura, current)
+    return isNowFlagged
+  }
+
+  fun isAyahFlagged(sura: Int, ayah: Int): Boolean {
+    return getFlaggedAyahsForSura(sura).contains(ayah)
+  }
+
+  fun getFlaggedAyahsForSura(sura: Int): Set<Int> {
+    val raw = prefs.getString("${KEY_FLAGGED_AYAHS_PREFIX}$sura", null) ?: return emptySet()
+    return raw.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+  }
+
+  fun setFlaggedAyahsForSura(sura: Int, ayahs: Set<Int>) {
+    if (ayahs.isEmpty()) {
+      prefs.edit().remove("${KEY_FLAGGED_AYAHS_PREFIX}$sura").apply()
+    } else {
+      prefs.edit().putString("${KEY_FLAGGED_AYAHS_PREFIX}$sura", ayahs.joinToString(",")).apply()
+    }
+  }
+
+  fun getAllFlaggedSurahs(): Set<Int> {
+    return (1..114).filter { getFlaggedAyahsForSura(it).isNotEmpty() }.toSet()
+  }
+
 
   /**
    * Saves active memorization configuration and progress step specifically for a Surah.
@@ -561,6 +654,12 @@ class MemorizationPreferences(
     private const val KEY_PLAYLIST_ID = "mem_playlist_id"
     private const val KEY_PLAYLIST_NAME = "mem_playlist_name"
     private const val KEY_REVISION_QUEUE = "mem_revision_queue"
+    private const val KEY_DAILY_GOAL_AYAHS = "mem_daily_goal_ayahs"
+    private const val KEY_AYAHS_MEMORIZED_TODAY = "mem_ayahs_today"
+    private const val KEY_CURRENT_STREAK = "mem_current_streak"
+    private const val KEY_BEST_STREAK = "mem_best_streak"
+    private const val KEY_LAST_ACTIVE_EPOCH_DAY = "mem_last_active_epoch_day"
+    private const val KEY_FLAGGED_AYAHS_PREFIX = "mem_flagged_sura_"
 
     private const val KEY_DEFAULT_WINDOW_SIZE = "mem_def_window_size"
     private const val KEY_DEFAULT_SINGLE_REPEAT = "mem_def_single_repeat"
