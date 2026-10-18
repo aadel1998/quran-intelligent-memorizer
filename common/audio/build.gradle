@@ -25,4 +25,5 @@ dependencies {
   testImplementation libs.okio.fakefilesystem
   testImplementation libs.kotlinx.coroutines.test
   testImplementation libs.turbine
+  testImplementation 'org.json:json:20240303'
 }

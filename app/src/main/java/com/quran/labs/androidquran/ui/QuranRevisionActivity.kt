@@ -13,7 +13,9 @@ import androidx.compose.runtime.setValue
 import com.quran.data.core.QuranInfo
 import com.quran.data.model.SuraAyah
 import com.quran.labs.androidquran.QuranApplication
+import com.quran.labs.androidquran.common.audio.memorization.HifzPlan
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationPreferences
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationProfile
 import com.quran.labs.androidquran.common.audio.memorization.MemorizedSurahInfo
 import com.quran.labs.androidquran.common.ui.core.QuranTheme
 import com.quran.labs.androidquran.data.Constants
@@ -21,6 +23,7 @@ import com.quran.labs.androidquran.data.QuranDisplayData
 import com.quran.labs.androidquran.ui.helpers.QuranNavigator
 import com.quran.labs.androidquran.ui.modern.ModernRevisionDashboardScreen
 import com.quran.labs.androidquran.ui.modern.SuraItemModel
+import com.quran.labs.androidquran.util.HifzReminderScheduler
 import com.quran.labs.androidquran.util.QuranSettings
 import dev.zacsweers.metro.Inject
 import com.quran.mobile.common.ui.core.R as UiCoreR
@@ -46,6 +49,11 @@ class QuranRevisionActivity : AppCompatActivity() {
   private var bestStreakState by mutableStateOf(0)
   private var flaggedSurahsState by mutableStateOf<Set<Int>>(emptySet())
   private var totalFlaggedAyahsState by mutableIntStateOf(0)
+  private var profilesState by mutableStateOf<List<MemorizationProfile>>(emptyList())
+  private var activeProfileState by mutableStateOf(MemorizationProfile("default", "Personal", 0L))
+  private var hifzPlanState by mutableStateOf<HifzPlan?>(null)
+  private var isReminderEnabledState by mutableStateOf(false)
+  private var reminderTimeState by mutableStateOf(Pair(9, 0))
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
@@ -147,6 +155,60 @@ class QuranRevisionActivity : AppCompatActivity() {
             refreshState()
           },
           totalFlaggedAyahs = totalFlaggedAyahsState,
+          profiles = profilesState,
+          activeProfile = activeProfileState,
+          onSwitchProfile = { profileId ->
+            memorizationPreferences.setActiveProfile(profileId)
+            refreshState()
+          },
+          onCreateProfile = { name ->
+            val p = memorizationPreferences.createProfile(name)
+            memorizationPreferences.setActiveProfile(p.id)
+            refreshState()
+          },
+          onDeleteProfile = { profileId ->
+            memorizationPreferences.deleteProfile(profileId)
+            refreshState()
+          },
+          hifzPlan = hifzPlanState,
+          onSetHifzPlan = { plan ->
+            memorizationPreferences.setHifzPlan(plan)
+            refreshState()
+          },
+          onClearHifzPlan = {
+            memorizationPreferences.clearHifzPlan()
+            refreshState()
+          },
+          isDailyReminderEnabled = isReminderEnabledState,
+          dailyReminderTime = reminderTimeState,
+          onToggleReminder = { enabled ->
+            memorizationPreferences.setDailyReminderEnabled(enabled)
+            if (enabled) {
+              val (h, m) = memorizationPreferences.getDailyReminderTime()
+              HifzReminderScheduler.scheduleDailyReminder(this, h, m)
+            } else {
+              HifzReminderScheduler.cancelDailyReminder(this)
+            }
+            refreshState()
+          },
+          onSetReminderTime = { hour, minute ->
+            memorizationPreferences.setDailyReminderTime(hour, minute)
+            if (memorizationPreferences.isDailyReminderEnabled()) {
+              HifzReminderScheduler.scheduleDailyReminder(this, hour, minute)
+            }
+            refreshState()
+          },
+          onSendTestReminder = {
+            HifzReminderScheduler.showReminderNotification(this)
+          },
+          onExportBackup = {
+            memorizationPreferences.exportHifzBackupJson()
+          },
+          onImportBackup = { json ->
+            val ok = memorizationPreferences.importHifzBackupJson(json)
+            if (ok) refreshState()
+            ok
+          },
           onBackClick = { finish() }
         )
       }
@@ -159,6 +221,11 @@ class QuranRevisionActivity : AppCompatActivity() {
   }
 
   private fun refreshState() {
+    profilesState = memorizationPreferences.getProfiles()
+    activeProfileState = memorizationPreferences.getActiveProfile()
+    hifzPlanState = memorizationPreferences.getHifzPlan()
+    isReminderEnabledState = memorizationPreferences.isDailyReminderEnabled()
+    reminderTimeState = memorizationPreferences.getDailyReminderTime()
     memorizedInfosState = memorizationPreferences.getAllMemorizedSurahInfo()
     selectedQueueState = memorizationPreferences.getRevisionQueue().toSet()
     dailyGoalAyahsState = memorizationPreferences.getDailyGoalAyahs()

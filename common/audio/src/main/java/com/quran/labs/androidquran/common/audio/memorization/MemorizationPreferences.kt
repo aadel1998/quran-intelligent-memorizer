@@ -34,6 +34,39 @@ data class MemorizedSurahInfo(
 )
 
 /**
+ * User profile for tracking independent memorization progress, streaks, and settings.
+ * Supports family members, students, and multiple custom learning profiles (Easy Quran Memorizer Pro).
+ */
+data class MemorizationProfile(
+  val id: String,
+  val name: String,
+  val createdAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Memorization target plan with deadline and daily pace calculation.
+ */
+data class HifzPlan(
+  val targetSura: Int,
+  val targetSuraName: String,
+  val totalVerses: Int,
+  val targetDateEpoch: Long,
+  val createdAt: Long = System.currentTimeMillis()
+) {
+  val daysRemaining: Int
+    get() {
+      val diff = targetDateEpoch - System.currentTimeMillis()
+      return (diff / (24 * 60 * 60 * 1000L)).toInt().coerceAtLeast(1)
+    }
+
+  fun dailyPaceRequired(versesCompleted: Int): Int {
+    val versesLeft = (totalVerses - versesCompleted).coerceAtLeast(0)
+    val days = daysRemaining
+    return if (days > 0) ((versesLeft + days - 1) / days).coerceAtLeast(1) else versesLeft
+  }
+}
+
+/**
  * Persisted default settings for memorization configuration.
  */
 data class MemorizationDefaultSettings(
@@ -63,6 +96,137 @@ class MemorizationPreferences(
   constructor(@ApplicationContext context: Context) : this(
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
   )
+
+  val currentPrefix: String
+    get() {
+      val activeId = getActiveProfileId()
+      return if (activeId == DEFAULT_PROFILE_ID) "" else "prof_${activeId}_"
+    }
+
+  // --- Multi-Profile Hifz Management (Easy Quran Memorizer Pro Feature) ---
+
+  fun getProfiles(): List<MemorizationProfile> {
+    val raw = prefs.getString(KEY_PROFILES_LIST, null)
+    if (raw.isNullOrBlank()) {
+      return listOf(MemorizationProfile(DEFAULT_PROFILE_ID, "Personal", 0L))
+    }
+    return raw.split("|").mapNotNull { entry ->
+      val parts = entry.split(":")
+      if (parts.size >= 2) {
+        val id = parts[0]
+        val name = parts[1]
+        val created = parts.getOrNull(2)?.toLongOrNull() ?: 0L
+        MemorizationProfile(id, name, created)
+      } else null
+    }.ifEmpty {
+      listOf(MemorizationProfile(DEFAULT_PROFILE_ID, "Personal", 0L))
+    }
+  }
+
+  fun getActiveProfileId(): String {
+    return prefs.getString(KEY_ACTIVE_PROFILE_ID, DEFAULT_PROFILE_ID) ?: DEFAULT_PROFILE_ID
+  }
+
+  fun getActiveProfile(): MemorizationProfile {
+    val activeId = getActiveProfileId()
+    return getProfiles().find { it.id == activeId } ?: MemorizationProfile(DEFAULT_PROFILE_ID, "Personal", 0L)
+  }
+
+  fun setActiveProfile(profileId: String) {
+    prefs.edit().putString(KEY_ACTIVE_PROFILE_ID, profileId).apply()
+  }
+
+  fun createProfile(name: String): MemorizationProfile {
+    val cleanName = name.trim().ifBlank { "Profile" }
+    val id = "p_${System.currentTimeMillis()}"
+    val newProfile = MemorizationProfile(id, cleanName, System.currentTimeMillis())
+    val list = getProfiles().toMutableList()
+    list.add(newProfile)
+    saveProfilesList(list)
+    return newProfile
+  }
+
+  fun deleteProfile(profileId: String) {
+    if (profileId == DEFAULT_PROFILE_ID) return
+    val list = getProfiles().filter { it.id != profileId }
+    saveProfilesList(list)
+    if (getActiveProfileId() == profileId) {
+      setActiveProfile(DEFAULT_PROFILE_ID)
+    }
+  }
+
+  fun renameProfile(profileId: String, newName: String) {
+    val cleanName = newName.trim().ifBlank { return }
+    val list = getProfiles().map {
+      if (it.id == profileId) it.copy(name = cleanName) else it
+    }
+    saveProfilesList(list)
+  }
+
+  private fun saveProfilesList(list: List<MemorizationProfile>) {
+    val str = list.joinToString("|") { "${it.id}:${it.name}:${it.createdAt}" }
+    prefs.edit().putString(KEY_PROFILES_LIST, str).apply()
+  }
+
+  // --- Hifz Plan Management (Easy Quran Memorizer Pro Feature) ---
+
+  fun getHifzPlan(): HifzPlan? {
+    val active = prefs.getBoolean("${currentPrefix}$KEY_HIFZ_PLAN_ACTIVE", false)
+    if (!active) return null
+    val targetSura = prefs.getInt("${currentPrefix}$KEY_HIFZ_PLAN_TARGET_SURA", 0)
+    val suraName = prefs.getString("${currentPrefix}$KEY_HIFZ_PLAN_SURA_NAME", "") ?: ""
+    val totalVerses = prefs.getInt("${currentPrefix}$KEY_HIFZ_PLAN_TOTAL_VERSES", 0)
+    val targetDate = prefs.getLong("${currentPrefix}$KEY_HIFZ_PLAN_TARGET_DATE", 0L)
+    val createdAt = prefs.getLong("${currentPrefix}$KEY_HIFZ_PLAN_CREATED_AT", 0L)
+    if (targetSura <= 0 || targetDate <= 0L) return null
+    return HifzPlan(
+      targetSura = targetSura,
+      targetSuraName = suraName,
+      totalVerses = totalVerses,
+      targetDateEpoch = targetDate,
+      createdAt = createdAt
+    )
+  }
+
+  fun setHifzPlan(plan: HifzPlan) {
+    prefs.edit()
+      .putBoolean("${currentPrefix}$KEY_HIFZ_PLAN_ACTIVE", true)
+      .putInt("${currentPrefix}$KEY_HIFZ_PLAN_TARGET_SURA", plan.targetSura)
+      .putString("${currentPrefix}$KEY_HIFZ_PLAN_SURA_NAME", plan.targetSuraName)
+      .putInt("${currentPrefix}$KEY_HIFZ_PLAN_TOTAL_VERSES", plan.totalVerses)
+      .putLong("${currentPrefix}$KEY_HIFZ_PLAN_TARGET_DATE", plan.targetDateEpoch)
+      .putLong("${currentPrefix}$KEY_HIFZ_PLAN_CREATED_AT", plan.createdAt)
+      .apply()
+  }
+
+  fun clearHifzPlan() {
+    prefs.edit()
+      .remove("${currentPrefix}$KEY_HIFZ_PLAN_ACTIVE")
+      .remove("${currentPrefix}$KEY_HIFZ_PLAN_TARGET_SURA")
+      .remove("${currentPrefix}$KEY_HIFZ_PLAN_SURA_NAME")
+      .remove("${currentPrefix}$KEY_HIFZ_PLAN_TOTAL_VERSES")
+      .remove("${currentPrefix}$KEY_HIFZ_PLAN_TARGET_DATE")
+      .remove("${currentPrefix}$KEY_HIFZ_PLAN_CREATED_AT")
+      .apply()
+  }
+
+  // --- Daily Reminder Notification Settings (Easy Quran Memorizer Pro Feature) ---
+
+  fun isDailyReminderEnabled(): Boolean = prefs.getBoolean(KEY_REMINDER_ENABLED, false)
+
+  fun setDailyReminderEnabled(enabled: Boolean) {
+    prefs.edit().putBoolean(KEY_REMINDER_ENABLED, enabled).apply()
+  }
+
+  fun getDailyReminderTime(): Pair<Int, Int> =
+    Pair(prefs.getInt(KEY_REMINDER_HOUR, 9), prefs.getInt(KEY_REMINDER_MINUTE, 0))
+
+  fun setDailyReminderTime(hour: Int, minute: Int) {
+    prefs.edit()
+      .putInt(KEY_REMINDER_HOUR, hour.coerceIn(0, 23))
+      .putInt(KEY_REMINDER_MINUTE, minute.coerceIn(0, 59))
+      .apply()
+  }
 
   /**
    * Saves active memorization configuration and progress step.
@@ -238,17 +402,17 @@ class MemorizationPreferences(
    * Sets whether an entire Surah has been marked as fully memorized.
    */
   fun setSurahMemorized(sura: Int, memorized: Boolean) {
-    val editor = prefs.edit().putBoolean("sura_memorized_$sura", memorized)
+    val editor = prefs.edit().putBoolean("${currentPrefix}sura_memorized_$sura", memorized)
     if (memorized) {
       if (getLastRevised(sura) == 0L) {
-        editor.putLong("sura_revised_$sura", System.currentTimeMillis())
+        editor.putLong("${currentPrefix}sura_revised_$sura", System.currentTimeMillis())
       }
     }
     editor.apply()
   }
 
   fun isSurahMemorized(sura: Int): Boolean {
-    return prefs.getBoolean("sura_memorized_$sura", false)
+    return prefs.getBoolean("${currentPrefix}sura_memorized_$sura", false)
   }
 
   fun getMemorizedSurahs(): Set<Int> {
@@ -256,19 +420,19 @@ class MemorizationPreferences(
   }
 
   fun setLastRevised(sura: Int, timestamp: Long = System.currentTimeMillis()) {
-    prefs.edit().putLong("sura_revised_$sura", timestamp).apply()
+    prefs.edit().putLong("${currentPrefix}sura_revised_$sura", timestamp).apply()
   }
 
   fun getLastRevised(sura: Int): Long {
-    return prefs.getLong("sura_revised_$sura", 0L)
+    return prefs.getLong("${currentPrefix}sura_revised_$sura", 0L)
   }
 
   fun setRevisionIntervalDays(sura: Int, days: Int) {
-    prefs.edit().putInt("sura_rev_interval_$sura", days).apply()
+    prefs.edit().putInt("${currentPrefix}sura_rev_interval_$sura", days).apply()
   }
 
   fun getRevisionIntervalDays(sura: Int): Int {
-    return prefs.getInt("sura_rev_interval_$sura", 3)
+    return prefs.getInt("${currentPrefix}sura_rev_interval_$sura", 3)
   }
 
   fun isSurahDueForRevision(sura: Int): Boolean {
@@ -284,13 +448,13 @@ class MemorizationPreferences(
   }
 
   fun getRevisionQueue(): Set<Int> {
-    val raw = prefs.getString(KEY_REVISION_QUEUE, null) ?: return emptySet()
+    val raw = prefs.getString("${currentPrefix}$KEY_REVISION_QUEUE", null) ?: return emptySet()
     if (raw.isBlank()) return emptySet()
     return raw.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
   }
 
   fun setRevisionQueue(surahs: Collection<Int>) {
-    prefs.edit().putString(KEY_REVISION_QUEUE, surahs.toSet().sorted().joinToString(",")).apply()
+    prefs.edit().putString("${currentPrefix}$KEY_REVISION_QUEUE", surahs.toSet().sorted().joinToString(",")).apply()
   }
 
   /**
@@ -324,7 +488,7 @@ class MemorizationPreferences(
   }
 
   fun clearRevisionQueue() {
-    prefs.edit().remove(KEY_REVISION_QUEUE).apply()
+    prefs.edit().remove("${currentPrefix}$KEY_REVISION_QUEUE").apply()
   }
 
   fun getMemorizedSurahInfo(sura: Int): MemorizedSurahInfo {
@@ -362,17 +526,17 @@ class MemorizationPreferences(
 
   // --- Daily Goal & Streak Tracking (Easy Quran Memorizer Pro) ---
 
-  fun getDailyGoalAyahs(): Int = prefs.getInt(KEY_DAILY_GOAL_AYAHS, 5)
+  fun getDailyGoalAyahs(): Int = prefs.getInt("${currentPrefix}$KEY_DAILY_GOAL_AYAHS", 5)
 
   fun setDailyGoalAyahs(goal: Int) {
-    prefs.edit().putInt(KEY_DAILY_GOAL_AYAHS, goal.coerceIn(1, 100)).apply()
+    prefs.edit().putInt("${currentPrefix}$KEY_DAILY_GOAL_AYAHS", goal.coerceIn(1, 100)).apply()
   }
 
   fun getAyahsMemorizedToday(): Int {
     val currentEpochDay = (System.currentTimeMillis() / 86_400_000L).toInt()
-    val lastEpochDay = prefs.getInt(KEY_LAST_ACTIVE_EPOCH_DAY, 0)
+    val lastEpochDay = prefs.getInt("${currentPrefix}$KEY_LAST_ACTIVE_EPOCH_DAY", 0)
     return if (lastEpochDay == currentEpochDay) {
-      prefs.getInt(KEY_AYAHS_MEMORIZED_TODAY, 0)
+      prefs.getInt("${currentPrefix}$KEY_AYAHS_MEMORIZED_TODAY", 0)
     } else {
       0
     }
@@ -380,36 +544,36 @@ class MemorizationPreferences(
 
   fun getCurrentStreak(): Int {
     val currentEpochDay = (System.currentTimeMillis() / 86_400_000L).toInt()
-    val lastEpochDay = prefs.getInt(KEY_LAST_ACTIVE_EPOCH_DAY, 0)
+    val lastEpochDay = prefs.getInt("${currentPrefix}$KEY_LAST_ACTIVE_EPOCH_DAY", 0)
     return when {
-      lastEpochDay == currentEpochDay || lastEpochDay == currentEpochDay - 1 -> prefs.getInt(KEY_CURRENT_STREAK, 0)
+      lastEpochDay == currentEpochDay || lastEpochDay == currentEpochDay - 1 -> prefs.getInt("${currentPrefix}$KEY_CURRENT_STREAK", 0)
       else -> 0
     }
   }
 
-  fun getBestStreak(): Int = prefs.getInt(KEY_BEST_STREAK, 0)
+  fun getBestStreak(): Int = prefs.getInt("${currentPrefix}$KEY_BEST_STREAK", 0)
 
   fun recordAyahsPracticed(count: Int) {
     if (count <= 0) return
     val currentEpochDay = (System.currentTimeMillis() / 86_400_000L).toInt()
-    val lastEpochDay = prefs.getInt(KEY_LAST_ACTIVE_EPOCH_DAY, 0)
+    val lastEpochDay = prefs.getInt("${currentPrefix}$KEY_LAST_ACTIVE_EPOCH_DAY", 0)
     val editor = prefs.edit()
     val newStreak = when {
-      lastEpochDay == currentEpochDay -> prefs.getInt(KEY_CURRENT_STREAK, 1)
-      lastEpochDay == currentEpochDay - 1 -> prefs.getInt(KEY_CURRENT_STREAK, 0) + 1
+      lastEpochDay == currentEpochDay -> prefs.getInt("${currentPrefix}$KEY_CURRENT_STREAK", 1)
+      lastEpochDay == currentEpochDay - 1 -> prefs.getInt("${currentPrefix}$KEY_CURRENT_STREAK", 0) + 1
       else -> 1
     }
-    val bestStreak = maxOf(newStreak, prefs.getInt(KEY_BEST_STREAK, 0))
+    val bestStreak = maxOf(newStreak, prefs.getInt("${currentPrefix}$KEY_BEST_STREAK", 0))
     val todayAyahs = if (lastEpochDay == currentEpochDay) {
-      prefs.getInt(KEY_AYAHS_MEMORIZED_TODAY, 0) + count
+      prefs.getInt("${currentPrefix}$KEY_AYAHS_MEMORIZED_TODAY", 0) + count
     } else {
       count
     }
 
-    editor.putInt(KEY_LAST_ACTIVE_EPOCH_DAY, currentEpochDay)
-      .putInt(KEY_CURRENT_STREAK, newStreak)
-      .putInt(KEY_BEST_STREAK, bestStreak)
-      .putInt(KEY_AYAHS_MEMORIZED_TODAY, todayAyahs)
+    editor.putInt("${currentPrefix}$KEY_LAST_ACTIVE_EPOCH_DAY", currentEpochDay)
+      .putInt("${currentPrefix}$KEY_CURRENT_STREAK", newStreak)
+      .putInt("${currentPrefix}$KEY_BEST_STREAK", bestStreak)
+      .putInt("${currentPrefix}$KEY_AYAHS_MEMORIZED_TODAY", todayAyahs)
       .apply()
   }
 
@@ -433,15 +597,15 @@ class MemorizationPreferences(
   }
 
   fun getFlaggedAyahsForSura(sura: Int): Set<Int> {
-    val raw = prefs.getString("${KEY_FLAGGED_AYAHS_PREFIX}$sura", null) ?: return emptySet()
+    val raw = prefs.getString("${currentPrefix}${KEY_FLAGGED_AYAHS_PREFIX}$sura", null) ?: return emptySet()
     return raw.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
   }
 
   fun setFlaggedAyahsForSura(sura: Int, ayahs: Set<Int>) {
     if (ayahs.isEmpty()) {
-      prefs.edit().remove("${KEY_FLAGGED_AYAHS_PREFIX}$sura").apply()
+      prefs.edit().remove("${currentPrefix}${KEY_FLAGGED_AYAHS_PREFIX}$sura").apply()
     } else {
-      prefs.edit().putString("${KEY_FLAGGED_AYAHS_PREFIX}$sura", ayahs.joinToString(",")).apply()
+      prefs.edit().putString("${currentPrefix}${KEY_FLAGGED_AYAHS_PREFIX}$sura", ayahs.joinToString(",")).apply()
     }
   }
 
@@ -456,16 +620,16 @@ class MemorizationPreferences(
   fun clearAllFlaggedAyahs() {
     val editor = prefs.edit()
     (1..114).forEach { sura ->
-      editor.remove("${KEY_FLAGGED_AYAHS_PREFIX}$sura")
+      editor.remove("${currentPrefix}${KEY_FLAGGED_AYAHS_PREFIX}$sura")
     }
     editor.apply()
   }
 
   fun resetStreak() {
     prefs.edit()
-      .putInt(KEY_CURRENT_STREAK, 0)
-      .putInt(KEY_AYAHS_MEMORIZED_TODAY, 0)
-      .remove(KEY_LAST_ACTIVE_EPOCH_DAY)
+      .putInt("${currentPrefix}$KEY_CURRENT_STREAK", 0)
+      .putInt("${currentPrefix}$KEY_AYAHS_MEMORIZED_TODAY", 0)
+      .remove("${currentPrefix}$KEY_LAST_ACTIVE_EPOCH_DAY")
       .apply()
   }
 
@@ -474,7 +638,7 @@ class MemorizationPreferences(
    * Saves active memorization configuration and progress step specifically for a Surah.
    */
   fun saveSessionForSura(sura: Int, config: MemorizationConfig, currentStepIndex: Int, currentRepeatIteration: Int) {
-    val prefix = "sura_${sura}_"
+    val prefix = "${currentPrefix}sura_${sura}_"
     val editor = prefs.edit()
       .putInt("${prefix}$KEY_START_SURA", config.startAyah.sura)
       .putInt("${prefix}$KEY_START_AYAH", config.startAyah.ayah)
@@ -511,12 +675,12 @@ class MemorizationPreferences(
   }
 
   fun hasSavedSessionForSura(sura: Int): Boolean {
-    return prefs.getBoolean("sura_${sura}_$KEY_HAS_ACTIVE_SESSION", false)
+    return prefs.getBoolean("${currentPrefix}sura_${sura}_$KEY_HAS_ACTIVE_SESSION", false)
   }
 
   fun getSavedSessionForSura(sura: Int): SavedSuraSession? {
     if (!hasSavedSessionForSura(sura)) return null
-    val prefix = "sura_${sura}_"
+    val prefix = "${currentPrefix}sura_${sura}_"
     val startSura = prefs.getInt("${prefix}$KEY_START_SURA", sura)
     val startAyah = prefs.getInt("${prefix}$KEY_START_AYAH", 1)
     val endSura = prefs.getInt("${prefix}$KEY_END_SURA", sura)
@@ -574,7 +738,7 @@ class MemorizationPreferences(
   }
 
   fun clearSessionForSura(sura: Int) {
-    prefs.edit().putBoolean("sura_${sura}_$KEY_HAS_ACTIVE_SESSION", false).apply()
+    prefs.edit().putBoolean("${currentPrefix}sura_${sura}_$KEY_HAS_ACTIVE_SESSION", false).apply()
   }
 
   /**
@@ -674,6 +838,161 @@ class MemorizationPreferences(
     )
   }
 
+  // --- Backup & Restore (Easy Quran Memorizer Pro Feature) ---
+
+  fun exportHifzBackupJson(): String {
+    val root = org.json.JSONObject()
+    root.put("version", 1)
+    root.put("exportTimestamp", System.currentTimeMillis())
+    root.put("activeProfileId", getActiveProfileId())
+
+    // Profiles
+    val profilesArray = org.json.JSONArray()
+    getProfiles().forEach { profile ->
+      val pObj = org.json.JSONObject()
+      pObj.put("id", profile.id)
+      pObj.put("name", profile.name)
+      pObj.put("createdAt", profile.createdAt)
+      profilesArray.put(pObj)
+    }
+    root.put("profiles", profilesArray)
+
+    // Current profile data
+    val currentData = org.json.JSONObject()
+    val memorizedArray = org.json.JSONArray()
+    for (sura in 1..114) {
+      if (isSurahMemorized(sura)) {
+        val sObj = org.json.JSONObject()
+        sObj.put("sura", sura)
+        sObj.put("lastRevised", getLastRevised(sura))
+        sObj.put("intervalDays", getRevisionIntervalDays(sura))
+        memorizedArray.put(sObj)
+      }
+    }
+    currentData.put("memorizedSurahs", memorizedArray)
+
+    // Flagged ayahs
+    val flaggedObj = org.json.JSONObject()
+    for (sura in 1..114) {
+      val flagged = getFlaggedAyahsForSura(sura)
+      if (flagged.isNotEmpty()) {
+        val aArray = org.json.JSONArray()
+        flagged.forEach { aArray.put(it) }
+        flaggedObj.put(sura.toString(), aArray)
+      }
+    }
+    currentData.put("flaggedAyahs", flaggedObj)
+
+    // Streak & goals
+    val streakObj = org.json.JSONObject()
+    streakObj.put("currentStreak", getCurrentStreak())
+    streakObj.put("bestStreak", getBestStreak())
+    streakObj.put("dailyGoal", getDailyGoalAyahs())
+    streakObj.put("ayahsToday", getAyahsMemorizedToday())
+    currentData.put("streaks", streakObj)
+
+    // Plan
+    val plan = getHifzPlan()
+    if (plan != null) {
+      val planObj = org.json.JSONObject()
+      planObj.put("targetSura", plan.targetSura)
+      planObj.put("targetSuraName", plan.targetSuraName)
+      planObj.put("totalVerses", plan.totalVerses)
+      planObj.put("targetDateEpoch", plan.targetDateEpoch)
+      planObj.put("createdAt", plan.createdAt)
+      currentData.put("hifzPlan", planObj)
+    }
+
+    root.put("currentProfileData", currentData)
+    return root.toString(2)
+  }
+
+  fun importHifzBackupJson(jsonString: String): Boolean {
+    return try {
+      val root = org.json.JSONObject(jsonString)
+      // Check profiles
+      if (root.has("profiles")) {
+        val pArray = root.getJSONArray("profiles")
+        val importedProfiles = mutableListOf<MemorizationProfile>()
+        for (i in 0 until pArray.length()) {
+          val pObj = pArray.getJSONObject(i)
+          importedProfiles.add(
+            MemorizationProfile(
+              id = pObj.getString("id"),
+              name = pObj.getString("name"),
+              createdAt = pObj.optLong("createdAt", System.currentTimeMillis())
+            )
+          )
+        }
+        if (importedProfiles.isNotEmpty()) {
+          saveProfilesList(importedProfiles)
+        }
+      }
+
+      val activeId = root.optString("activeProfileId", null)
+      if (!activeId.isNullOrBlank()) {
+        setActiveProfile(activeId)
+      }
+
+      val data = root.optJSONObject("currentProfileData") ?: root
+      if (data.has("memorizedSurahs")) {
+        val memArray = data.getJSONArray("memorizedSurahs")
+        for (i in 0 until memArray.length()) {
+          val sObj = memArray.getJSONObject(i)
+          val sura = sObj.getInt("sura")
+          setSurahMemorized(sura, true)
+          val lastRev = sObj.optLong("lastRevised", 0L)
+          if (lastRev > 0L) {
+            setLastRevised(sura, lastRev)
+          }
+          val interval = sObj.optInt("intervalDays", 3)
+          setRevisionIntervalDays(sura, interval)
+        }
+      }
+
+      if (data.has("flaggedAyahs")) {
+        val flaggedObj = data.getJSONObject("flaggedAyahs")
+        val keys = flaggedObj.keys()
+        while (keys.hasNext()) {
+          val suraKey = keys.next()
+          val sura = suraKey.toIntOrNull() ?: continue
+          val aArray = flaggedObj.getJSONArray(suraKey)
+          val ayahsSet = mutableSetOf<Int>()
+          for (j in 0 until aArray.length()) {
+            ayahsSet.add(aArray.getInt(j))
+          }
+          setFlaggedAyahsForSura(sura, ayahsSet)
+        }
+      }
+
+      if (data.has("streaks")) {
+        val streakObj = data.getJSONObject("streaks")
+        val curr = streakObj.optInt("currentStreak", -1)
+        val best = streakObj.optInt("bestStreak", -1)
+        if (curr >= 0) prefs.edit().putInt("${currentPrefix}$KEY_CURRENT_STREAK", curr).apply()
+        if (best >= 0) prefs.edit().putInt("${currentPrefix}$KEY_BEST_STREAK", best).apply()
+        val goal = streakObj.optInt("dailyGoal", -1)
+        if (goal > 0) setDailyGoalAyahs(goal)
+      }
+
+      if (data.has("hifzPlan")) {
+        val planObj = data.getJSONObject("hifzPlan")
+        setHifzPlan(
+          HifzPlan(
+            targetSura = planObj.getInt("targetSura"),
+            targetSuraName = planObj.getString("targetSuraName"),
+            totalVerses = planObj.getInt("totalVerses"),
+            targetDateEpoch = planObj.getLong("targetDateEpoch"),
+            createdAt = planObj.optLong("createdAt", System.currentTimeMillis())
+          )
+        )
+      }
+      true
+    } catch (e: Exception) {
+      false
+    }
+  }
+
   companion object {
     private const val PREFS_NAME = "quran_intelligent_memorizer_prefs"
     private const val KEY_START_SURA = "mem_start_sura"
@@ -703,6 +1022,18 @@ class MemorizationPreferences(
     private const val KEY_BEST_STREAK = "mem_best_streak"
     private const val KEY_LAST_ACTIVE_EPOCH_DAY = "mem_last_active_epoch_day"
     private const val KEY_FLAGGED_AYAHS_PREFIX = "mem_flagged_sura_"
+    const val DEFAULT_PROFILE_ID = "default"
+    private const val KEY_PROFILES_LIST = "mem_profiles_list"
+    private const val KEY_ACTIVE_PROFILE_ID = "mem_active_profile_id"
+    private const val KEY_HIFZ_PLAN_TARGET_SURA = "mem_hifz_plan_sura"
+    private const val KEY_HIFZ_PLAN_SURA_NAME = "mem_hifz_plan_name"
+    private const val KEY_HIFZ_PLAN_TOTAL_VERSES = "mem_hifz_plan_total"
+    private const val KEY_HIFZ_PLAN_TARGET_DATE = "mem_hifz_plan_date"
+    private const val KEY_HIFZ_PLAN_CREATED_AT = "mem_hifz_plan_created"
+    private const val KEY_HIFZ_PLAN_ACTIVE = "mem_hifz_plan_active"
+    private const val KEY_REMINDER_ENABLED = "mem_reminder_enabled"
+    private const val KEY_REMINDER_HOUR = "mem_reminder_hour"
+    private const val KEY_REMINDER_MINUTE = "mem_reminder_minute"
 
     private const val KEY_DEFAULT_WINDOW_SIZE = "mem_def_window_size"
     private const val KEY_DEFAULT_SINGLE_REPEAT = "mem_def_single_repeat"

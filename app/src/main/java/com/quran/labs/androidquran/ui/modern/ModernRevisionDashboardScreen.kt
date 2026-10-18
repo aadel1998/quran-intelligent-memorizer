@@ -20,15 +20,20 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +60,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import com.quran.labs.androidquran.common.audio.memorization.HifzPlan
+import com.quran.labs.androidquran.common.audio.memorization.MemorizationProfile
 import com.quran.labs.androidquran.common.audio.memorization.MemorizedSurahInfo
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernCard
@@ -87,13 +96,33 @@ fun ModernRevisionDashboardScreen(
   onResetStreak: (() -> Unit)? = null,
   onClearAllFlagged: (() -> Unit)? = null,
   totalFlaggedAyahs: Int = 0,
+  profiles: List<MemorizationProfile> = listOf(MemorizationProfile("default", "Personal", 0L)),
+  activeProfile: MemorizationProfile = MemorizationProfile("default", "Personal", 0L),
+  onSwitchProfile: ((String) -> Unit)? = null,
+  onCreateProfile: ((String) -> Unit)? = null,
+  onDeleteProfile: ((String) -> Unit)? = null,
+  hifzPlan: HifzPlan? = null,
+  onSetHifzPlan: ((HifzPlan) -> Unit)? = null,
+  onClearHifzPlan: (() -> Unit)? = null,
+  isDailyReminderEnabled: Boolean = false,
+  dailyReminderTime: Pair<Int, Int> = Pair(9, 0),
+  onToggleReminder: ((Boolean) -> Unit)? = null,
+  onSetReminderTime: ((Int, Int) -> Unit)? = null,
+  onSendTestReminder: (() -> Unit)? = null,
+  onExportBackup: (() -> String)? = null,
+  onImportBackup: ((String) -> Boolean)? = null,
   modifier: Modifier = Modifier
 ) {
   var searchQuery by remember { mutableStateOf("") }
   // 0: All, 1: Due, 2: Memorized, 3: In Queue, 4: Flagged
   var selectedFilterTab by remember { mutableIntStateOf(0) }
+  var selectedJuz by remember { mutableStateOf<Int?>(null) }
+  var showJuzSheet by remember { mutableStateOf(false) }
+  var showBackupSheet by remember { mutableStateOf(false) }
   var quizSura by remember { mutableStateOf<SuraItemModel?>(null) }
   var showStatsDialog by remember { mutableStateOf(false) }
+  var showProfileSheet by remember { mutableStateOf(false) }
+  var showPlanSheet by remember { mutableStateOf(false) }
 
   val memorizedCount = surahs.count { memorizedInfos[it.number]?.isMemorized == true }
   val dueCount = surahs.count { memorizedInfos[it.number]?.isDue == true }
@@ -101,8 +130,9 @@ fun ModernRevisionDashboardScreen(
     surahs.filter { memorizedInfos[it.number]?.isMemorized == true }.sumOf { it.numberOfAyahs }
   }
 
-  // Filter surahs based on tab & query
-  val filteredSurahs = remember(surahs, memorizedInfos, selectedQueue, searchQuery, selectedFilterTab, flaggedSurahs) {
+  // Filter surahs based on tab & query & juz
+  val filteredSurahs = remember(surahs, memorizedInfos, selectedQueue, searchQuery, selectedFilterTab, flaggedSurahs, selectedJuz) {
+    val juzSurahs = selectedJuz?.let { JuzConstants.getJuz(it)?.surahs }
     surahs.filter { sura ->
       val info = memorizedInfos[sura.number]
       val matchesTab = when (selectedFilterTab) {
@@ -119,7 +149,26 @@ fun ModernRevisionDashboardScreen(
           sura.arabicName.contains(searchQuery) ||
           sura.number.toString() == searchQuery.trim()
       }
-      matchesTab && matchesQuery
+      val matchesJuz = juzSurahs == null || juzSurahs.contains(sura.number)
+      matchesTab && matchesQuery && matchesJuz
+    }
+  }
+
+  // 0: Surah Number (1..114), 1: Revision Due First, 2: Most Verses Memorized
+  var sortOrder by remember { mutableIntStateOf(0) }
+
+  val sortedSurahs = remember(filteredSurahs, sortOrder, memorizedInfos) {
+    when (sortOrder) {
+      1 -> filteredSurahs.sortedWith(
+        compareByDescending<SuraItemModel> { memorizedInfos[it.number]?.isDue == true }
+          .thenBy { it.number }
+      )
+      2 -> filteredSurahs.sortedWith(
+        compareByDescending<SuraItemModel> { memorizedInfos[it.number]?.isMemorized == true }
+          .thenByDescending { it.numberOfAyahs }
+          .thenBy { it.number }
+      )
+      else -> filteredSurahs.sortedBy { it.number }
     }
   }
 
@@ -231,36 +280,97 @@ fun ModernRevisionDashboardScreen(
           }
         }
 
-        // Memorized Stat Pill
-        Box(
-          modifier = Modifier
-            .background(
-              color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-              shape = RoundedCornerShape(20.dp)
-            )
-            .border(
-              width = 1.dp,
-              color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-              shape = RoundedCornerShape(20.dp)
-            )
-            .clip(RoundedCornerShape(20.dp))
-            .clickable { showStatsDialog = true }
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-              imageVector = QuranIcons.BookmarkFilled,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(14.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-              text = "$memorizedCount/114",
-              fontSize = 13.sp,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.primary
-            )
+        // Top Action Pills: Profile Switcher & Memorized Stat
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          // Profile Selector Pill
+          Box(
+            modifier = Modifier
+              .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(20.dp)
+              )
+              .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(20.dp)
+              )
+              .clip(RoundedCornerShape(20.dp))
+              .clickable { showProfileSheet = true }
+              .padding(horizontal = 10.dp, vertical = 6.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text("👤", fontSize = 11.sp)
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = activeProfile.name,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+              )
+              Spacer(modifier = Modifier.width(2.dp))
+              Text(
+                text = "▾",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+          }
+
+          Spacer(modifier = Modifier.width(6.dp))
+
+          // Memorized Stat Pill
+          Box(
+            modifier = Modifier
+              .background(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(20.dp)
+              )
+              .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(20.dp)
+              )
+              .clip(RoundedCornerShape(20.dp))
+              .clickable { showStatsDialog = true }
+              .padding(horizontal = 10.dp, vertical = 6.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = QuranIcons.BookmarkFilled,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(13.dp)
+              )
+              Spacer(modifier = Modifier.width(3.dp))
+              Text(
+                text = "$memorizedCount/114",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+
+          if (onExportBackup != null && onImportBackup != null) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+              modifier = Modifier
+                .background(
+                  color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                  shape = CircleShape
+                )
+                .border(
+                  width = 1.dp,
+                  color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                  shape = CircleShape
+                )
+                .clip(CircleShape)
+                .clickable { showBackupSheet = true }
+                .padding(horizontal = 9.dp, vertical = 6.dp)
+            ) {
+              Text("💾", fontSize = 11.sp)
+            }
           }
         }
       }
@@ -363,6 +473,143 @@ fun ModernRevisionDashboardScreen(
         }
       }
 
+      // Active Hifz Plan Card (Easy Quran Memorizer Pro Feature)
+      if (hifzPlan != null) {
+        val isTargetSuraMemorized = memorizedInfos[hifzPlan.targetSura]?.isMemorized == true
+        val versesCompleted = if (isTargetSuraMemorized) hifzPlan.totalVerses else 0
+        val daysLeft = hifzPlan.daysRemaining
+        val requiredPace = hifzPlan.dailyPaceRequired(versesCompleted)
+        val planProgress = if (hifzPlan.totalVerses > 0) (versesCompleted.toFloat() / hifzPlan.totalVerses).coerceIn(0f, 1f) else 0f
+
+        ModernCard(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable { showPlanSheet = true },
+          shape = RoundedCornerShape(16.dp),
+          backgroundColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+          borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+          borderWidth = 1.dp,
+          contentPadding = 12.dp
+        ) {
+          Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🎯", fontSize = 14.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = "TARGET: ${hifzPlan.targetSuraName.ifBlank { "Surah ${hifzPlan.targetSura}" }}",
+                  fontSize = 12.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary,
+                  letterSpacing = 0.5.sp
+                )
+              }
+
+              TextButton(
+                onClick = { onClearHifzPlan?.invoke() },
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+              ) {
+                Text("Clear", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+              }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Text(
+                text = "$daysLeft days left • Need $requiredPace v/day",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+              Text(
+                text = if (isTargetSuraMemorized) "Completed! 🎉" else "${(planProgress * 100).toInt()}%",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isTargetSuraMemorized) Color(0xFF10B981) else MaterialTheme.colorScheme.primary
+              )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            LinearProgressIndicator(
+              progress = { planProgress },
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .clip(RoundedCornerShape(3.dp)),
+              color = MaterialTheme.colorScheme.primary,
+              trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+          }
+        }
+      } else {
+        // Hifz Target Plan Prompt Card
+        ModernCard(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable { showPlanSheet = true },
+          shape = RoundedCornerShape(16.dp),
+          backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+          borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+          borderWidth = 1.dp,
+          contentPadding = 12.dp
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(34.dp)
+                  .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center
+              ) {
+                Text("🎯", fontSize = 16.sp)
+              }
+              Spacer(modifier = Modifier.width(10.dp))
+              Column {
+                Text(
+                  text = "Hifz Target Planner",
+                  fontSize = 13.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                  text = "Set a deadline & daily pace for any Surah",
+                  fontSize = 11.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+
+            Box(
+              modifier = Modifier
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+              Text(
+                text = "+ Set Plan",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+        }
+      }
+
       // Search Box
       Box(
         modifier = Modifier
@@ -405,76 +652,153 @@ fun ModernRevisionDashboardScreen(
         )
       }
 
-      // Filter Chips Row
+      // Filter & Sort Row
       Row(
         modifier = Modifier
           .fillMaxWidth()
           .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
       ) {
-        FilterChip(
-          selected = selectedFilterTab == 0,
-          onClick = { selectedFilterTab = 0 },
-          label = { Text("All (114)", fontSize = 12.sp) },
-          colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-          ),
-          shape = RoundedCornerShape(10.dp)
-        )
-
-        FilterChip(
-          selected = selectedFilterTab == 1,
-          onClick = { selectedFilterTab = 1 },
-          label = {
-            Text(
-              text = if (dueCount > 0) "Due ($dueCount)" else "Due",
-              fontSize = 12.sp,
-              fontWeight = if (dueCount > 0) FontWeight.Bold else FontWeight.Normal
-            )
-          },
-          colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-          ),
-          shape = RoundedCornerShape(10.dp)
-        )
-
-        FilterChip(
-          selected = selectedFilterTab == 2,
-          onClick = { selectedFilterTab = 2 },
-          label = { Text("Memorized ($memorizedCount)", fontSize = 12.sp) },
-          colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-          ),
-          shape = RoundedCornerShape(10.dp)
-        )
-
-        if (selectedQueue.isNotEmpty()) {
+        Row(
+          modifier = Modifier
+            .weight(1f)
+            .horizontalScroll(rememberScrollState()),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
           FilterChip(
-            selected = selectedFilterTab == 3,
-            onClick = { selectedFilterTab = 3 },
-            label = { Text("Queue (${selectedQueue.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+            selected = selectedFilterTab == 0,
+            onClick = { selectedFilterTab = 0 },
+            label = { Text("All (114)", fontSize = 12.sp) },
             colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = MaterialTheme.colorScheme.primary,
-              selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+              selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+              selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ),
+            shape = RoundedCornerShape(10.dp)
+          )
+
+          FilterChip(
+            selected = selectedFilterTab == 1,
+            onClick = { selectedFilterTab = 1 },
+            label = {
+              Text(
+                text = if (dueCount > 0) "Due ($dueCount)" else "Due",
+                fontSize = 12.sp,
+                fontWeight = if (dueCount > 0) FontWeight.Bold else FontWeight.Normal
+              )
+            },
+            colors = FilterChipDefaults.filterChipColors(
+              selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+              selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ),
+            shape = RoundedCornerShape(10.dp)
+          )
+
+          FilterChip(
+            selected = selectedFilterTab == 2,
+            onClick = { selectedFilterTab = 2 },
+            label = { Text("Memorized ($memorizedCount)", fontSize = 12.sp) },
+            colors = FilterChipDefaults.filterChipColors(
+              selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+              selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ),
+            shape = RoundedCornerShape(10.dp)
+          )
+
+          if (selectedQueue.isNotEmpty()) {
+            FilterChip(
+              selected = selectedFilterTab == 3,
+              onClick = { selectedFilterTab = 3 },
+              label = { Text("Queue (${selectedQueue.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+              colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+              ),
+              shape = RoundedCornerShape(10.dp)
+            )
+          }
+
+          if (flaggedSurahs.isNotEmpty()) {
+            FilterChip(
+              selected = selectedFilterTab == 4,
+              onClick = { selectedFilterTab = 4 },
+              label = { Text("Flagged (${flaggedSurahs.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+              colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = Color(0xFFEF4444).copy(alpha = 0.2f),
+                selectedLabelColor = Color(0xFFEF4444)
+              ),
+              shape = RoundedCornerShape(10.dp)
+            )
+          }
+
+          FilterChip(
+            selected = selectedJuz != null,
+            onClick = { showJuzSheet = true },
+            label = {
+              Text(
+                text = if (selectedJuz != null) "Juz $selectedJuz ▾" else "Juz ▾",
+                fontSize = 12.sp,
+                fontWeight = if (selectedJuz != null) FontWeight.Bold else FontWeight.Normal
+              )
+            },
+            colors = FilterChipDefaults.filterChipColors(
+              selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+              selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
             ),
             shape = RoundedCornerShape(10.dp)
           )
         }
 
-        if (flaggedSurahs.isNotEmpty()) {
-          FilterChip(
-            selected = selectedFilterTab == 4,
-            onClick = { selectedFilterTab = 4 },
-            label = { Text("Flagged (${flaggedSurahs.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
-            colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = Color(0xFFEF4444).copy(alpha = 0.2f),
-              selectedLabelColor = Color(0xFFEF4444)
-            ),
-            shape = RoundedCornerShape(10.dp)
-          )
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Sort Control Pill
+        var showSortMenu by remember { mutableStateOf(false) }
+        Box {
+          Box(
+            modifier = Modifier
+              .clip(RoundedCornerShape(10.dp))
+              .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+              .clickable { showSortMenu = true }
+              .padding(horizontal = 8.dp, vertical = 6.dp)
+          ) {
+            Text(
+              text = when (sortOrder) {
+                1 -> "⇅ Due"
+                2 -> "⇅ Verses"
+                else -> "⇅ 1..114"
+              },
+              fontSize = 11.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.primary
+            )
+          }
+
+          DropdownMenu(
+            expanded = showSortMenu,
+            onDismissRequest = { showSortMenu = false }
+          ) {
+            DropdownMenuItem(
+              text = { Text("Surah Number (1 → 114)") },
+              onClick = {
+                sortOrder = 0
+                showSortMenu = false
+              }
+            )
+            DropdownMenuItem(
+              text = { Text("Revision Due First") },
+              onClick = {
+                sortOrder = 1
+                showSortMenu = false
+              }
+            )
+            DropdownMenuItem(
+              text = { Text("Most Verses Memorized") },
+              onClick = {
+                sortOrder = 2
+                showSortMenu = false
+              }
+            )
+          }
         }
       }
 
@@ -549,8 +873,81 @@ fun ModernRevisionDashboardScreen(
           contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+          if (selectedJuz != null) {
+            item(key = "juz_banner") {
+              val juzInfo = JuzConstants.getJuz(selectedJuz!!)
+              if (juzInfo != null) {
+                ModernCard(
+                  modifier = Modifier.fillMaxWidth(),
+                  shape = RoundedCornerShape(14.dp),
+                  backgroundColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                  borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                  borderWidth = 1.dp,
+                  contentPadding = 12.dp
+                ) {
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                          text = "Juz ${juzInfo.number}: ${juzInfo.nameEnglish}",
+                          fontSize = 13.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                          text = juzInfo.nameArabic,
+                          fontSize = 15.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = MaterialTheme.colorScheme.primary
+                        )
+                      }
+                      Text(
+                        text = "${juzInfo.surahs.size} Surahs • ${juzInfo.description}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                      FilledTonalButton(
+                        onClick = {
+                          juzInfo.surahs.forEach { s ->
+                            if (!selectedQueue.contains(s)) {
+                              onToggleQueueSelection(s)
+                            }
+                          }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                      ) {
+                        Text("⚡ Select All", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                      }
+
+                      IconButton(
+                        onClick = { selectedJuz = null },
+                        modifier = Modifier.size(32.dp)
+                      ) {
+                        Icon(
+                          imageVector = QuranIcons.Close,
+                          contentDescription = "Clear Juz",
+                          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                          modifier = Modifier.size(16.dp)
+                        )
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
           items(
-            items = filteredSurahs,
+            items = sortedSurahs,
             key = { it.number }
           ) { sura ->
             val info = memorizedInfos[sura.number]
@@ -663,6 +1060,129 @@ fun ModernRevisionDashboardScreen(
             Text("⚠️ $totalFlaggedAyahs Verses", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
           }
 
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+          // Memorization Target Plan Row
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column {
+              Text("Memorization Plan:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(
+                text = if (hifzPlan != null) "${hifzPlan.targetSuraName} (${hifzPlan.daysRemaining}d left)"
+                       else "No active plan",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+            }
+            TextButton(
+              onClick = {
+                showStatsDialog = false
+                showPlanSheet = true
+              }
+            ) {
+              Text(if (hifzPlan != null) "Edit Plan" else "+ Set Plan", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+          }
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+          // Daily Reminder Notification Settings (Easy Quran Memorizer Pro)
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column {
+              Text("Daily Hifz Reminder:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(
+                text = if (isDailyReminderEnabled) {
+                  val hourStr = dailyReminderTime.first.toString().padStart(2, '0')
+                  val minStr = dailyReminderTime.second.toString().padStart(2, '0')
+                  "Alarm set for $hourStr:$minStr"
+                } else "Disabled",
+                fontSize = 11.sp,
+                color = if (isDailyReminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+              )
+            }
+
+            Switch(
+              checked = isDailyReminderEnabled,
+              onCheckedChange = { onToggleReminder?.invoke(it) },
+              colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+              )
+            )
+          }
+
+          if (isDailyReminderEnabled && onSendTestReminder != null) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              TextButton(
+                onClick = {
+                  val nextTime = when (dailyReminderTime.first) {
+                    7 -> Pair(8, 30)
+                    8 -> Pair(12, 30)
+                    12 -> Pair(18, 0)
+                    18 -> Pair(20, 30)
+                    20 -> Pair(21, 30)
+                    else -> Pair(7, 0)
+                  }
+                  onSetReminderTime?.invoke(nextTime.first, nextTime.second)
+                }
+              ) {
+                val hourStr = dailyReminderTime.first.toString().padStart(2, '0')
+                val minStr = dailyReminderTime.second.toString().padStart(2, '0')
+                Text("⏰ Time: $hourStr:$minStr ▾", fontSize = 11.sp)
+              }
+
+              TextButton(
+                onClick = onSendTestReminder
+              ) {
+                Text("🔔 Test Alarm", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+              }
+            }
+          }
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+          // 30 Juz Mastery Matrix & Backup & Restore Action Buttons
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            FilledTonalButton(
+              onClick = {
+                showStatsDialog = false
+                showJuzSheet = true
+              },
+              modifier = Modifier.weight(1f),
+              shape = RoundedCornerShape(10.dp)
+            ) {
+              Text("📊 30 Juz Matrix", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+
+            if (onExportBackup != null && onImportBackup != null) {
+              FilledTonalButton(
+                onClick = {
+                  showStatsDialog = false
+                  showBackupSheet = true
+                },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(10.dp)
+              ) {
+                Text("💾 Backup & Restore", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+              }
+            }
+          }
+
           if (onResetStreak != null || onClearAllFlagged != null) {
             Spacer(modifier = Modifier.height(6.dp))
             Row(
@@ -700,6 +1220,46 @@ fun ModernRevisionDashboardScreen(
           Text("Done")
         }
       }
+    )
+  }
+
+  if (showProfileSheet) {
+    ModernProfileManagementSheet(
+      profiles = profiles,
+      activeProfile = activeProfile,
+      onSwitchProfile = { id -> onSwitchProfile?.invoke(id) },
+      onCreateProfile = { name -> onCreateProfile?.invoke(name) },
+      onDeleteProfile = { id -> onDeleteProfile?.invoke(id) },
+      onDismissRequest = { showProfileSheet = false }
+    )
+  }
+
+  if (showPlanSheet) {
+    ModernHifzPlanSheet(
+      surahs = surahs,
+      existingPlan = hifzPlan,
+      onSetHifzPlan = { plan -> onSetHifzPlan?.invoke(plan) },
+      onClearHifzPlan = if (onClearHifzPlan != null) { { onClearHifzPlan() } } else null,
+      onDismissRequest = { showPlanSheet = false }
+    )
+  }
+
+  if (showJuzSheet) {
+    ModernJuzPickerSheet(
+      selectedJuz = selectedJuz,
+      memorizedInfos = memorizedInfos,
+      onSelectJuz = { selectedJuz = it },
+      onDismissRequest = { showJuzSheet = false }
+    )
+  }
+
+  val exportFn = onExportBackup
+  val importFn = onImportBackup
+  if (showBackupSheet && exportFn != null && importFn != null) {
+    ModernBackupRestoreSheet(
+      onExportJson = exportFn,
+      onImportJson = importFn,
+      onDismissRequest = { showBackupSheet = false }
     )
   }
 }

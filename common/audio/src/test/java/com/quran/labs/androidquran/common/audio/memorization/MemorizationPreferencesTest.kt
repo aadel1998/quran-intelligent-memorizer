@@ -298,6 +298,130 @@ class MemorizationPreferencesTest {
     assertThat(lastUsed.playbackSpeed).isEqualTo(1.25f)
   }
 
+  @Test
+  fun `multi-profile management creates and isolates data between profiles`() {
+    // 1. Initial default profile
+    val initialProfiles = memorizationPreferences.getProfiles()
+    assertThat(initialProfiles).hasSize(1)
+    assertThat(initialProfiles.first().id).isEqualTo(MemorizationPreferences.DEFAULT_PROFILE_ID)
+    assertThat(memorizationPreferences.getActiveProfileId()).isEqualTo(MemorizationPreferences.DEFAULT_PROFILE_ID)
+
+    // Mark Surah 1 as memorized in Default profile
+    memorizationPreferences.setSurahMemorized(1, true)
+    memorizationPreferences.recordAyahsPracticed(15)
+    memorizationPreferences.toggleAyahFlagged(1, 4)
+    assertThat(memorizationPreferences.isSurahMemorized(1)).isTrue()
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(15)
+    assertThat(memorizationPreferences.isAyahFlagged(1, 4)).isTrue()
+
+    // 2. Create student/family profile
+    val studentProfile = memorizationPreferences.createProfile("Student Ahmad")
+    assertThat(studentProfile.name).isEqualTo("Student Ahmad")
+    assertThat(memorizationPreferences.getProfiles()).hasSize(2)
+
+    // Switch to Student profile
+    memorizationPreferences.setActiveProfile(studentProfile.id)
+    assertThat(memorizationPreferences.getActiveProfileId()).isEqualTo(studentProfile.id)
+
+    // Student profile should have fresh isolated data
+    assertThat(memorizationPreferences.isSurahMemorized(1)).isFalse()
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(0)
+    assertThat(memorizationPreferences.isAyahFlagged(1, 4)).isFalse()
+
+    // Practice in Student profile
+    memorizationPreferences.setSurahMemorized(112, true)
+    memorizationPreferences.recordAyahsPracticed(4)
+    assertThat(memorizationPreferences.isSurahMemorized(112)).isTrue()
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(4)
+
+    // 3. Switch back to Default profile
+    memorizationPreferences.setActiveProfile(MemorizationPreferences.DEFAULT_PROFILE_ID)
+    assertThat(memorizationPreferences.isSurahMemorized(1)).isTrue()
+    assertThat(memorizationPreferences.isSurahMemorized(112)).isFalse()
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(15)
+    assertThat(memorizationPreferences.isAyahFlagged(1, 4)).isTrue()
+
+    // 4. Rename & Delete profile
+    memorizationPreferences.renameProfile(studentProfile.id, "Ahmad (Advanced)")
+    assertThat(memorizationPreferences.getProfiles().find { it.id == studentProfile.id }?.name).isEqualTo("Ahmad (Advanced)")
+
+    memorizationPreferences.deleteProfile(studentProfile.id)
+    assertThat(memorizationPreferences.getProfiles()).hasSize(1)
+  }
+
+  @Test
+  fun `hifz plan persists and calculates daily pace required`() {
+    assertThat(memorizationPreferences.getHifzPlan()).isNull()
+
+    // 10 days in future
+    val targetDate = System.currentTimeMillis() + 10L * 24 * 60 * 60 * 1000L
+    val plan = HifzPlan(
+      targetSura = 67,
+      targetSuraName = "Al-Mulk",
+      totalVerses = 30,
+      targetDateEpoch = targetDate
+    )
+    memorizationPreferences.setHifzPlan(plan)
+
+    val savedPlan = memorizationPreferences.getHifzPlan()
+    assertThat(savedPlan).isNotNull()
+    assertThat(savedPlan?.targetSura).isEqualTo(67)
+    assertThat(savedPlan?.targetSuraName).isEqualTo("Al-Mulk")
+    assertThat(savedPlan?.totalVerses).isEqualTo(30)
+    assertThat(savedPlan?.daysRemaining).isIn(9..11)
+
+    // If 10 verses completed out of 30, with ~10 days left, daily pace should be 2 to 3 verses/day
+    val pace = savedPlan?.dailyPaceRequired(10)
+    assertThat(pace).isIn(2..3)
+
+    memorizationPreferences.clearHifzPlan()
+    assertThat(memorizationPreferences.getHifzPlan()).isNull()
+  }
+
+  @Test
+  fun `daily reminder settings persist properly`() {
+    assertThat(memorizationPreferences.isDailyReminderEnabled()).isFalse()
+    memorizationPreferences.setDailyReminderEnabled(true)
+    assertThat(memorizationPreferences.isDailyReminderEnabled()).isTrue()
+
+    memorizationPreferences.setDailyReminderTime(8, 30)
+    val time = memorizationPreferences.getDailyReminderTime()
+    assertThat(time.first).isEqualTo(8)
+    assertThat(time.second).isEqualTo(30)
+  }
+
+  @Test
+  fun `export and import hifz backup json round trip succeeds`() {
+    // Setup state
+    memorizationPreferences.setSurahMemorized(1, true)
+    memorizationPreferences.setSurahMemorized(114, true)
+    memorizationPreferences.setRevisionIntervalDays(1, 12)
+    memorizationPreferences.setFlaggedAyahsForSura(1, setOf(3, 5))
+    memorizationPreferences.setDailyGoalAyahs(10)
+
+    val profile = memorizationPreferences.createProfile("Aisha")
+    memorizationPreferences.setActiveProfile(profile.id)
+    memorizationPreferences.setSurahMemorized(112, true)
+
+    // Export
+    val jsonStr = memorizationPreferences.exportHifzBackupJson()
+    assertThat(jsonStr).isNotEmpty()
+    assertThat(jsonStr).contains("Aisha")
+    assertThat(jsonStr).contains("\"sura\": 112")
+
+    // Clear state
+    val newPrefs = FakeSharedPreferences()
+    val newMemPrefs = MemorizationPreferences(newPrefs)
+    assertThat(newMemPrefs.isSurahMemorized(112)).isFalse()
+
+    // Import into new instance
+    val success = newMemPrefs.importHifzBackupJson(jsonStr)
+    assertThat(success).isTrue()
+    assertThat(newMemPrefs.getActiveProfileId()).isEqualTo(profile.id)
+    assertThat(newMemPrefs.isSurahMemorized(112)).isTrue()
+    assertThat(newMemPrefs.getProfiles().any { it.name == "Aisha" }).isTrue()
+  }
+
   /**
    * Lightweight in-memory implementation of [SharedPreferences] for unit tests.
    */

@@ -227,6 +227,14 @@
           android:resource="@xml/search_widget_info" />
     </receiver>
 
+    <receiver
+        android:name=".util.HifzReminderReceiver"
+        android:exported="false">
+      <intent-filter>
+        <action android:name="com.quran.labs.androidquran.action.HIFZ_REMINDER" />
+      </intent-filter>
+    </receiver>
+
     <activity
         android:name=".widget.ShowJumpFragmentActivity"
         android:launchMode="singleInstance"
