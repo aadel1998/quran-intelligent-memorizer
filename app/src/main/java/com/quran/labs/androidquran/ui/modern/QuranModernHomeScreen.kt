@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -129,6 +131,9 @@ fun QuranModernHomeScreen(
   onOpenLastRead: (page: Int) -> Unit,
   onResumeMemorization: (SavedSuraSession) -> Unit,
   onStartFromBeginningMemorization: (SavedSuraSession) -> Unit,
+  onOpenRevisionDashboard: () -> Unit = {},
+  memorizedCount: Int = 0,
+  dueCount: Int = 0,
   onOpenSearch: (String) -> Unit,
   onOpenJump: () -> Unit,
   onOpenPlaylists: () -> Unit,
@@ -227,6 +232,9 @@ fun QuranModernHomeScreen(
           3 -> MemorizerTabContent(
             savedSessions = savedSessions,
             surahs = surahs,
+            memorizedCount = memorizedCount,
+            dueCount = dueCount,
+            onOpenRevisionDashboard = onOpenRevisionDashboard,
             onResume = onResumeMemorization,
             onStartBeginning = onStartFromBeginningMemorization,
             onOpenSurah = onOpenSurah
@@ -844,101 +852,200 @@ private fun JuzCard(
 private fun MemorizerTabContent(
   savedSessions: List<SavedSuraSession>,
   surahs: List<SuraItemModel>,
+  memorizedCount: Int,
+  dueCount: Int,
+  onOpenRevisionDashboard: () -> Unit,
   onResume: (SavedSuraSession) -> Unit,
   onStartBeginning: (SavedSuraSession) -> Unit,
   onOpenSurah: (sura: Int, page: Int) -> Unit,
   modifier: Modifier = Modifier
 ) {
-  if (savedSessions.isEmpty()) {
-    Column(
-      modifier = modifier
-        .fillMaxSize()
-        .padding(32.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.Center
-    ) {
-      Box(
+  LazyColumn(
+    modifier = modifier.fillMaxSize(),
+    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp)
+  ) {
+    // 1. Easy Quran Memorizer Pro - Revision & Hifz Dashboard Card
+    item {
+      ModernCard(
         modifier = Modifier
-          .size(64.dp)
-          .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f), CircleShape),
-        contentAlignment = Alignment.Center
+          .fillMaxWidth()
+          .clickable { onOpenRevisionDashboard() },
+        shape = RoundedCornerShape(18.dp),
+        backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+        borderWidth = 1.dp,
+        contentPadding = 16.dp
       ) {
-        Icon(
-          imageVector = QuranIcons.Repeat,
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.size(32.dp)
-        )
-      }
-      Spacer(modifier = Modifier.height(16.dp))
-      Text(
-        text = "No In-Progress Memorizations",
-        fontSize = 18.sp,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onBackground
-      )
-      Spacer(modifier = Modifier.height(8.dp))
-      Text(
-        text = "Select any Surah from the Surahs tab and tap Memorize in the audio bar to begin spaced-repetition memorization.",
-        fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center
-      )
-    }
-  } else {
-    LazyColumn(
-      modifier = modifier.fillMaxSize(),
-      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-      verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-      // Summary Banner
-      item {
-        ModernCard(
-          modifier = Modifier.fillMaxWidth(),
-          shape = RoundedCornerShape(16.dp),
-          backgroundColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-          borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-          borderWidth = 1.dp,
-          contentPadding = 14.dp
-        ) {
+        Column {
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Column {
-              Text(
-                text = "SURAH MEMORIZATION TRACKER",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                letterSpacing = 1.sp
-              )
-              Spacer(modifier = Modifier.height(4.dp))
-              Text(
-                text = "${savedSessions.size} Active ${if (savedSessions.size == 1) "Surah" else "Surahs"} in Progress",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-              )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(38.dp)
+                  .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = QuranIcons.BookmarkFilled,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(20.dp)
+                )
+              }
+              Spacer(modifier = Modifier.width(12.dp))
+              Column {
+                Text(
+                  text = "REVISION DASHBOARD",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary,
+                  letterSpacing = 1.sp
+                )
+                Text(
+                  text = "$memorizedCount of 114 Surahs Memorized",
+                  fontSize = 15.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+              }
             }
 
+            if (dueCount > 0) {
+              Box(
+                modifier = Modifier
+                  .background(Color(0xFFF59E0B).copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                  .padding(horizontal = 8.dp, vertical = 4.dp)
+              ) {
+                Text(
+                  text = "$dueCount DUE",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color(0xFFF59E0B)
+                )
+              }
+            }
+          }
+
+          Spacer(modifier = Modifier.height(14.dp))
+
+          val progressRatio = (memorizedCount.toFloat() / 114f).coerceIn(0f, 1f)
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(6.dp)
+              .clip(RoundedCornerShape(3.dp))
+              .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+          ) {
             Box(
               modifier = Modifier
-                .size(36.dp)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                .fillMaxWidth(fraction = if (progressRatio > 0f) progressRatio else 0.01f)
+                .height(6.dp)
+                .background(MaterialTheme.colorScheme.primary)
+            )
+          }
+
+          Spacer(modifier = Modifier.height(14.dp))
+
+          Button(
+            onClick = onOpenRevisionDashboard,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.primary,
+              contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+          ) {
+            Icon(
+              imageVector = QuranIcons.Check,
+              contentDescription = null,
+              modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "Open Revision Dashboard & Queue",
+              fontWeight = FontWeight.Bold,
+              fontSize = 13.sp
+            )
+          }
+        }
+      }
+    }
+
+    // 2. Section Header: Active In-Progress Sessions
+    item {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(top = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = "ACTIVE MEMORIZATION SESSIONS",
+          fontSize = 12.sp,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          letterSpacing = 1.sp
+        )
+        if (savedSessions.isNotEmpty()) {
+          Text(
+            text = "${savedSessions.size} Active",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+          )
+        }
+      }
+    }
+
+    if (savedSessions.isEmpty()) {
+      item {
+        ModernCard(
+          modifier = Modifier.fillMaxWidth(),
+          shape = RoundedCornerShape(16.dp),
+          contentPadding = 20.dp
+        ) {
+          Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+          ) {
+            Box(
+              modifier = Modifier
+                .size(48.dp)
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f), CircleShape),
               contentAlignment = Alignment.Center
             ) {
               Icon(
                 imageVector = QuranIcons.Repeat,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(20.dp)
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
               )
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+              text = "No In-Progress Sessions",
+              fontSize = 15.sp,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+              text = "Select any Surah to begin spaced-repetition memorization, or review memorized Surahs in the Revision Dashboard.",
+              fontSize = 12.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              textAlign = TextAlign.Center
+            )
           }
         }
       }
+    }
+    if (savedSessions.isNotEmpty()) {
 
       // Active Surah Sessions
       items(

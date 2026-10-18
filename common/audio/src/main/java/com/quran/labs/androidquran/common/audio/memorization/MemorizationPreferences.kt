@@ -21,6 +21,18 @@ data class SavedSuraSession(
 }
 
 /**
+ * Information regarding a Surah's memorization state, revision history, and queue status.
+ */
+data class MemorizedSurahInfo(
+  val sura: Int,
+  val isMemorized: Boolean,
+  val lastRevised: Long = 0L,
+  val intervalDays: Int = 3,
+  val isDue: Boolean = false,
+  val inRevisionQueue: Boolean = false
+)
+
+/**
  * Persisted default settings for memorization configuration.
  */
 data class MemorizationDefaultSettings(
@@ -31,7 +43,9 @@ data class MemorizationDefaultSettings(
   val memoryTestMode: Boolean = false,
   val maskingLevel: MaskingLevel = MaskingLevel.OFF,
   val recordRecitation: Boolean = false,
-  val enableBridge: Boolean = true
+  val enableBridge: Boolean = true,
+  val isIntelliJMode: Boolean = true,
+  val rangeRepeat: Int = 1
 )
 
 /**
@@ -207,6 +221,132 @@ class MemorizationPreferences(
     prefs.edit().remove(KEY_MASTERED_RANGES).apply()
   }
 
+  // --- Revision & Memorization Tracking (Easy Quran Memorizer Pro Feature) ---
+
+  /**
+   * Sets whether an entire Surah has been marked as fully memorized.
+   */
+  fun setSurahMemorized(sura: Int, memorized: Boolean) {
+    val editor = prefs.edit().putBoolean("sura_memorized_$sura", memorized)
+    if (memorized) {
+      if (getLastRevised(sura) == 0L) {
+        editor.putLong("sura_revised_$sura", System.currentTimeMillis())
+      }
+    }
+    editor.apply()
+  }
+
+  fun isSurahMemorized(sura: Int): Boolean {
+    return prefs.getBoolean("sura_memorized_$sura", false)
+  }
+
+  fun getMemorizedSurahs(): Set<Int> {
+    return (1..114).filter { isSurahMemorized(it) }.toSet()
+  }
+
+  fun setLastRevised(sura: Int, timestamp: Long = System.currentTimeMillis()) {
+    prefs.edit().putLong("sura_revised_$sura", timestamp).apply()
+  }
+
+  fun getLastRevised(sura: Int): Long {
+    return prefs.getLong("sura_revised_$sura", 0L)
+  }
+
+  fun setRevisionIntervalDays(sura: Int, days: Int) {
+    prefs.edit().putInt("sura_rev_interval_$sura", days).apply()
+  }
+
+  fun getRevisionIntervalDays(sura: Int): Int {
+    return prefs.getInt("sura_rev_interval_$sura", 3)
+  }
+
+  fun isSurahDueForRevision(sura: Int): Boolean {
+    if (!isSurahMemorized(sura)) return false
+    val last = getLastRevised(sura)
+    if (last == 0L) return true
+    val intervalMillis = getRevisionIntervalDays(sura).toLong() * 24 * 60 * 60 * 1000L
+    return (System.currentTimeMillis() - last) >= intervalMillis
+  }
+
+  fun getSurahsDueForRevision(): List<Int> {
+    return getMemorizedSurahs().filter { isSurahDueForRevision(it) }.sorted()
+  }
+
+  fun getRevisionQueue(): Set<Int> {
+    val raw = prefs.getString(KEY_REVISION_QUEUE, null) ?: return emptySet()
+    if (raw.isBlank()) return emptySet()
+    return raw.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+  }
+
+  fun setRevisionQueue(surahs: Collection<Int>) {
+    prefs.edit().putString(KEY_REVISION_QUEUE, surahs.toSet().sorted().joinToString(",")).apply()
+  }
+
+  /**
+   * Records self-testing recall quiz results with Spaced Repetition (SRS) interval adaptation.
+   */
+  fun recordQuizResult(sura: Int, passed: Boolean) {
+    if (passed) {
+      setLastRevised(sura, System.currentTimeMillis())
+      val currentInterval = getRevisionIntervalDays(sura)
+      // Exponential SRS expansion: 3d -> 6d -> 12d -> 24d (capped at 60d)
+      val nextInterval = (currentInterval * 2).coerceIn(3, 60)
+      setRevisionIntervalDays(sura, nextInterval)
+      removeFromRevisionQueue(sura)
+    } else {
+      // Failed recall reset interval to 1 day and add to revision queue
+      setRevisionIntervalDays(sura, 1)
+      addToRevisionQueue(sura)
+    }
+  }
+
+  fun addToRevisionQueue(sura: Int) {
+    val current = getRevisionQueue().toMutableSet()
+    current.add(sura)
+    setRevisionQueue(current)
+  }
+
+  fun removeFromRevisionQueue(sura: Int) {
+    val current = getRevisionQueue().toMutableSet()
+    current.remove(sura)
+    setRevisionQueue(current)
+  }
+
+  fun clearRevisionQueue() {
+    prefs.edit().remove(KEY_REVISION_QUEUE).apply()
+  }
+
+  fun getMemorizedSurahInfo(sura: Int): MemorizedSurahInfo {
+    val isMem = isSurahMemorized(sura)
+    return MemorizedSurahInfo(
+      sura = sura,
+      isMemorized = isMem,
+      lastRevised = getLastRevised(sura),
+      intervalDays = getRevisionIntervalDays(sura),
+      isDue = isSurahDueForRevision(sura),
+      inRevisionQueue = getRevisionQueue().contains(sura)
+    )
+  }
+
+  fun getAllMemorizedSurahInfos(): List<MemorizedSurahInfo> {
+    val queue = getRevisionQueue()
+    return (1..114).map { sura ->
+      val isMem = isSurahMemorized(sura)
+      MemorizedSurahInfo(
+        sura = sura,
+        isMemorized = isMem,
+        lastRevised = getLastRevised(sura),
+        intervalDays = getRevisionIntervalDays(sura),
+        isDue = isSurahDueForRevision(sura),
+        inRevisionQueue = queue.contains(sura)
+      )
+    }
+  }
+
+  fun getAllMemorizedSurahInfo(): Map<Int, MemorizedSurahInfo> {
+    return getAllMemorizedSurahInfos().associateBy { it.sura }
+  }
+
   /**
    * Saves active memorization configuration and progress step specifically for a Surah.
    */
@@ -322,7 +462,9 @@ class MemorizationPreferences(
     memoryTestMode: Boolean = false,
     maskingLevel: MaskingLevel = MaskingLevel.OFF,
     recordRecitation: Boolean = false,
-    enableBridge: Boolean = true
+    enableBridge: Boolean = true,
+    isIntelliJMode: Boolean = true,
+    rangeRepeat: Int = 1
   ) {
     val editor = prefs.edit()
       .putInt(KEY_DEFAULT_WINDOW_SIZE, windowSize)
@@ -332,6 +474,8 @@ class MemorizationPreferences(
       .putString(KEY_DEFAULT_MASKING_LEVEL, maskingLevel.name)
       .putBoolean(KEY_DEFAULT_RECORD_RECITATION, recordRecitation)
       .putBoolean(KEY_DEFAULT_ENABLE_BRIDGE, enableBridge)
+      .putBoolean(KEY_DEFAULT_INTELLIJ_MODE, isIntelliJMode)
+      .putInt(KEY_DEFAULT_RANGE_REPEAT, rangeRepeat)
       .putBoolean(KEY_HAS_CUSTOM_DEFAULTS, true)
 
     when (delayMode) {
@@ -355,7 +499,9 @@ class MemorizationPreferences(
       return MemorizationDefaultSettings(
         windowSize = 7,
         singleRepeat = 3,
-        connectRepeat = 2
+        connectRepeat = 2,
+        isIntelliJMode = true,
+        rangeRepeat = 1
       )
     }
 
@@ -386,7 +532,9 @@ class MemorizationPreferences(
       memoryTestMode = memoryTest,
       maskingLevel = maskingLevel,
       recordRecitation = prefs.getBoolean(KEY_DEFAULT_RECORD_RECITATION, false),
-      enableBridge = prefs.getBoolean(KEY_DEFAULT_ENABLE_BRIDGE, true)
+      enableBridge = prefs.getBoolean(KEY_DEFAULT_ENABLE_BRIDGE, true),
+      isIntelliJMode = prefs.getBoolean(KEY_DEFAULT_INTELLIJ_MODE, true),
+      rangeRepeat = prefs.getInt(KEY_DEFAULT_RANGE_REPEAT, 1)
     )
   }
 
@@ -412,6 +560,7 @@ class MemorizationPreferences(
     private const val KEY_SEGMENTS = "mem_segments"
     private const val KEY_PLAYLIST_ID = "mem_playlist_id"
     private const val KEY_PLAYLIST_NAME = "mem_playlist_name"
+    private const val KEY_REVISION_QUEUE = "mem_revision_queue"
 
     private const val KEY_DEFAULT_WINDOW_SIZE = "mem_def_window_size"
     private const val KEY_DEFAULT_SINGLE_REPEAT = "mem_def_single_repeat"
@@ -422,6 +571,8 @@ class MemorizationPreferences(
     private const val KEY_DEFAULT_DELAY_MODE = "mem_def_delay_mode"
     private const val KEY_DEFAULT_DELAY_SECONDS = "mem_def_delay_seconds"
     private const val KEY_DEFAULT_ENABLE_BRIDGE = "mem_def_enable_bridge"
+    private const val KEY_DEFAULT_INTELLIJ_MODE = "mem_def_intellij_mode"
+    private const val KEY_DEFAULT_RANGE_REPEAT = "mem_def_range_repeat"
     private const val KEY_HAS_CUSTOM_DEFAULTS = "mem_has_custom_defaults"
 
     private const val VALUE_DELAY_NONE = "NONE"

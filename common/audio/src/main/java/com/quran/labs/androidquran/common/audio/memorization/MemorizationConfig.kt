@@ -44,7 +44,9 @@ data class MemorizationConfig(
   val enableBridge: Boolean = true,
   val segments: List<PlaylistSegment> = emptyList(),
   val playlistId: String? = null,
-  val playlistName: String? = null
+  val playlistName: String? = null,
+  val isIntelliJMode: Boolean = true,
+  val rangeRepeat: Int = 1
 ) : Parcelable {
   init {
     require(windowSize >= 1) { "windowSize must be at least 1" }

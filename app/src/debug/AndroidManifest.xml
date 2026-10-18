@@ -46,6 +46,11 @@
         android:exported="true"
         tools:replace="android:exported" />
 
+    <activity
+        android:name=".ui.QuranRevisionActivity"
+        android:exported="true"
+        tools:replace="android:exported" />
+
     <meta-data
         android:name="firebase_crashlytics_collection_enabled"
         android:value="false" />

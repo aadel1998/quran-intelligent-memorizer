@@ -1,4 +1,4 @@
-﻿package com.quran.labs.androidquran.common.audio.memorization
+package com.quran.labs.androidquran.common.audio.memorization
 
 import com.quran.data.core.QuranInfo
 import com.quran.data.model.SuraAyah
@@ -59,12 +59,67 @@ object MemorizationPlanBuilder {
     }
     if (allAyahs.isEmpty()) return emptyList()
 
+    val steps = mutableListOf<MemorizationStep>()
+    var stepIndex = 0
+
+    // Linear Mode (when IntelliJ Mode is toggled OFF)
+    if (!config.isIntelliJMode) {
+      val repeatCount = config.rangeRepeat.coerceAtLeast(1)
+      for (r in 0 until repeatCount) {
+        for ((idx, ayah) in allAyahs.withIndex()) {
+          val ayahLabel = "Surah ${ayah.sura}:${ayah.ayah}"
+          steps.add(
+            MemorizationStep(
+              stepIndex = stepIndex++,
+              windowIndex = idx,
+              totalWindows = allAyahs.size,
+              stepType = StepType.SOLO,
+              ayahs = listOf(ayah),
+              targetRepeatCount = config.singleRepeat,
+              delayMode = config.delayMode,
+              isMaskedByDefault = config.memoryTestMode,
+              description = if (repeatCount > 1) "$ayahLabel (Cycle ${r + 1}/$repeatCount)" else "$ayahLabel Solo"
+            )
+          )
+          if (config.delayMode != MemorizationDelayMode.None) {
+            steps.add(
+              MemorizationStep(
+                stepIndex = stepIndex++,
+                windowIndex = idx,
+                totalWindows = allAyahs.size,
+                stepType = StepType.PAUSE_FOR_RECITATION,
+                ayahs = listOf(ayah),
+                targetRepeatCount = 1,
+                delayMode = config.delayMode,
+                isMaskedByDefault = config.memoryTestMode,
+                description = "Recitation Pause ($ayahLabel)"
+              )
+            )
+          }
+        }
+        if (allAyahs.size > 1 && config.connectRepeat > 0) {
+          steps.add(
+            MemorizationStep(
+              stepIndex = stepIndex++,
+              windowIndex = allAyahs.size - 1,
+              totalWindows = allAyahs.size,
+              stepType = StepType.CONNECT,
+              ayahs = allAyahs,
+              targetRepeatCount = config.connectRepeat,
+              delayMode = config.delayMode,
+              isMaskedByDefault = config.memoryTestMode,
+              description = "Full Selection Recitation"
+            )
+          )
+        }
+      }
+      return steps
+    }
+
     val n = allAyahs.size
     val W = config.windowSize
     // totalWindows == n so HUD shows "Window j+1 / n" -- smooth linear progress
     val totalWindows = n
-    val steps = mutableListOf<MemorizationStep>()
-    var stepIndex = 0
 
     for (j in 0 until n) {
       val currentAyah = allAyahs[j]

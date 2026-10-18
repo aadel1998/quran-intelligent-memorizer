@@ -460,6 +460,11 @@ class QuranActivity : AppCompatActivity(),
             onStartFromBeginningMemorization = { session ->
               startMemorizationFromBeginning(session.sura)
             },
+            onOpenRevisionDashboard = {
+              startActivity(QuranRevisionActivity.getIntent(this@QuranActivity))
+            },
+            memorizedCount = memorizationPreferences.getMemorizedSurahs().size,
+            dueCount = memorizationPreferences.getSurahsDueForRevision().size,
             onOpenSearch = { query ->
               val searchIntent = Intent(this@QuranActivity, SearchActivity::class.java).apply {
                 if (query.isNotBlank()) {

@@ -343,7 +343,12 @@ class MemorizationEngine @Inject constructor(
           repetitions = config.singleRepeat + config.connectRepeat
         )
       )
-      memorizationPreferences?.clearSessionForSura(config.startAyah.sura)
+      val sura = config.startAyah.sura
+      memorizationPreferences?.setLastRevised(sura, System.currentTimeMillis())
+      if (config.startAyah.ayah == 1 && config.endAyah.ayah >= quranInfo.getNumberOfAyahs(sura)) {
+        memorizationPreferences?.setSurahMemorized(sura, true)
+      }
+      memorizationPreferences?.clearSessionForSura(sura)
     }
     memorizationPreferences?.clearSession()
     _state.value = _state.value.copy(

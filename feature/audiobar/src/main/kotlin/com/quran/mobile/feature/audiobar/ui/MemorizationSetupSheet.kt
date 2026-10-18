@@ -100,12 +100,19 @@ fun MemorizationSetupSheet(
   var selectedPlaylist by remember { mutableStateOf<CustomPlaylist?>(initialPlaylist) }
   var startAyahNum by remember { mutableIntStateOf(initialStartAyah.ayah) }
   var endAyahNum by remember { mutableIntStateOf(initialEndAyah.ayah.coerceIn(initialStartAyah.ayah, maxAyahsForSura)) }
+  var isIntelliJMode by remember { mutableStateOf(savedSessionConfig?.isIntelliJMode ?: true) }
+  var rangeRepeat by remember { mutableIntStateOf(savedSessionConfig?.rangeRepeat ?: 1) }
   var windowSize by remember { mutableIntStateOf(defaultSettings.windowSize) }
   var singleRepeat by remember { mutableIntStateOf(defaultSettings.singleRepeat) }
   var connectRepeat by remember { mutableIntStateOf(defaultSettings.connectRepeat) }
   val initialDelayOption = when (val dm = defaultSettings.delayMode) {
-    is MemorizationDelayMode.FixedSeconds -> if (dm.seconds == 5) 2 else 1
-    is MemorizationDelayMode.MatchAyahDuration -> 3
+    is MemorizationDelayMode.FixedSeconds -> when (dm.seconds) {
+      1 -> 1
+      2 -> 2
+      3 -> 3
+      else -> 4
+    }
+    is MemorizationDelayMode.MatchAyahDuration -> 5
     else -> 0
   }
   var selectedDelayOption by remember { mutableIntStateOf(initialDelayOption) }
@@ -512,36 +519,109 @@ fun MemorizationSetupSheet(
       HorizontalDivider()
       Spacer(modifier = Modifier.height(12.dp))
 
-      // Parameters: Window Size, Single Repeat, Connect Repeat
+      // IntelliJ Mode Toggle Card
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+          containerColor = if (isIntelliJMode) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                           else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        )
+      ) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(14.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = "IntelliJ Mode",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = if (isIntelliJMode) "ON" else "OFF",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isIntelliJMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+              text = if (isIntelliJMode) "Auto-connects verses in a sliding window with progressive repeats"
+                     else "Linear sequential repetition across the selected range",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+          Switch(
+            checked = isIntelliJMode,
+            onCheckedChange = { isIntelliJMode = it }
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(14.dp))
+
+      // Parameters
       Text(
-        text = "Memorization Parameters",
+        text = if (isIntelliJMode) "Window & Repetition Parameters" else "Repetition Controls",
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold
       )
 
       Spacer(modifier = Modifier.height(8.dp))
 
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-      ) {
-        NumberStepper(
-          label = "Window Size",
-          value = windowSize,
-          onValueChange = { windowSize = it.coerceIn(1, 10) }
-        )
+      if (isIntelliJMode) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          NumberStepper(
+            label = "Window Size",
+            value = windowSize,
+            onValueChange = { windowSize = it.coerceIn(1, 10) }
+          )
 
-        NumberStepper(
-          label = "Solo Repeat",
-          value = singleRepeat,
-          onValueChange = { singleRepeat = it.coerceIn(1, 10) }
-        )
+          NumberStepper(
+            label = "Solo Repeat",
+            value = singleRepeat,
+            onValueChange = { singleRepeat = it.coerceIn(1, 20) }
+          )
 
-        NumberStepper(
-          label = "Connect Repeat",
-          value = connectRepeat,
-          onValueChange = { connectRepeat = it.coerceIn(1, 10) }
-        )
+          NumberStepper(
+            label = "Connect",
+            value = connectRepeat,
+            onValueChange = { connectRepeat = it.coerceIn(0, 20) }
+          )
+
+          NumberStepper(
+            label = "Range",
+            value = rangeRepeat,
+            onValueChange = { rangeRepeat = it.coerceIn(1, 20) }
+          )
+        }
+      } else {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+          NumberStepper(
+            label = "Verse Repeat",
+            value = singleRepeat,
+            onValueChange = { singleRepeat = it.coerceIn(1, 50) }
+          )
+
+          NumberStepper(
+            label = "Range Repeat",
+            value = rangeRepeat,
+            onValueChange = { rangeRepeat = it.coerceIn(1, 50) }
+          )
+        }
       }
 
       Spacer(modifier = Modifier.height(12.dp))
@@ -559,7 +639,7 @@ fun MemorizationSetupSheet(
 
       Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
       ) {
         FilterChip(
           selected = selectedDelayOption == 0,
@@ -569,17 +649,27 @@ fun MemorizationSetupSheet(
         FilterChip(
           selected = selectedDelayOption == 1,
           onClick = { selectedDelayOption = 1 },
-          label = { Text("3 sec") }
+          label = { Text("1s") }
         )
         FilterChip(
           selected = selectedDelayOption == 2,
           onClick = { selectedDelayOption = 2 },
-          label = { Text("5 sec") }
+          label = { Text("2s") }
         )
         FilterChip(
           selected = selectedDelayOption == 3,
           onClick = { selectedDelayOption = 3 },
-          label = { Text("Match Ayah") }
+          label = { Text("3s") }
+        )
+        FilterChip(
+          selected = selectedDelayOption == 4,
+          onClick = { selectedDelayOption = 4 },
+          label = { Text("5s") }
+        )
+        FilterChip(
+          selected = selectedDelayOption == 5,
+          onClick = { selectedDelayOption = 5 },
+          label = { Text("Echo 1:1") }
         )
       }
 
@@ -705,9 +795,11 @@ fun MemorizationSetupSheet(
         Button(
           onClick = {
             val delayMode = when (selectedDelayOption) {
-              1 -> MemorizationDelayMode.FixedSeconds(3)
-              2 -> MemorizationDelayMode.FixedSeconds(5)
-              3 -> MemorizationDelayMode.MatchAyahDuration
+              1 -> MemorizationDelayMode.FixedSeconds(1)
+              2 -> MemorizationDelayMode.FixedSeconds(2)
+              3 -> MemorizationDelayMode.FixedSeconds(3)
+              4 -> MemorizationDelayMode.FixedSeconds(5)
+              5 -> MemorizationDelayMode.MatchAyahDuration
               else -> MemorizationDelayMode.None
             }
 
@@ -718,6 +810,8 @@ fun MemorizationSetupSheet(
               MemorizationConfig(
                 startAyah = firstAyah,
                 endAyah = lastAyah,
+                isIntelliJMode = isIntelliJMode,
+                rangeRepeat = rangeRepeat,
                 windowSize = windowSize,
                 singleRepeat = singleRepeat,
                 connectRepeat = connectRepeat,
@@ -734,6 +828,8 @@ fun MemorizationSetupSheet(
               MemorizationConfig(
                 startAyah = SuraAyah(initialStartAyah.sura, startAyahNum),
                 endAyah = SuraAyah(initialStartAyah.sura, endAyahNum),
+                isIntelliJMode = isIntelliJMode,
+                rangeRepeat = rangeRepeat,
                 windowSize = windowSize,
                 singleRepeat = singleRepeat,
                 connectRepeat = connectRepeat,

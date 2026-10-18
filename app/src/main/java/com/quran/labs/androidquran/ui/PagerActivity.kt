@@ -2099,6 +2099,24 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         val saved = memorizationPreferences.getSavedSessionForSura(startMemorizeSura)
         if (saved != null) {
           startMemorizationSession(saved.config, isResume = false)
+        } else {
+          val ayahCount = quranInfo.getNumberOfAyahs(startMemorizeSura)
+          val defaultSettings = memorizationPreferences.getLastUsedSettings()
+          val freshConfig = MemorizationConfig(
+            startAyah = SuraAyah(startMemorizeSura, 1),
+            endAyah = SuraAyah(startMemorizeSura, ayahCount),
+            windowSize = defaultSettings.windowSize,
+            singleRepeat = defaultSettings.singleRepeat,
+            connectRepeat = defaultSettings.connectRepeat,
+            delayMode = defaultSettings.delayMode,
+            memoryTestMode = defaultSettings.memoryTestMode,
+            maskingLevel = defaultSettings.maskingLevel,
+            recordRecitation = defaultSettings.recordRecitation,
+            enableBridge = defaultSettings.enableBridge,
+            isIntelliJMode = defaultSettings.isIntelliJMode,
+            rangeRepeat = defaultSettings.rangeRepeat
+          )
+          startMemorizationSession(freshConfig, isResume = false)
         }
       }
     }
