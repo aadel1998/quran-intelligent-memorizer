@@ -29,6 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -119,6 +120,7 @@ fun MemorizationSetupSheet(
   var maskingLevel by remember { mutableStateOf(defaultSettings.maskingLevel) }
   var recordRecitation by remember { mutableStateOf(defaultSettings.recordRecitation) }
   var enableBridge by remember { mutableStateOf(defaultSettings.enableBridge) }
+  var playbackSpeed by remember { mutableFloatStateOf(defaultSettings.playbackSpeed) }
 
   ModalBottomSheet(
     onDismissRequest = onDismissRequest,
@@ -727,6 +729,32 @@ fun MemorizationSetupSheet(
       HorizontalDivider()
       Spacer(modifier = Modifier.height(12.dp))
 
+      // Reciter Audio Speed
+      Text(
+        text = "Reciter Audio Speed",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold
+      )
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        listOf(0.75f, 1.0f, 1.25f, 1.5f).forEach { speed ->
+          FilterChip(
+            selected = playbackSpeed == speed,
+            onClick = { playbackSpeed = speed },
+            label = { Text(if (speed == 1.0f) "1.0x" else "${speed}x") }
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(12.dp))
+
       // Memory Test Masking Difficulty
       Text(
         text = "Memory Test Masking",
@@ -872,7 +900,8 @@ fun MemorizationSetupSheet(
                 enableBridge = enableBridge,
                 segments = pl.segments,
                 playlistId = pl.id,
-                playlistName = pl.name
+                playlistName = pl.name,
+                playbackSpeed = playbackSpeed
               )
             } else {
               MemorizationConfig(
@@ -887,7 +916,8 @@ fun MemorizationSetupSheet(
                 memoryTestMode = maskingLevel != MaskingLevel.OFF,
                 maskingLevel = maskingLevel,
                 recordRecitation = recordRecitation && canRecord,
-                enableBridge = enableBridge
+                enableBridge = enableBridge,
+                playbackSpeed = playbackSpeed
               )
             }
 

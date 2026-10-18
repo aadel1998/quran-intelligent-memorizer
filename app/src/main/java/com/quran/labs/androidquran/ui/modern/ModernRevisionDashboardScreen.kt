@@ -22,16 +22,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -80,15 +83,23 @@ fun ModernRevisionDashboardScreen(
   bestStreak: Int = 0,
   onUpdateDailyGoal: ((Int) -> Unit)? = null,
   flaggedSurahs: Set<Int> = emptySet(),
+  onPracticeFlagged: ((sura: Int) -> Unit)? = null,
+  onResetStreak: (() -> Unit)? = null,
+  onClearAllFlagged: (() -> Unit)? = null,
+  totalFlaggedAyahs: Int = 0,
   modifier: Modifier = Modifier
 ) {
   var searchQuery by remember { mutableStateOf("") }
   // 0: All, 1: Due, 2: Memorized, 3: In Queue, 4: Flagged
   var selectedFilterTab by remember { mutableIntStateOf(0) }
   var quizSura by remember { mutableStateOf<SuraItemModel?>(null) }
+  var showStatsDialog by remember { mutableStateOf(false) }
 
   val memorizedCount = surahs.count { memorizedInfos[it.number]?.isMemorized == true }
   val dueCount = surahs.count { memorizedInfos[it.number]?.isDue == true }
+  val totalMemorizedAyahs = remember(surahs, memorizedInfos) {
+    surahs.filter { memorizedInfos[it.number]?.isMemorized == true }.sumOf { it.numberOfAyahs }
+  }
 
   // Filter surahs based on tab & query
   val filteredSurahs = remember(surahs, memorizedInfos, selectedQueue, searchQuery, selectedFilterTab, flaggedSurahs) {
@@ -232,6 +243,8 @@ fun ModernRevisionDashboardScreen(
               color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
               shape = RoundedCornerShape(20.dp)
             )
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { showStatsDialog = true }
             .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
           Row(verticalAlignment = Alignment.CenterVertically) {
@@ -256,7 +269,8 @@ fun ModernRevisionDashboardScreen(
       ModernCard(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 4.dp),
+          .padding(horizontal = 16.dp, vertical = 4.dp)
+          .clickable { showStatsDialog = true },
         shape = RoundedCornerShape(16.dp),
         backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
@@ -553,7 +567,8 @@ fun ModernRevisionDashboardScreen(
               isSelected = isSelectedInQueue,
               onToggleQueue = { onToggleQueueSelection(sura.number) },
               onToggleMemorized = { onToggleMemorized(sura.number, !isMemorized) },
-              onStartQuiz = { quizSura = sura }
+              onStartQuiz = { quizSura = sura },
+              onPracticeFlagged = if (onPracticeFlagged != null) { { onPracticeFlagged(sura.number) } } else null
             )
           }
         }
@@ -571,6 +586,122 @@ fun ModernRevisionDashboardScreen(
       onDismissRequest = { quizSura = null }
     )
   }
+
+  if (showStatsDialog) {
+    AlertDialog(
+      onDismissRequest = { showStatsDialog = false },
+      title = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            imageVector = QuranIcons.BookmarkFilled,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "Hifz Mastery Overview",
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp
+          )
+        }
+      },
+      text = {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text("Surahs Memorized:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$memorizedCount / 114", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+          }
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text("Verses Memorized:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$totalMemorizedAyahs / 6,236", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+          }
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text("Current Streak:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("🔥 $currentStreak Days", fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B))
+          }
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text("Longest Streak:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("⚡ $bestStreak Days", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+          }
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text("Practiced Today:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$ayahsToday / $dailyGoal v", fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+          }
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text("Flagged Mistakes:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("⚠️ $totalFlaggedAyahs Verses", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+          }
+
+          if (onResetStreak != null || onClearAllFlagged != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              if (onResetStreak != null) {
+                OutlinedButton(
+                  onClick = {
+                    onResetStreak()
+                    showStatsDialog = false
+                  },
+                  modifier = Modifier.weight(1f)
+                ) {
+                  Text("Reset Streak", fontSize = 11.sp)
+                }
+              }
+              if (onClearAllFlagged != null && totalFlaggedAyahs > 0) {
+                OutlinedButton(
+                  onClick = {
+                    onClearAllFlagged()
+                    showStatsDialog = false
+                  },
+                  modifier = Modifier.weight(1f)
+                ) {
+                  Text("Clear Flags", fontSize = 11.sp)
+                }
+              }
+            }
+          }
+        }
+      },
+      confirmButton = {
+        Button(onClick = { showStatsDialog = false }) {
+          Text("Done")
+        }
+      }
+    )
+  }
 }
 
 @Composable
@@ -584,6 +715,7 @@ private fun RevisionSurahCard(
   onToggleMemorized: () -> Unit,
   onStartQuiz: () -> Unit,
   flaggedAyahsCount: Int = 0,
+  onPracticeFlagged: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val backgroundColor = if (isSelected) {
@@ -716,6 +848,24 @@ private fun RevisionSurahCard(
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(horizontal = 8.dp)
       )
+
+      // Practice Flagged Verses Button
+      if (flaggedAyahsCount > 0 && onPracticeFlagged != null) {
+        IconButton(
+          onClick = onPracticeFlagged,
+          modifier = Modifier
+            .size(36.dp)
+            .background(Color(0xFFEF4444).copy(alpha = 0.15f), CircleShape)
+        ) {
+          Icon(
+            imageVector = QuranIcons.BookmarkFilled,
+            contentDescription = "Practice Flagged Verses",
+            tint = Color(0xFFEF4444),
+            modifier = Modifier.size(18.dp)
+          )
+        }
+        Spacer(modifier = Modifier.width(6.dp))
+      }
 
       // Recall Quiz Button
       IconButton(

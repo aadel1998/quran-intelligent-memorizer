@@ -881,7 +881,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       updateLocalTranslations(startPosition)
       onClearAyahModeBackCallback.isEnabled = selectionStart != null
 
-      if (isModernUi && startPosition != null) {
+      if (isModernUi && startPosition != null && !memorizationEngine.state.value.isActive) {
         val endPosition = when (ayahSelection) {
           is AyahRange -> ayahSelection.endSuraAyah
           else -> startPosition
@@ -2006,7 +2006,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         0,
         0,
         true,
-        1.0f,
+        config.playbackSpeed,
         shouldStream = false
       )
     } else {
@@ -2015,6 +2015,7 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
   }
 
   private fun launchMemorizationPlayback(config: MemorizationConfig, isResume: Boolean) {
+    endAyahMode()
     pendingMemorizationConfig = null
     pendingIsResume = false
     audioStatusBar.visibility = View.VISIBLE
@@ -2029,12 +2030,12 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
       val currentAyah = memorizationEngine.state.value.currentPlayingAyah ?: config.startAyah
       ensurePage(currentAyah.sura, currentAyah.ayah)
       val page = quranInfo.getPageFromSuraAyah(currentAyah.sura, currentAyah.ayah)
-      playFromAyah(currentAyah, config.endAyah, page, 0, 0, true, 1.0f)
+      playFromAyah(currentAyah, config.endAyah, page, 0, 0, true, config.playbackSpeed)
     } else {
       ensurePage(config.startAyah.sura, config.startAyah.ayah)
       memorizationEngine.startMemorization(config)
       val page = quranInfo.getPageFromSuraAyah(config.startAyah.sura, config.startAyah.ayah)
-      playFromAyah(config.startAyah, config.endAyah, page, 0, 0, true, 1.0f)
+      playFromAyah(config.startAyah, config.endAyah, page, 0, 0, true, config.playbackSpeed)
     }
   }
 
@@ -2094,17 +2095,18 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         }
       }
     } else if (startMemorizeSura in 1..114) {
+      val customStartAyah = intent.getIntExtra(EXTRA_START_MEMORIZATION_START_AYAH, -1)
+      val customEndAyah = intent.getIntExtra(EXTRA_START_MEMORIZATION_END_AYAH, -1)
       intent.removeExtra(EXTRA_START_MEMORIZATION_SURA)
+      intent.removeExtra(EXTRA_START_MEMORIZATION_START_AYAH)
+      intent.removeExtra(EXTRA_START_MEMORIZATION_END_AYAH)
       viewPager.post {
-        val saved = memorizationPreferences.getSavedSessionForSura(startMemorizeSura)
-        if (saved != null) {
-          startMemorizationSession(saved.config, isResume = false)
-        } else {
-          val ayahCount = quranInfo.getNumberOfAyahs(startMemorizeSura)
+        val ayahCount = quranInfo.getNumberOfAyahs(startMemorizeSura)
+        if (customStartAyah in 1..ayahCount && customEndAyah in customStartAyah..ayahCount) {
           val defaultSettings = memorizationPreferences.getLastUsedSettings()
-          val freshConfig = MemorizationConfig(
-            startAyah = SuraAyah(startMemorizeSura, 1),
-            endAyah = SuraAyah(startMemorizeSura, ayahCount),
+          val targetedConfig = MemorizationConfig(
+            startAyah = SuraAyah(startMemorizeSura, customStartAyah),
+            endAyah = SuraAyah(startMemorizeSura, customEndAyah),
             windowSize = defaultSettings.windowSize,
             singleRepeat = defaultSettings.singleRepeat,
             connectRepeat = defaultSettings.connectRepeat,
@@ -2114,9 +2116,33 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
             recordRecitation = defaultSettings.recordRecitation,
             enableBridge = defaultSettings.enableBridge,
             isIntelliJMode = defaultSettings.isIntelliJMode,
-            rangeRepeat = defaultSettings.rangeRepeat
+            rangeRepeat = defaultSettings.rangeRepeat,
+            playbackSpeed = defaultSettings.playbackSpeed
           )
-          startMemorizationSession(freshConfig, isResume = false)
+          startMemorizationSession(targetedConfig, isResume = false)
+        } else {
+          val saved = memorizationPreferences.getSavedSessionForSura(startMemorizeSura)
+          if (saved != null) {
+            startMemorizationSession(saved.config, isResume = false)
+          } else {
+            val defaultSettings = memorizationPreferences.getLastUsedSettings()
+            val freshConfig = MemorizationConfig(
+              startAyah = SuraAyah(startMemorizeSura, 1),
+              endAyah = SuraAyah(startMemorizeSura, ayahCount),
+              windowSize = defaultSettings.windowSize,
+              singleRepeat = defaultSettings.singleRepeat,
+              connectRepeat = defaultSettings.connectRepeat,
+              delayMode = defaultSettings.delayMode,
+              memoryTestMode = defaultSettings.memoryTestMode,
+              maskingLevel = defaultSettings.maskingLevel,
+              recordRecitation = defaultSettings.recordRecitation,
+              enableBridge = defaultSettings.enableBridge,
+              isIntelliJMode = defaultSettings.isIntelliJMode,
+              rangeRepeat = defaultSettings.rangeRepeat,
+              playbackSpeed = defaultSettings.playbackSpeed
+            )
+            startMemorizationSession(freshConfig, isResume = false)
+          }
         }
       }
     }
@@ -2215,6 +2241,9 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
         if (playlistId != null) {
           playlistRepository.updateLastPlayed(playlistId)
         }
+        overlay.removeAllViews()
+        overlay.visibility = View.GONE
+        endAyahMode()
         startMemorizationSession(config, false)
       },
       onDismissed = {
@@ -3067,6 +3096,8 @@ class PagerActivity : AppCompatActivity(), AudioBarListener, OnBookmarkTagsUpdat
     const val EXTRA_MEMORIZE_PLAYLIST_ID: String = "memorizePlaylistId"
     const val EXTRA_RESUME_MEMORIZATION_SURA: String = "resumeMemorizationSura"
     const val EXTRA_START_MEMORIZATION_SURA: String = "startMemorizationSura"
+    const val EXTRA_START_MEMORIZATION_START_AYAH: String = "extra_start_memorization_start_ayah"
+    const val EXTRA_START_MEMORIZATION_END_AYAH: String = "extra_start_memorization_end_ayah"
 
     private const val DEFAULT_HIDE_AFTER_TIME: Long = 2000
 

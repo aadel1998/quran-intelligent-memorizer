@@ -46,7 +46,8 @@ data class MemorizationConfig(
   val playlistId: String? = null,
   val playlistName: String? = null,
   val isIntelliJMode: Boolean = true,
-  val rangeRepeat: Int = 1
+  val rangeRepeat: Int = 1,
+  val playbackSpeed: Float = 1.0f
 ) : Parcelable {
   init {
     require(windowSize >= 1) { "windowSize must be at least 1" }

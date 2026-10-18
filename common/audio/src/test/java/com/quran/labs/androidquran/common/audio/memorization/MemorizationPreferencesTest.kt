@@ -254,6 +254,50 @@ class MemorizationPreferencesTest {
     assertThat(memorizationPreferences.getAllFlaggedSurahs()).isEmpty()
   }
 
+  @Test
+  fun `getTotalFlaggedAyahsCount and clearAllFlaggedAyahs work properly`() {
+    memorizationPreferences.toggleAyahFlagged(2, 255)
+    memorizationPreferences.toggleAyahFlagged(2, 256)
+    memorizationPreferences.toggleAyahFlagged(36, 1)
+
+    assertThat(memorizationPreferences.getTotalFlaggedAyahsCount()).isEqualTo(3)
+    assertThat(memorizationPreferences.getAllFlaggedSurahs()).containsExactly(2, 36)
+
+    memorizationPreferences.clearAllFlaggedAyahs()
+    assertThat(memorizationPreferences.getTotalFlaggedAyahsCount()).isEqualTo(0)
+    assertThat(memorizationPreferences.getAllFlaggedSurahs()).isEmpty()
+  }
+
+  @Test
+  fun `resetStreak clears active streak and daily progress`() {
+    memorizationPreferences.recordAyahsPracticed(7)
+    assertThat(memorizationPreferences.getCurrentStreak()).isEqualTo(1)
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(7)
+
+    memorizationPreferences.resetStreak()
+    assertThat(memorizationPreferences.getCurrentStreak()).isEqualTo(0)
+    assertThat(memorizationPreferences.getAyahsMemorizedToday()).isEqualTo(0)
+  }
+
+  @Test
+  fun `playbackSpeed is persisted in session and default settings`() {
+    val config = MemorizationConfig(
+      startAyah = SuraAyah(1, 1),
+      endAyah = SuraAyah(1, 7),
+      playbackSpeed = 1.25f
+    )
+    memorizationPreferences.saveSession(config, 0, 1)
+
+    val savedSuraSession = memorizationPreferences.getSavedSessionForSura(1)
+    assertThat(savedSuraSession?.config?.playbackSpeed).isEqualTo(1.25f)
+
+    val globalSaved = memorizationPreferences.getSavedConfig()
+    assertThat(globalSaved?.playbackSpeed).isEqualTo(1.25f)
+
+    val lastUsed = memorizationPreferences.getLastUsedSettings()
+    assertThat(lastUsed.playbackSpeed).isEqualTo(1.25f)
+  }
+
   /**
    * Lightweight in-memory implementation of [SharedPreferences] for unit tests.
    */

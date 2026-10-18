@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -39,8 +40,8 @@ import com.quran.labs.androidquran.common.ui.core.QuranIcons
  * Displays:
  * - Active window index and total windows (e.g. "Window 1/3")
  * - Active step description & repeat counter (e.g. "Connecting Ayah 1–3 (Repeat 2/2)")
- * - Play/Pause, Previous Step, Skip Step, and Exit controls
- * - Peek/Hide text toggle when Memory Test Mode is active
+ * - Play/Pause, Previous Step, Skip Step, Speed, Bookmark, and Exit controls
+ * - Peek/Hide text toggle for blind self-recitation test
  */
 @Composable
 fun MemorizationHud(
@@ -50,6 +51,10 @@ fun MemorizationHud(
   onSkipStep: () -> Unit,
   onStop: () -> Unit,
   onToggleMask: () -> Unit,
+  playbackSpeed: Float = 1.0f,
+  onCycleSpeed: (() -> Unit)? = null,
+  isCurrentAyahFlagged: Boolean = false,
+  onToggleFlagAyah: (() -> Unit)? = null,
   onReplayRecitation: (() -> Unit)? = null,
   onOpenSettings: (() -> Unit)? = null,
   onEnterPip: (() -> Unit)? = null,
@@ -192,16 +197,17 @@ fun MemorizationHud(
             }
           }
 
-          // Tap-to-peek toggle if test mode active
-          if (state.config?.memoryTestMode == true) {
-            TextButton(onClick = onToggleMask) {
-              Text(
-                text = if (state.isTextMasked) "Peek Text" else "Hide Text",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-              )
-            }
+          // Tap-to-peek toggle for blind self-recitation test
+          TextButton(
+            onClick = onToggleMask,
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+          ) {
+            Text(
+              text = if (state.isTextMasked) "Peek Text" else "Hide Text",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.Bold,
+              color = if (state.isTextMasked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
           }
         }
       }
@@ -262,6 +268,32 @@ fun MemorizationHud(
             contentDescription = "Skip Step",
             tint = colors.defaultTextColor
           )
+        }
+
+        // Bookmark / Flag Difficult Ayah Button
+        if (onToggleFlagAyah != null) {
+          IconButton(onClick = onToggleFlagAyah) {
+            Icon(
+              if (isCurrentAyahFlagged) QuranIcons.BookmarkFilled else QuranIcons.BookmarkBorder,
+              contentDescription = if (isCurrentAyahFlagged) "Flagged as Difficult Verse" else "Flag as Difficult Verse",
+              tint = if (isCurrentAyahFlagged) Color(0xFFF59E0B) else colors.defaultTextColor
+            )
+          }
+        }
+
+        // Playback Speed Cycle Button
+        if (onCycleSpeed != null) {
+          TextButton(
+            onClick = onCycleSpeed,
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+          ) {
+            Text(
+              text = "${playbackSpeed}x",
+              fontSize = 13.sp,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary
+            )
+          }
         }
 
         // Live Settings Tuning Button

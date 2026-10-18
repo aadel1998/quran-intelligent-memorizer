@@ -46,7 +46,8 @@ data class MemorizationDefaultSettings(
   val recordRecitation: Boolean = false,
   val enableBridge: Boolean = true,
   val isIntelliJMode: Boolean = true,
-  val rangeRepeat: Int = 1
+  val rangeRepeat: Int = 1,
+  val playbackSpeed: Float = 1.0f
 )
 
 /**
@@ -76,7 +77,10 @@ class MemorizationPreferences(
       memoryTestMode = config.memoryTestMode,
       maskingLevel = config.maskingLevel,
       recordRecitation = config.recordRecitation,
-      enableBridge = config.enableBridge
+      enableBridge = config.enableBridge,
+      isIntelliJMode = config.isIntelliJMode,
+      rangeRepeat = config.rangeRepeat,
+      playbackSpeed = config.playbackSpeed
     )
     val editor = prefs.edit()
       .putInt(KEY_START_SURA, config.startAyah.sura)
@@ -90,6 +94,9 @@ class MemorizationPreferences(
       .putString(KEY_MASKING_LEVEL, config.maskingLevel.name)
       .putBoolean(KEY_RECORD_RECITATION, config.recordRecitation)
       .putBoolean(KEY_ENABLE_BRIDGE, config.enableBridge)
+      .putBoolean(KEY_INTELLIJ_MODE, config.isIntelliJMode)
+      .putInt(KEY_RANGE_REPEAT, config.rangeRepeat)
+      .putFloat(KEY_PLAYBACK_SPEED, config.playbackSpeed)
       .putInt(KEY_SAVED_STEP_INDEX, currentStepIndex)
       .putInt(KEY_SAVED_REPEAT, currentRepeatIteration)
       .putBoolean(KEY_HAS_ACTIVE_SESSION, true)
@@ -185,7 +192,10 @@ class MemorizationPreferences(
       enableBridge = prefs.getBoolean(KEY_ENABLE_BRIDGE, true),
       segments = segments,
       playlistId = playlistId,
-      playlistName = playlistName
+      playlistName = playlistName,
+      isIntelliJMode = prefs.getBoolean(KEY_INTELLIJ_MODE, true),
+      rangeRepeat = prefs.getInt(KEY_RANGE_REPEAT, 1),
+      playbackSpeed = prefs.getFloat(KEY_PLAYBACK_SPEED, 1.0f)
     )
   }
 
@@ -439,6 +449,26 @@ class MemorizationPreferences(
     return (1..114).filter { getFlaggedAyahsForSura(it).isNotEmpty() }.toSet()
   }
 
+  fun getTotalFlaggedAyahsCount(): Int {
+    return (1..114).sumOf { getFlaggedAyahsForSura(it).size }
+  }
+
+  fun clearAllFlaggedAyahs() {
+    val editor = prefs.edit()
+    (1..114).forEach { sura ->
+      editor.remove("${KEY_FLAGGED_AYAHS_PREFIX}$sura")
+    }
+    editor.apply()
+  }
+
+  fun resetStreak() {
+    prefs.edit()
+      .putInt(KEY_CURRENT_STREAK, 0)
+      .putInt(KEY_AYAHS_MEMORIZED_TODAY, 0)
+      .remove(KEY_LAST_ACTIVE_EPOCH_DAY)
+      .apply()
+  }
+
 
   /**
    * Saves active memorization configuration and progress step specifically for a Surah.
@@ -457,6 +487,9 @@ class MemorizationPreferences(
       .putString("${prefix}$KEY_MASKING_LEVEL", config.maskingLevel.name)
       .putBoolean("${prefix}$KEY_RECORD_RECITATION", config.recordRecitation)
       .putBoolean("${prefix}$KEY_ENABLE_BRIDGE", config.enableBridge)
+      .putBoolean("${prefix}$KEY_INTELLIJ_MODE", config.isIntelliJMode)
+      .putInt("${prefix}$KEY_RANGE_REPEAT", config.rangeRepeat)
+      .putFloat("${prefix}$KEY_PLAYBACK_SPEED", config.playbackSpeed)
       .putInt("${prefix}$KEY_SAVED_STEP_INDEX", currentStepIndex)
       .putInt("${prefix}$KEY_SAVED_REPEAT", currentRepeatIteration)
       .putBoolean("${prefix}$KEY_HAS_ACTIVE_SESSION", true)
@@ -509,6 +542,9 @@ class MemorizationPreferences(
     }
 
     val recordRecitation = prefs.getBoolean("${prefix}$KEY_RECORD_RECITATION", false)
+    val isIntelliJ = prefs.getBoolean("${prefix}$KEY_INTELLIJ_MODE", true)
+    val rangeRepeat = prefs.getInt("${prefix}$KEY_RANGE_REPEAT", 1)
+    val playbackSpeed = prefs.getFloat("${prefix}$KEY_PLAYBACK_SPEED", 1.0f)
     val stepIndex = prefs.getInt("${prefix}$KEY_SAVED_STEP_INDEX", 0)
     val repeatIter = prefs.getInt("${prefix}$KEY_SAVED_REPEAT", 1)
     val timestamp = prefs.getLong("${prefix}timestamp", System.currentTimeMillis())
@@ -523,7 +559,10 @@ class MemorizationPreferences(
       memoryTestMode = memoryTest,
       maskingLevel = maskingLevel,
       recordRecitation = recordRecitation,
-      enableBridge = prefs.getBoolean("${prefix}$KEY_ENABLE_BRIDGE", true)
+      enableBridge = prefs.getBoolean("${prefix}$KEY_ENABLE_BRIDGE", true),
+      isIntelliJMode = isIntelliJ,
+      rangeRepeat = rangeRepeat,
+      playbackSpeed = playbackSpeed
     )
 
     return SavedSuraSession(
@@ -557,7 +596,8 @@ class MemorizationPreferences(
     recordRecitation: Boolean = false,
     enableBridge: Boolean = true,
     isIntelliJMode: Boolean = true,
-    rangeRepeat: Int = 1
+    rangeRepeat: Int = 1,
+    playbackSpeed: Float = 1.0f
   ) {
     val editor = prefs.edit()
       .putInt(KEY_DEFAULT_WINDOW_SIZE, windowSize)
@@ -569,6 +609,7 @@ class MemorizationPreferences(
       .putBoolean(KEY_DEFAULT_ENABLE_BRIDGE, enableBridge)
       .putBoolean(KEY_DEFAULT_INTELLIJ_MODE, isIntelliJMode)
       .putInt(KEY_DEFAULT_RANGE_REPEAT, rangeRepeat)
+      .putFloat(KEY_DEFAULT_PLAYBACK_SPEED, playbackSpeed)
       .putBoolean(KEY_HAS_CUSTOM_DEFAULTS, true)
 
     when (delayMode) {
@@ -594,7 +635,8 @@ class MemorizationPreferences(
         singleRepeat = 3,
         connectRepeat = 2,
         isIntelliJMode = true,
-        rangeRepeat = 1
+        rangeRepeat = 1,
+        playbackSpeed = 1.0f
       )
     }
 
@@ -627,7 +669,8 @@ class MemorizationPreferences(
       recordRecitation = prefs.getBoolean(KEY_DEFAULT_RECORD_RECITATION, false),
       enableBridge = prefs.getBoolean(KEY_DEFAULT_ENABLE_BRIDGE, true),
       isIntelliJMode = prefs.getBoolean(KEY_DEFAULT_INTELLIJ_MODE, true),
-      rangeRepeat = prefs.getInt(KEY_DEFAULT_RANGE_REPEAT, 1)
+      rangeRepeat = prefs.getInt(KEY_DEFAULT_RANGE_REPEAT, 1),
+      playbackSpeed = prefs.getFloat(KEY_DEFAULT_PLAYBACK_SPEED, 1.0f)
     )
   }
 
@@ -672,6 +715,10 @@ class MemorizationPreferences(
     private const val KEY_DEFAULT_ENABLE_BRIDGE = "mem_def_enable_bridge"
     private const val KEY_DEFAULT_INTELLIJ_MODE = "mem_def_intellij_mode"
     private const val KEY_DEFAULT_RANGE_REPEAT = "mem_def_range_repeat"
+    private const val KEY_DEFAULT_PLAYBACK_SPEED = "mem_def_playback_speed"
+    private const val KEY_INTELLIJ_MODE = "mem_intellij_mode"
+    private const val KEY_RANGE_REPEAT = "mem_range_repeat"
+    private const val KEY_PLAYBACK_SPEED = "mem_playback_speed"
     private const val KEY_HAS_CUSTOM_DEFAULTS = "mem_has_custom_defaults"
 
     private const val VALUE_DELAY_NONE = "NONE"

@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,9 @@ fun MemorizationLiveSettingsSheet(
   currentConfig: MemorizationConfig,
   onApplySettings: (MemorizationConfig) -> Unit,
   onDismissRequest: () -> Unit,
+  isCurrentAyahFlagged: Boolean = false,
+  onToggleFlagAyah: (() -> Unit)? = null,
+  currentAyahNumber: Int? = null,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
   var isIntelliJMode by remember { mutableStateOf(currentConfig.isIntelliJMode) }
@@ -55,6 +59,7 @@ fun MemorizationLiveSettingsSheet(
   var windowSize by remember { mutableIntStateOf(currentConfig.windowSize) }
   var singleRepeat by remember { mutableIntStateOf(currentConfig.singleRepeat) }
   var connectRepeat by remember { mutableIntStateOf(currentConfig.connectRepeat) }
+  var playbackSpeed by remember { mutableFloatStateOf(currentConfig.playbackSpeed) }
   var selectedDelayOption by remember {
     mutableIntStateOf(
       when (val delay = currentConfig.delayMode) {
@@ -254,6 +259,32 @@ fun MemorizationLiveSettingsSheet(
       HorizontalDivider()
       Spacer(modifier = Modifier.height(14.dp))
 
+      // Reciter Audio Speed
+      Text(
+        text = "Reciter Audio Speed",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold
+      )
+
+      Spacer(modifier = Modifier.height(8.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        listOf(0.75f, 1.0f, 1.25f, 1.5f).forEach { speed ->
+          FilterChip(
+            selected = playbackSpeed == speed,
+            onClick = { playbackSpeed = speed },
+            label = { Text(if (speed == 1.0f) "1.0x" else "${speed}x") }
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(14.dp))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(14.dp))
+
       // Progressive Masking Level
       Text(
         text = "Memory Test Masking Level",
@@ -282,6 +313,35 @@ fun MemorizationLiveSettingsSheet(
           onClick = { maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT },
           label = { Text("Progressive") }
         )
+      }
+
+      if (onToggleFlagAyah != null && currentAyahNumber != null) {
+        Spacer(modifier = Modifier.height(14.dp))
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Text(
+              text = "Difficult Verse Bookmark",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.SemiBold
+            )
+            Text(
+              text = "Mark Ayah $currentAyahNumber as difficult for mistake review",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+          Switch(
+            checked = isCurrentAyahFlagged,
+            onCheckedChange = { onToggleFlagAyah() }
+          )
+        }
       }
 
       Spacer(modifier = Modifier.height(24.dp))
@@ -316,7 +376,8 @@ fun MemorizationLiveSettingsSheet(
               connectRepeat = connectRepeat,
               delayMode = delayMode,
               memoryTestMode = memoryTest,
-              maskingLevel = maskingLevel
+              maskingLevel = maskingLevel,
+              playbackSpeed = playbackSpeed
             )
             onApplySettings(updated)
           },

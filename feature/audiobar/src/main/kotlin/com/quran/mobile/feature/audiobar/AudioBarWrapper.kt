@@ -35,6 +35,7 @@ import dev.zacsweers.metro.Inject
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
@@ -87,6 +88,35 @@ class AudioBarWrapper @JvmOverloads constructor(
           audioBarState is AudioBarState.Loading
       var showLiveSettingsSheet by remember { mutableStateOf(false) }
       var showTrackerSheet by remember { mutableStateOf(false) }
+      var flaggedAyahsVersion by remember { mutableIntStateOf(0) }
+
+      val currentAyah = memorizationState.currentPlayingAyah
+      val isCurrentAyahFlagged = remember(currentAyah, flaggedAyahsVersion) {
+        if (currentAyah != null) memorizationPreferences.isAyahFlagged(currentAyah.sura, currentAyah.ayah) else false
+      }
+      val onToggleFlagAyah: (() -> Unit)? = remember(currentAyah) {
+        if (currentAyah != null) {
+          {
+            memorizationPreferences.toggleAyahFlagged(currentAyah.sura, currentAyah.ayah)
+            flaggedAyahsVersion++
+          }
+        } else null
+      }
+
+      val currentSpeed = when (val s = audioBarState) {
+        is AudioBarState.ActivePlayback -> s.speed
+        else -> memorizationState.config?.playbackSpeed ?: 1.0f
+      }
+      val onCycleSpeed: () -> Unit = {
+        val speeds = listOf(1.0f, 1.25f, 1.5f, 0.75f)
+        val currentIdx = speeds.indexOfFirst { kotlin.math.abs(it - currentSpeed) < 0.05f }
+        val nextIdx = if (currentIdx in speeds.indices) (currentIdx + 1) % speeds.size else 0
+        val nextSpeed = speeds[nextIdx]
+        eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.SetSpeed(nextSpeed))
+        memorizationState.config?.let { cfg ->
+          memorizationEngine.updateConfig(cfg.copy(playbackSpeed = nextSpeed))
+        }
+      }
 
       val isModernUi = remember {
         try {
@@ -131,6 +161,10 @@ class AudioBarWrapper @JvmOverloads constructor(
                 eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
               },
               onToggleMask = { memorizationEngine.toggleTextMask() },
+              playbackSpeed = currentSpeed,
+              onCycleSpeed = onCycleSpeed,
+              isCurrentAyahFlagged = isCurrentAyahFlagged,
+              onToggleFlagAyah = onToggleFlagAyah,
               onOpenSettings = { showLiveSettingsSheet = true },
               onOpenTracker = { showTrackerSheet = true },
               onEnterPip = onEnterPip,
@@ -203,6 +237,10 @@ class AudioBarWrapper @JvmOverloads constructor(
                 eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.Stop)
               },
               onToggleMask = { memorizationEngine.toggleTextMask() },
+              playbackSpeed = currentSpeed,
+              onCycleSpeed = onCycleSpeed,
+              isCurrentAyahFlagged = isCurrentAyahFlagged,
+              onToggleFlagAyah = onToggleFlagAyah,
               onOpenSettings = { showLiveSettingsSheet = true },
               onOpenTracker = { showTrackerSheet = true },
               onEnterPip = onEnterPip,
@@ -255,9 +293,15 @@ class AudioBarWrapper @JvmOverloads constructor(
           currentConfig = currentConfig,
           onApplySettings = { updated ->
             memorizationEngine.updateConfig(updated)
+            if (kotlin.math.abs(updated.playbackSpeed - currentSpeed) > 0.01f) {
+              eventListeners.commonPlaybackEventSink(AudioBarUiEvent.CommonPlaybackEvent.SetSpeed(updated.playbackSpeed))
+            }
             showLiveSettingsSheet = false
           },
-          onDismissRequest = { showLiveSettingsSheet = false }
+          onDismissRequest = { showLiveSettingsSheet = false },
+          isCurrentAyahFlagged = isCurrentAyahFlagged,
+          onToggleFlagAyah = onToggleFlagAyah,
+          currentAyahNumber = currentAyah?.ayah
         )
       }
 

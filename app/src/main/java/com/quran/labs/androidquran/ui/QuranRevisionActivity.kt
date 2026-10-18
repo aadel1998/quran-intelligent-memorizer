@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.quran.data.core.QuranInfo
@@ -44,6 +45,7 @@ class QuranRevisionActivity : AppCompatActivity() {
   private var currentStreakState by mutableStateOf(0)
   private var bestStreakState by mutableStateOf(0)
   private var flaggedSurahsState by mutableStateOf<Set<Int>>(emptySet())
+  private var totalFlaggedAyahsState by mutableIntStateOf(0)
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
@@ -124,6 +126,27 @@ class QuranRevisionActivity : AppCompatActivity() {
             refreshState()
           },
           flaggedSurahs = flaggedSurahsState,
+          onPracticeFlagged = { sura ->
+            val flaggedAyahs = memorizationPreferences.getFlaggedAyahsForSura(sura).sorted()
+            if (flaggedAyahs.isNotEmpty()) {
+              val firstAyah = flaggedAyahs.first()
+              val lastAyah = flaggedAyahs.last()
+              val intent = quranNavigator.intentFor(SuraAyah(sura, firstAyah))
+              intent.putExtra(PagerActivity.EXTRA_START_MEMORIZATION_SURA, sura)
+              intent.putExtra(PagerActivity.EXTRA_START_MEMORIZATION_START_AYAH, firstAyah)
+              intent.putExtra(PagerActivity.EXTRA_START_MEMORIZATION_END_AYAH, lastAyah)
+              startActivity(intent)
+            }
+          },
+          onResetStreak = {
+            memorizationPreferences.resetStreak()
+            refreshState()
+          },
+          onClearAllFlagged = {
+            memorizationPreferences.clearAllFlaggedAyahs()
+            refreshState()
+          },
+          totalFlaggedAyahs = totalFlaggedAyahsState,
           onBackClick = { finish() }
         )
       }
@@ -143,6 +166,7 @@ class QuranRevisionActivity : AppCompatActivity() {
     currentStreakState = memorizationPreferences.getCurrentStreak()
     bestStreakState = memorizationPreferences.getBestStreak()
     flaggedSurahsState = memorizationPreferences.getAllFlaggedSurahs()
+    totalFlaggedAyahsState = memorizationPreferences.getTotalFlaggedAyahsCount()
   }
 
   companion object {

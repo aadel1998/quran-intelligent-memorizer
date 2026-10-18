@@ -107,7 +107,7 @@
     <activity
         android:name=".ui.QuranRevisionActivity"
         android:theme="@style/QuranToolBarDayNight"
-        android:exported="false"/>
+        android:exported="true"/>
 
     <activity
         android:name=".SearchActivity"
