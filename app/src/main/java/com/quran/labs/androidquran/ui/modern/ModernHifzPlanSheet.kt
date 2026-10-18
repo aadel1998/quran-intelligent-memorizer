@@ -295,7 +295,13 @@ fun ModernHifzPlanSheet(
               contentColor = MaterialTheme.colorScheme.error
             )
           ) {
-            Text("Clear Plan", fontSize = 13.sp)
+            Icon(
+              imageVector = QuranIcons.Delete,
+              contentDescription = null,
+              modifier = Modifier.size(15.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Clear", fontSize = 13.sp)
           }
         }
 
@@ -318,7 +324,13 @@ fun ModernHifzPlanSheet(
             contentColor = MaterialTheme.colorScheme.onPrimary
           )
         ) {
-          Text("Save Memorization Plan", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Icon(
+            imageVector = QuranIcons.Check,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text("Save Plan", fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
       }
     }

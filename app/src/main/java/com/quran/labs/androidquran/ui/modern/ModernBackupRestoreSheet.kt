@@ -95,18 +95,34 @@ fun ModernBackupRestoreSheet(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column {
-          Text(
-            text = "Backup & Restore",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-          )
-          Text(
-            text = "Safeguard & transfer your memorization data",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(
+            modifier = Modifier
+              .size(38.dp)
+              .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = QuranIcons.CloudUpload,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(20.dp)
+            )
+          }
+          Spacer(modifier = Modifier.width(12.dp))
+          Column {
+            Text(
+              text = "Backup & Restore",
+              fontSize = 19.sp,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+              text = "Safeguard & transfer your memorization data",
+              fontSize = 11.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
         }
 
         Box(
@@ -141,6 +157,13 @@ fun ModernBackupRestoreSheet(
         Tab(
           selected = selectedTab == 0,
           onClick = { selectedTab = 0 },
+          icon = {
+            Icon(
+              imageVector = QuranIcons.CloudUpload,
+              contentDescription = null,
+              modifier = Modifier.size(18.dp)
+            )
+          },
           text = {
             Text(
               text = "Export Backup",
@@ -152,6 +175,13 @@ fun ModernBackupRestoreSheet(
         Tab(
           selected = selectedTab == 1,
           onClick = { selectedTab = 1 },
+          icon = {
+            Icon(
+              imageVector = QuranIcons.CloudDownload,
+              contentDescription = null,
+              modifier = Modifier.size(18.dp)
+            )
+          },
           text = {
             Text(
               text = "Restore Backup",

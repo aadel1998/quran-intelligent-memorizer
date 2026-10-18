@@ -191,27 +191,49 @@ fun ModernRevisionDashboardScreen(
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = 20.dp, vertical = 14.dp),
+              .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Column {
-              Text(
-                text = "${selectedQueue.size} Surahs Selected",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-              )
-              Text(
-                text = "Ready for revision session",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.primary
-              )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(38.dp)
+                  .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = QuranIcons.Layers,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(20.dp)
+                )
+              }
+              Spacer(modifier = Modifier.width(10.dp))
+              Column {
+                Text(
+                  text = "${selectedQueue.size} Surahs Selected",
+                  fontSize = 15.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                  text = "Ready for batch revision",
+                  fontSize = 12.sp,
+                  color = MaterialTheme.colorScheme.primary
+                )
+              }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-              TextButton(onClick = onClearQueue) {
-                Text("Clear", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              OutlinedButton(
+                onClick = onClearQueue,
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+              ) {
+                Icon(QuranIcons.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Clear", fontSize = 12.sp)
               }
 
               Button(
@@ -220,10 +242,11 @@ fun ModernRevisionDashboardScreen(
                   containerColor = MaterialTheme.colorScheme.primary,
                   contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
               ) {
                 Icon(
-                  imageVector = QuranIcons.PlayArrow,
+                  imageVector = QuranIcons.Headphones,
                   contentDescription = null,
                   modifier = Modifier.size(18.dp)
                 )
@@ -249,33 +272,55 @@ fun ModernRevisionDashboardScreen(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+          modifier = Modifier.weight(1f, fill = false),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
           IconButton(
             onClick = onBackClick,
             modifier = Modifier
-              .size(40.dp)
+              .size(38.dp)
               .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), CircleShape)
           ) {
             Icon(
               imageVector = QuranIcons.ArrowBack,
               contentDescription = "Back",
-              tint = MaterialTheme.colorScheme.onSurface
+              tint = MaterialTheme.colorScheme.onSurface,
+              modifier = Modifier.size(20.dp)
             )
           }
 
-          Spacer(modifier = Modifier.width(12.dp))
+          Spacer(modifier = Modifier.width(8.dp))
+
+          Box(
+            modifier = Modifier
+              .size(36.dp)
+              .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = QuranIcons.MenuBook,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(18.dp)
+            )
+          }
+
+          Spacer(modifier = Modifier.width(8.dp))
 
           Column {
             Text(
-              text = "Revision Dashboard",
-              fontSize = 20.sp,
+              text = "Quran Revision",
+              fontSize = 18.sp,
               fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onBackground
+              color = MaterialTheme.colorScheme.onBackground,
+              maxLines = 1
             )
             Text(
-              text = "Special tracking for memorized Surahs",
-              fontSize = 12.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
+              text = "Hifz Mastery",
+              fontSize = 11.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1
             )
           }
         }
@@ -296,14 +341,19 @@ fun ModernRevisionDashboardScreen(
               )
               .clip(RoundedCornerShape(20.dp))
               .clickable { showProfileSheet = true }
-              .padding(horizontal = 10.dp, vertical = 6.dp)
+              .padding(horizontal = 8.dp, vertical = 5.dp)
           ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-              Text("👤", fontSize = 11.sp)
-              Spacer(modifier = Modifier.width(4.dp))
+              Icon(
+                imageVector = QuranIcons.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(13.dp)
+              )
+              Spacer(modifier = Modifier.width(3.dp))
               Text(
                 text = activeProfile.name,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
@@ -311,49 +361,49 @@ fun ModernRevisionDashboardScreen(
               Spacer(modifier = Modifier.width(2.dp))
               Text(
                 text = "▾",
-                fontSize = 10.sp,
+                fontSize = 9.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
             }
           }
 
-          Spacer(modifier = Modifier.width(6.dp))
+          Spacer(modifier = Modifier.width(5.dp))
 
           // Memorized Stat Pill
           Box(
             modifier = Modifier
               .background(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                color = Color(0xFFEAB308).copy(alpha = 0.15f),
                 shape = RoundedCornerShape(20.dp)
               )
               .border(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                color = Color(0xFFEAB308).copy(alpha = 0.35f),
                 shape = RoundedCornerShape(20.dp)
               )
               .clip(RoundedCornerShape(20.dp))
               .clickable { showStatsDialog = true }
-              .padding(horizontal = 10.dp, vertical = 6.dp)
+              .padding(horizontal = 8.dp, vertical = 5.dp)
           ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Icon(
-                imageVector = QuranIcons.BookmarkFilled,
+                imageVector = QuranIcons.Star,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = Color(0xFFEAB308),
                 modifier = Modifier.size(13.dp)
               )
               Spacer(modifier = Modifier.width(3.dp))
               Text(
                 text = "$memorizedCount/114",
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = Color(0xFFEAB308)
               )
             }
           }
 
           if (onExportBackup != null && onImportBackup != null) {
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(5.dp))
             Box(
               modifier = Modifier
                 .background(
@@ -367,9 +417,14 @@ fun ModernRevisionDashboardScreen(
                 )
                 .clip(CircleShape)
                 .clickable { showBackupSheet = true }
-                .padding(horizontal = 9.dp, vertical = 6.dp)
+                .padding(6.dp)
             ) {
-              Text("💾", fontSize = 11.sp)
+              Icon(
+                imageVector = QuranIcons.CloudUpload,
+                contentDescription = "Backup & Restore",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+              )
             }
           }
         }
@@ -670,6 +725,13 @@ fun ModernRevisionDashboardScreen(
             selected = selectedFilterTab == 0,
             onClick = { selectedFilterTab = 0 },
             label = { Text("All (114)", fontSize = 12.sp) },
+            leadingIcon = {
+              Icon(
+                imageVector = QuranIcons.MenuBook,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp)
+              )
+            },
             colors = FilterChipDefaults.filterChipColors(
               selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
               selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -687,6 +749,14 @@ fun ModernRevisionDashboardScreen(
                 fontWeight = if (dueCount > 0) FontWeight.Bold else FontWeight.Normal
               )
             },
+            leadingIcon = {
+              Icon(
+                imageVector = QuranIcons.Hourglass,
+                contentDescription = null,
+                tint = if (dueCount > 0) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp)
+              )
+            },
             colors = FilterChipDefaults.filterChipColors(
               selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
               selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -698,6 +768,14 @@ fun ModernRevisionDashboardScreen(
             selected = selectedFilterTab == 2,
             onClick = { selectedFilterTab = 2 },
             label = { Text("Memorized ($memorizedCount)", fontSize = 12.sp) },
+            leadingIcon = {
+              Icon(
+                imageVector = QuranIcons.Star,
+                contentDescription = null,
+                tint = Color(0xFFEAB308),
+                modifier = Modifier.size(14.dp)
+              )
+            },
             colors = FilterChipDefaults.filterChipColors(
               selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
               selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -710,6 +788,13 @@ fun ModernRevisionDashboardScreen(
               selected = selectedFilterTab == 3,
               onClick = { selectedFilterTab = 3 },
               label = { Text("Queue (${selectedQueue.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+              leadingIcon = {
+                Icon(
+                  imageVector = QuranIcons.Layers,
+                  contentDescription = null,
+                  modifier = Modifier.size(14.dp)
+                )
+              },
               colors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary
@@ -723,6 +808,14 @@ fun ModernRevisionDashboardScreen(
               selected = selectedFilterTab == 4,
               onClick = { selectedFilterTab = 4 },
               label = { Text("Flagged (${flaggedSurahs.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+              leadingIcon = {
+                Icon(
+                  imageVector = QuranIcons.Flag,
+                  contentDescription = null,
+                  tint = Color(0xFFEF4444),
+                  modifier = Modifier.size(14.dp)
+                )
+              },
               colors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = Color(0xFFEF4444).copy(alpha = 0.2f),
                 selectedLabelColor = Color(0xFFEF4444)
@@ -739,6 +832,13 @@ fun ModernRevisionDashboardScreen(
                 text = if (selectedJuz != null) "Juz $selectedJuz ▾" else "Juz ▾",
                 fontSize = 12.sp,
                 fontWeight = if (selectedJuz != null) FontWeight.Bold else FontWeight.Normal
+              )
+            },
+            leadingIcon = {
+              Icon(
+                imageVector = QuranIcons.CollectionsBookmark,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp)
               )
             },
             colors = FilterChipDefaults.filterChipColors(
@@ -761,16 +861,25 @@ fun ModernRevisionDashboardScreen(
               .clickable { showSortMenu = true }
               .padding(horizontal = 8.dp, vertical = 6.dp)
           ) {
-            Text(
-              text = when (sortOrder) {
-                1 -> "⇅ Due"
-                2 -> "⇅ Verses"
-                else -> "⇅ 1..114"
-              },
-              fontSize = 11.sp,
-              fontWeight = FontWeight.SemiBold,
-              color = MaterialTheme.colorScheme.primary
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = QuranIcons.SwapVert,
+                contentDescription = "Sort Order",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(15.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = when (sortOrder) {
+                  1 -> "Due"
+                  2 -> "Verses"
+                  else -> "1..114"
+                },
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
           }
 
           DropdownMenu(
@@ -779,6 +888,13 @@ fun ModernRevisionDashboardScreen(
           ) {
             DropdownMenuItem(
               text = { Text("Surah Number (1 → 114)") },
+              leadingIcon = {
+                Icon(
+                  imageVector = QuranIcons.MenuBook,
+                  contentDescription = null,
+                  modifier = Modifier.size(16.dp)
+                )
+              },
               onClick = {
                 sortOrder = 0
                 showSortMenu = false
@@ -786,6 +902,14 @@ fun ModernRevisionDashboardScreen(
             )
             DropdownMenuItem(
               text = { Text("Revision Due First") },
+              leadingIcon = {
+                Icon(
+                  imageVector = QuranIcons.Hourglass,
+                  contentDescription = null,
+                  tint = Color(0xFFF59E0B),
+                  modifier = Modifier.size(16.dp)
+                )
+              },
               onClick = {
                 sortOrder = 1
                 showSortMenu = false
@@ -793,6 +917,14 @@ fun ModernRevisionDashboardScreen(
             )
             DropdownMenuItem(
               text = { Text("Most Verses Memorized") },
+              leadingIcon = {
+                Icon(
+                  imageVector = QuranIcons.Star,
+                  contentDescription = null,
+                  tint = Color(0xFFEAB308),
+                  modifier = Modifier.size(16.dp)
+                )
+              },
               onClick = {
                 sortOrder = 2
                 showSortMenu = false
@@ -989,13 +1121,20 @@ fun ModernRevisionDashboardScreen(
       onDismissRequest = { showStatsDialog = false },
       title = {
         Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            imageVector = QuranIcons.BookmarkFilled,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(24.dp)
-          )
-          Spacer(modifier = Modifier.width(8.dp))
+          Box(
+            modifier = Modifier
+              .size(36.dp)
+              .background(Color(0xFFEAB308).copy(alpha = 0.2f), CircleShape),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = QuranIcons.Star,
+              contentDescription = null,
+              tint = Color(0xFFEAB308),
+              modifier = Modifier.size(20.dp)
+            )
+          }
+          Spacer(modifier = Modifier.width(10.dp))
           Text(
             text = "Hifz Mastery Overview",
             fontWeight = FontWeight.Bold,
@@ -1010,17 +1149,37 @@ fun ModernRevisionDashboardScreen(
         ) {
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("Surahs Memorized:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("$memorizedCount / 114", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = QuranIcons.Star,
+                contentDescription = null,
+                tint = Color(0xFFEAB308),
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Surahs Memorized:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("$memorizedCount / 114", fontWeight = FontWeight.Bold, color = Color(0xFFEAB308))
           }
 
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("Verses Memorized:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = QuranIcons.MenuBook,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Verses Memorized:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text("$totalMemorizedAyahs / 6,236", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
           }
 
@@ -1028,36 +1187,49 @@ fun ModernRevisionDashboardScreen(
 
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("Current Streak:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("🔥 $currentStreak Days", fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B))
+            Text("🔥 Current Streak:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$currentStreak Days", fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B))
           }
 
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("Longest Streak:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("⚡ $bestStreak Days", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text("⚡ Longest Streak:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$bestStreak Days", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
           }
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("Practiced Today:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("🎯 Practiced Today:", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("$ayahsToday / $dailyGoal v", fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
           }
 
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("Flagged Mistakes:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("⚠️ $totalFlaggedAyahs Verses", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = QuranIcons.Flag,
+                contentDescription = null,
+                tint = Color(0xFFEF4444),
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Flagged Mistakes:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("$totalFlaggedAyahs Verses", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
           }
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -1069,7 +1241,7 @@ fun ModernRevisionDashboardScreen(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Column {
-              Text("Memorization Plan:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text("🎯 Memorization Plan:", color = MaterialTheme.colorScheme.onSurfaceVariant)
               Text(
                 text = if (hifzPlan != null) "${hifzPlan.targetSuraName} (${hifzPlan.daysRemaining}d left)"
                        else "No active plan",
@@ -1097,7 +1269,7 @@ fun ModernRevisionDashboardScreen(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Column {
-              Text("Daily Hifz Reminder:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text("⏰ Daily Hifz Reminder:", color = MaterialTheme.colorScheme.onSurfaceVariant)
               Text(
                 text = if (isDailyReminderEnabled) {
                   val hourStr = dailyReminderTime.first.toString().padStart(2, '0')
@@ -1166,7 +1338,13 @@ fun ModernRevisionDashboardScreen(
               modifier = Modifier.weight(1f),
               shape = RoundedCornerShape(10.dp)
             ) {
-              Text("📊 30 Juz Matrix", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+              Icon(
+                imageVector = QuranIcons.CollectionsBookmark,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("30 Juz Matrix", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
 
             if (onExportBackup != null && onImportBackup != null) {
@@ -1178,7 +1356,13 @@ fun ModernRevisionDashboardScreen(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(10.dp)
               ) {
-                Text("💾 Backup & Restore", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Icon(
+                  imageVector = QuranIcons.CloudUpload,
+                  contentDescription = null,
+                  modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Backup", fontSize = 11.sp, fontWeight = FontWeight.Bold)
               }
             }
           }
@@ -1352,15 +1536,24 @@ private fun RevisionSurahCard(
             Spacer(modifier = Modifier.width(6.dp))
             Box(
               modifier = Modifier
-                .background(Color(0xFFF59E0B).copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                .background(Color(0xFFF59E0B).copy(alpha = 0.2f), RoundedCornerShape(6.dp))
                 .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
-              Text(
-                text = "DUE",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFF59E0B)
-              )
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                  imageVector = QuranIcons.Hourglass,
+                  contentDescription = null,
+                  tint = Color(0xFFF59E0B),
+                  modifier = Modifier.size(10.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                  text = "DUE",
+                  fontSize = 9.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color(0xFFF59E0B)
+                )
+              }
             }
           }
 
@@ -1368,15 +1561,49 @@ private fun RevisionSurahCard(
             Spacer(modifier = Modifier.width(6.dp))
             Box(
               modifier = Modifier
-                .background(Color(0xFFEF4444).copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                .background(Color(0xFFEF4444).copy(alpha = 0.2f), RoundedCornerShape(6.dp))
                 .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
-              Text(
-                text = "⚠️ $flaggedAyahsCount flagged",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFEF4444)
-              )
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                  imageVector = QuranIcons.Flag,
+                  contentDescription = null,
+                  tint = Color(0xFFEF4444),
+                  modifier = Modifier.size(10.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                  text = "$flaggedAyahsCount",
+                  fontSize = 9.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color(0xFFEF4444)
+                )
+              }
+            }
+          }
+
+          if (isMemorized && !isDue) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+              modifier = Modifier
+                .background(Color(0xFF10B981).copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                  imageVector = QuranIcons.Check,
+                  contentDescription = null,
+                  tint = Color(0xFF10B981),
+                  modifier = Modifier.size(10.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                  text = "FRESH",
+                  fontSize = 9.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = Color(0xFF10B981)
+                )
+              }
             }
           }
         }
@@ -1384,16 +1611,24 @@ private fun RevisionSurahCard(
         Spacer(modifier = Modifier.height(2.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            imageVector = QuranIcons.MenuBook,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(11.dp)
+          )
+          Spacer(modifier = Modifier.width(3.dp))
           Text(
             text = "${sura.numberOfAyahs} ayahs",
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
 
           if (lastRevised > 0L) {
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
-              text = " • Revised ${getRelativeTimeText(lastRevised)}",
-              fontSize = 11.sp,
+              text = "• 🕒 ${getRelativeTimeText(lastRevised)}",
+              fontSize = 10.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
             )
           }
@@ -1418,7 +1653,7 @@ private fun RevisionSurahCard(
             .background(Color(0xFFEF4444).copy(alpha = 0.15f), CircleShape)
         ) {
           Icon(
-            imageVector = QuranIcons.BookmarkFilled,
+            imageVector = QuranIcons.Flag,
             contentDescription = "Practice Flagged Verses",
             tint = Color(0xFFEF4444),
             modifier = Modifier.size(18.dp)
@@ -1427,16 +1662,16 @@ private fun RevisionSurahCard(
         Spacer(modifier = Modifier.width(6.dp))
       }
 
-      // Recall Quiz Button
+      // Recall Quiz Button (Graduation Cap / Academic Recall)
       IconButton(
         onClick = onStartQuiz,
         modifier = Modifier
           .size(36.dp)
-          .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), CircleShape)
+          .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f), CircleShape)
       ) {
         Icon(
-          imageVector = QuranIcons.Speed,
-          contentDescription = "Recall Quiz",
+          imageVector = QuranIcons.School,
+          contentDescription = "Active Recall Quiz",
           tint = MaterialTheme.colorScheme.primary,
           modifier = Modifier.size(18.dp)
         )
@@ -1450,15 +1685,15 @@ private fun RevisionSurahCard(
         modifier = Modifier
           .size(36.dp)
           .background(
-            if (isMemorized) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+            if (isMemorized) Color(0xFFEAB308).copy(alpha = 0.18f)
             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
             CircleShape
           )
       ) {
         Icon(
-          imageVector = if (isMemorized) QuranIcons.Check else QuranIcons.BookmarkBorder,
+          imageVector = if (isMemorized) QuranIcons.Star else QuranIcons.BookmarkBorder,
           contentDescription = if (isMemorized) "Memorized" else "Mark as memorized",
-          tint = if (isMemorized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+          tint = if (isMemorized) Color(0xFFEAB308) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
           modifier = Modifier.size(18.dp)
         )
       }

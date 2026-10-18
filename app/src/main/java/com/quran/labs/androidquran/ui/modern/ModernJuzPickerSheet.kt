@@ -66,18 +66,34 @@ fun ModernJuzPickerSheet(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column {
-          Text(
-            text = "Select Juz (Para)",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-          )
-          Text(
-            text = "Filter dashboard and batch-revise entire Juz",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(
+            modifier = Modifier
+              .size(38.dp)
+              .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = QuranIcons.CollectionsBookmark,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(20.dp)
+            )
+          }
+          Spacer(modifier = Modifier.width(12.dp))
+          Column {
+            Text(
+              text = "Select Juz (Para)",
+              fontSize = 19.sp,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+              text = "Filter dashboard and batch-revise entire Juz",
+              fontSize = 11.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
         }
 
         Box(
@@ -136,9 +152,11 @@ fun ModernJuzPickerSheet(
                     ),
                   contentAlignment = Alignment.Center
                 ) {
-                  Text(
-                    text = "📖",
-                    fontSize = 16.sp
+                  Icon(
+                    imageVector = QuranIcons.MenuBook,
+                    contentDescription = null,
+                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp)
                   )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
@@ -218,12 +236,21 @@ fun ModernJuzPickerSheet(
                       ),
                     contentAlignment = Alignment.Center
                   ) {
-                    Text(
-                      text = if (isFullyMemorized) "✓" else "${juz.number}",
-                      fontSize = 13.sp,
-                      fontWeight = FontWeight.Bold,
-                      color = if (isFullyMemorized || isSelected) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
+                    if (isFullyMemorized) {
+                      Icon(
+                        imageVector = QuranIcons.Check,
+                        contentDescription = "Memorized",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                      )
+                    } else {
+                      Text(
+                        text = "${juz.number}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                      )
+                    }
                   }
                   Spacer(modifier = Modifier.width(12.dp))
                   Column {
@@ -236,8 +263,15 @@ fun ModernJuzPickerSheet(
                       )
                       if (isFullyMemorized) {
                         Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                          imageVector = QuranIcons.Star,
+                          contentDescription = "Hāfiz",
+                          tint = Color(0xFFEAB308),
+                          modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
                         Text(
-                          text = "Hāfiz 🎉",
+                          text = "Hāfiz",
                           fontSize = 10.sp,
                           fontWeight = FontWeight.Bold,
                           color = Color(0xFF10B981)

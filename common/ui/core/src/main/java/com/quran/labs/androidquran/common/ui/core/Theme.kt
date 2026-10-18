@@ -108,6 +108,19 @@ object QuranIcons {
   val Translate: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Translate
   val Share: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Share
   val ContentCopy: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.ContentCopy
+  val Star: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Star
+  val Flag: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Flag
+  val School: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.School
+  val Hourglass: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Hourglass
+  val Headphones: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Headphones
+  val Tune: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Tune
+  val Layers: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Layers
+  val CloudUpload: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.CloudUpload
+  val CloudDownload: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.CloudDownload
+  val Visibility: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.Visibility
+  val VisibilityOff: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.VisibilityOff
+  val SwapVert: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.SwapVert
+  val CollectionsBookmark: ImageVector get() = com.quran.labs.androidquran.common.ui.core.icons.CollectionsBookmark
 }
 
 @Composable

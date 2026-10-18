@@ -108,10 +108,10 @@ fun ModernRecallQuizSheet(
             contentAlignment = Alignment.Center
           ) {
             Icon(
-              imageVector = QuranIcons.Speed,
+              imageVector = QuranIcons.School,
               contentDescription = null,
               tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(18.dp)
+              modifier = Modifier.size(20.dp)
             )
           }
           Spacer(modifier = Modifier.width(10.dp))
@@ -257,11 +257,11 @@ fun ModernRecallQuizSheet(
               contentAlignment = Alignment.Center
             ) {
               Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                  text = "••••••••••••••••••••••••••••••••••••••",
-                  fontSize = 18.sp,
-                  color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                  letterSpacing = 2.sp
+                Icon(
+                  imageVector = QuranIcons.Visibility,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                  modifier = Modifier.size(28.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -291,7 +291,7 @@ fun ModernRecallQuizSheet(
               )
             ) {
               Icon(
-                imageVector = QuranIcons.Check,
+                imageVector = QuranIcons.Visibility,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp)
               )
@@ -311,12 +311,21 @@ fun ModernRecallQuizSheet(
                   .padding(12.dp),
                 contentAlignment = Alignment.Center
               ) {
-                Text(
-                  text = "Ayah $targetAyah Revealed",
-                  fontSize = 14.sp,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.primary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(
+                    imageVector = QuranIcons.Visibility,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text(
+                    text = "Ayah $targetAyah Revealed",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                  )
+                }
               }
 
               Spacer(modifier = Modifier.height(14.dp))
@@ -368,10 +377,17 @@ fun ModernRecallQuizSheet(
                   modifier = Modifier.weight(1f),
                   shape = RoundedCornerShape(12.dp),
                   colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFFF59E0B)
+                    contentColor = Color(0xFFEF4444)
                   )
                 ) {
-                  Text("Needs Practice", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                  Icon(
+                    imageVector = QuranIcons.Flag,
+                    contentDescription = null,
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(16.dp)
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text("Flag & Practice", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                 }
               }
             }

@@ -80,11 +80,11 @@ fun MemorizationHud(
       ) {
         // Step Type Badge
         val badgeLabel = when {
-          state.isRecordingRecitation -> "RECORDING"
-          state.stepType == StepType.SOLO -> "SOLO"
-          state.stepType == StepType.CONNECT -> "CONNECT"
-          state.stepType == StepType.PAUSE_FOR_RECITATION -> "RECITE"
-          state.stepType == StepType.BRIDGE -> "BRIDGE"
+          state.isRecordingRecitation -> "🔴 REC"
+          state.stepType == StepType.SOLO -> "🎯 SOLO"
+          state.stepType == StepType.CONNECT -> "🔗 CONNECT"
+          state.stepType == StepType.PAUSE_FOR_RECITATION -> "🎙️ RECITE"
+          state.stepType == StepType.BRIDGE -> "🌉 BRIDGE"
           else -> ""
         }
         val badgeColor = when {
@@ -150,7 +150,7 @@ fun MemorizationHud(
               contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
             ) {
               Icon(
-                QuranIcons.Settings,
+                QuranIcons.Tune,
                 contentDescription = "Tune Settings",
                 modifier = Modifier
                   .size(16.dp)
@@ -202,6 +202,13 @@ fun MemorizationHud(
             onClick = onToggleMask,
             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
           ) {
+            Icon(
+              imageVector = if (state.isTextMasked) QuranIcons.Visibility else QuranIcons.VisibilityOff,
+              contentDescription = null,
+              modifier = Modifier.size(15.dp),
+              tint = if (state.isTextMasked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(3.dp))
             Text(
               text = if (state.isTextMasked) "Peek Text" else "Hide Text",
               fontSize = 12.sp,
@@ -270,13 +277,13 @@ fun MemorizationHud(
           )
         }
 
-        // Bookmark / Flag Difficult Ayah Button
+        // Flag Difficult Ayah Button
         if (onToggleFlagAyah != null) {
           IconButton(onClick = onToggleFlagAyah) {
             Icon(
-              if (isCurrentAyahFlagged) QuranIcons.BookmarkFilled else QuranIcons.BookmarkBorder,
+              imageVector = QuranIcons.Flag,
               contentDescription = if (isCurrentAyahFlagged) "Flagged as Difficult Verse" else "Flag as Difficult Verse",
-              tint = if (isCurrentAyahFlagged) Color(0xFFF59E0B) else colors.defaultTextColor
+              tint = if (isCurrentAyahFlagged) Color(0xFFEF4444) else colors.defaultTextColor
             )
           }
         }
@@ -288,8 +295,8 @@ fun MemorizationHud(
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
           ) {
             Text(
-              text = "${playbackSpeed}x",
-              fontSize = 13.sp,
+              text = "⚡ ${playbackSpeed}x",
+              fontSize = 12.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary
             )
@@ -300,7 +307,7 @@ fun MemorizationHud(
         if (onOpenSettings != null) {
           IconButton(onClick = onOpenSettings) {
             Icon(
-              QuranIcons.Settings,
+              QuranIcons.Tune,
               contentDescription = "Tuning Memorization Settings",
               tint = MaterialTheme.colorScheme.primary
             )

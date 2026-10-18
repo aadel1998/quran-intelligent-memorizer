@@ -35,9 +35,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
+import com.quran.labs.androidquran.common.ui.core.QuranIcons
 
 /**
  * Bottom sheet allowing live on-the-fly adjustment of memorization parameters
@@ -87,17 +93,34 @@ fun MemorizationLiveSettingsSheet(
         .padding(bottom = 32.dp)
         .verticalScroll(rememberScrollState())
     ) {
-      Text(
-        text = "Tuning Memorization Settings",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold
-      )
-
-      Text(
-        text = "Changes take effect immediately on your current session",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+          modifier = Modifier
+            .size(38.dp)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = QuranIcons.Tune,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+          )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column {
+          Text(
+            text = "Tuning Memorization",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+          )
+          Text(
+            text = "Changes take effect immediately on current session",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      }
 
       Spacer(modifier = Modifier.height(14.dp))
 

@@ -93,11 +93,16 @@ fun ModernProfileManagementSheet(
           Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
               modifier = Modifier
-                .size(36.dp)
+                .size(38.dp)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
               contentAlignment = Alignment.Center
             ) {
-              Text("👤", fontSize = 18.sp)
+              Icon(
+                imageVector = QuranIcons.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+              )
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
@@ -193,12 +198,21 @@ fun ModernProfileManagementSheet(
                     .background(Color(0xFF10B981).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                  Text(
-                    text = "ACTIVE",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF10B981)
-                  )
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                      imageVector = QuranIcons.Check,
+                      contentDescription = null,
+                      tint = Color(0xFF10B981),
+                      modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                      text = "ACTIVE",
+                      fontSize = 10.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = Color(0xFF10B981)
+                    )
+                  }
                 }
               } else if (profile.id != MemorizationPreferences.DEFAULT_PROFILE_ID) {
                 IconButton(
@@ -206,7 +220,7 @@ fun ModernProfileManagementSheet(
                   modifier = Modifier.size(32.dp)
                 ) {
                   Icon(
-                    imageVector = QuranIcons.Close,
+                    imageVector = QuranIcons.Delete,
                     contentDescription = "Delete Profile",
                     tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                     modifier = Modifier.size(16.dp)
