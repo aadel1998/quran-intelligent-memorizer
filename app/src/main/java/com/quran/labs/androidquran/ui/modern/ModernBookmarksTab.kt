@@ -38,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
+import com.quran.labs.androidquran.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
@@ -156,7 +158,7 @@ fun BookmarksTabContent(
         ) {
           item {
             FilterPill(
-              title = "All (${bookmarks.size})",
+              title = stringResource(R.string.bookmarks_filter_all, bookmarks.size),
               isSelected = selectedFilter == BookmarkFilterType.ALL,
               onClick = {
                 selectedFilter = BookmarkFilterType.ALL
@@ -166,7 +168,7 @@ fun BookmarksTabContent(
           }
           item {
             FilterPill(
-              title = "Ayahs ($ayahCount)",
+              title = stringResource(R.string.bookmarks_filter_ayahs, ayahCount),
               isSelected = selectedFilter == BookmarkFilterType.AYAHS,
               onClick = {
                 selectedFilter = BookmarkFilterType.AYAHS
@@ -176,7 +178,7 @@ fun BookmarksTabContent(
           }
           item {
             FilterPill(
-              title = "Pages ($pageCount)",
+              title = stringResource(R.string.bookmarks_filter_pages, pageCount),
               isSelected = selectedFilter == BookmarkFilterType.PAGES,
               onClick = {
                 selectedFilter = BookmarkFilterType.PAGES
@@ -188,7 +190,7 @@ fun BookmarksTabContent(
             val count = bookmarks.count { b -> b.tags.any { it.id == tag.id } }
             val tagColor = getModernTagColor(tag.id)
             FilterPillWithDot(
-              title = "${tag.name} ($count)",
+              title = stringResource(R.string.bookmarks_tag_format, tag.name, count),
               dotColor = tagColor,
               isSelected = selectedFilter == BookmarkFilterType.TAG && selectedTagId == tag.id,
               onClick = {
@@ -215,13 +217,13 @@ fun BookmarksTabContent(
               Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                   imageVector = QuranIcons.Add,
-                  contentDescription = "New Tag",
+                  contentDescription = stringResource(R.string.bookmarks_new_tag),
                   tint = MaterialTheme.colorScheme.primary,
                   modifier = Modifier.size(13.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                  text = "New Tag",
+                  text = stringResource(R.string.bookmarks_new_tag),
                   fontSize = 12.sp,
                   fontWeight = FontWeight.SemiBold,
                   color = MaterialTheme.colorScheme.primary
@@ -243,7 +245,11 @@ fun BookmarksTabContent(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
-              text = "${filteredBookmarks.size} ${if (filteredBookmarks.size == 1) "bookmark" else "bookmarks"}",
+              text = if (filteredBookmarks.size == 1) {
+                stringResource(R.string.bookmarks_count_single, 1)
+              } else {
+                stringResource(R.string.bookmarks_count_plural, filteredBookmarks.size)
+              },
               fontSize = 12.sp,
               fontWeight = FontWeight.Medium,
               color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
@@ -264,7 +270,11 @@ fun BookmarksTabContent(
               contentAlignment = Alignment.Center
             ) {
               Text(
-                text = if (sortType == BookmarkSortType.NEWEST) "⇅ Sort: Recent" else "⇅ Sort: Page Order",
+                text = if (sortType == BookmarkSortType.NEWEST) {
+                  stringResource(R.string.bookmarks_sort_recent)
+                } else {
+                  stringResource(R.string.bookmarks_sort_page)
+                },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -312,9 +322,9 @@ fun BookmarksTabContent(
       val currentBookmark = taggingBookmark
       if (currentBookmark != null) {
         val targetLabel = if (!currentBookmark.isPageBookmark && currentBookmark.sura != null && currentBookmark.ayah != null) {
-          "${currentBookmark.suraName} : Ayah ${currentBookmark.ayah}"
+          stringResource(R.string.bookmarks_ayah_format, currentBookmark.suraName, currentBookmark.ayah)
         } else {
-          "Page ${currentBookmark.page}"
+          stringResource(R.string.bookmarks_page_format, currentBookmark.page)
         }
 
         ModernTagSheet(
@@ -344,7 +354,7 @@ fun BookmarksTabContent(
     if (isManageTagsOpen) {
       ModernTagSheet(
         visible = true,
-        targetTitle = "Manage Collections",
+        targetTitle = stringResource(R.string.bookmarks_manage_collections),
         tags = tags,
         selectedTagIds = emptySet(),
         onToggleTag = {},
@@ -381,7 +391,7 @@ private fun ReadingBookmarksSection(
       )
       Spacer(modifier = Modifier.width(6.dp))
       Text(
-        text = "READING RIBBONS",
+        text = stringResource(R.string.bookmarks_reading_ribbons),
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
@@ -439,7 +449,7 @@ private fun ReadingBookmarksSection(
                   ) {
                     Icon(
                       imageVector = QuranIcons.Close,
-                      contentDescription = "Clear ribbon",
+                      contentDescription = stringResource(R.string.bookmarks_clear_ribbon),
                       tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                       modifier = Modifier.size(14.dp)
                     )
@@ -449,7 +459,11 @@ private fun ReadingBookmarksSection(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                  text = if (item.ayah != null) "${item.suraName} : ${item.ayah}" else "Page ${item.page}",
+                  text = if (item.ayah != null) {
+                    stringResource(R.string.bookmarks_ayah_format, item.suraName, item.ayah)
+                  } else {
+                    stringResource(R.string.bookmarks_page_format, item.page)
+                  },
                   fontSize = 13.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface,
@@ -460,7 +474,7 @@ private fun ReadingBookmarksSection(
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                  text = "Page ${item.page}",
+                  text = stringResource(R.string.bookmarks_page_format, item.page),
                   fontSize = 11.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -497,13 +511,13 @@ private fun ReadingBookmarksSection(
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                  text = "Not Placed",
+                  text = stringResource(R.string.bookmarks_not_placed),
                   fontSize = 12.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                  text = "Pin in reader",
+                  text = stringResource(R.string.bookmarks_pin_in_reader),
                   fontSize = 10.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                 )
@@ -632,13 +646,13 @@ private fun BookmarkCard(
             Spacer(modifier = Modifier.width(10.dp))
             Column {
               Text(
-                text = "${bookmark.suraName} : Ayah ${bookmark.ayah}",
+                text = stringResource(R.string.bookmarks_ayah_format, bookmark.suraName, bookmark.ayah),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = "Page ${bookmark.page}",
+                text = stringResource(R.string.bookmarks_page_format, bookmark.page),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -662,7 +676,7 @@ private fun BookmarkCard(
             Spacer(modifier = Modifier.width(10.dp))
             Column {
               Text(
-                text = "Page ${bookmark.page}",
+                text = stringResource(R.string.bookmarks_page_format, bookmark.page),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -694,7 +708,7 @@ private fun BookmarkCard(
           ) {
             Icon(
               imageVector = QuranIcons.BookmarkFilled,
-              contentDescription = "Edit tags",
+              contentDescription = stringResource(R.string.bookmarks_edit_tags),
               tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
               modifier = Modifier.size(16.dp)
             )
@@ -709,7 +723,7 @@ private fun BookmarkCard(
           ) {
             Icon(
               imageVector = QuranIcons.Delete,
-              contentDescription = "Delete bookmark",
+              contentDescription = stringResource(R.string.bookmarks_delete),
               tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
               modifier = Modifier.size(16.dp)
             )
@@ -821,7 +835,11 @@ private fun EmptyBookmarksState(
     Spacer(modifier = Modifier.height(16.dp))
 
     Text(
-      text = if (isFilterActive) "No Bookmarks in This Filter" else "No Bookmarks Saved",
+      text = if (isFilterActive) {
+        stringResource(R.string.bookmarks_empty_filtered)
+      } else {
+        stringResource(R.string.bookmarks_empty_saved)
+      },
       fontSize = 18.sp,
       fontWeight = FontWeight.Bold,
       color = MaterialTheme.colorScheme.onBackground
@@ -831,9 +849,9 @@ private fun EmptyBookmarksState(
 
     Text(
       text = if (isFilterActive) {
-        "Try selecting 'All' or a different category to view your bookmarks."
+        stringResource(R.string.bookmarks_empty_filtered_desc)
       } else {
-        "Tap the bookmark icon or ribbon in the Quran reader to bookmark your favorite ayahs and pages."
+        stringResource(R.string.bookmarks_empty_saved_desc)
       },
       fontSize = 13.sp,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -850,7 +868,7 @@ private fun EmptyBookmarksState(
           .padding(horizontal = 16.dp, vertical = 8.dp)
       ) {
         Text(
-          text = "Show All Bookmarks",
+          text = stringResource(R.string.bookmarks_show_all),
           fontSize = 12.sp,
           fontWeight = FontWeight.Bold,
           color = MaterialTheme.colorScheme.onPrimary

@@ -72,6 +72,7 @@ import com.quran.labs.androidquran.ui.modern.BookmarkItemModel
 import com.quran.labs.androidquran.ui.modern.JuzItemModel
 import com.quran.labs.androidquran.ui.modern.LastReadModel
 import com.quran.labs.androidquran.ui.modern.ModernJumpSheet
+import com.quran.labs.androidquran.ui.modern.ModernLanguagePickerSheet
 import com.quran.labs.androidquran.ui.modern.QuarterItemModel
 import com.quran.labs.androidquran.ui.modern.QuranModernHomeScreen
 import com.quran.labs.androidquran.ui.modern.ReadingBookmarkItemModel
@@ -200,6 +201,7 @@ class QuranActivity : AppCompatActivity(),
       .generate()
       .inject(this)
 
+    isRtl = isRtl()
     memorizationPreferences = MemorizationPreferences(this)
     isModernUi = settings.isModernUiEnabled
 
@@ -383,6 +385,7 @@ class QuranActivity : AppCompatActivity(),
         }
 
         var isJumpSheetVisible by remember { mutableStateOf(false) }
+        var isLanguagePickerVisible by remember { mutableStateOf(false) }
         val suraNames = remember {
           resources.getStringArray(UiCoreR.array.sura_names).toList()
         }
@@ -485,6 +488,9 @@ class QuranActivity : AppCompatActivity(),
             },
             onOpenSettings = {
               startActivity(Intent(this@QuranActivity, QuranPreferenceActivity::class.java))
+            },
+            onOpenLanguage = {
+              isLanguagePickerVisible = true
             }
           )
 
@@ -512,6 +518,12 @@ class QuranActivity : AppCompatActivity(),
             getStartingPageForJuz = { j -> quranInfo.getStartingPageForJuz(j) },
             getJuzForPage = { p -> quranInfo.getJuzFromPage(p) }
           )
+
+          if (isLanguagePickerVisible) {
+            ModernLanguagePickerSheet(
+              onDismissRequest = { isLanguagePickerVisible = false }
+            )
+          }
         }
       }
     }
@@ -593,9 +605,11 @@ class QuranActivity : AppCompatActivity(),
 
     val isRtl = isRtl()
     if (isRtl != this.isRtl) {
+      this.isRtl = isRtl
       val i = intent
       finish()
       startActivity(i)
+      return
     } else {
       if (!isModernUi) {
         val pageToJumpTo = jumpToPageOnResume

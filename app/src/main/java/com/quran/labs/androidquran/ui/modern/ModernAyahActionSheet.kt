@@ -37,8 +37,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernBadgeChip
 
@@ -128,9 +130,9 @@ fun ModernAyahActionSheet(
             }
 
             val ayahText = if (startAyah == endAyah) {
-              "Ayah $startAyah"
+              stringResource(R.string.jump_ayah_indicator, startAyah)
             } else {
-              "Ayahs $startAyah - $endAyah"
+              stringResource(R.string.memorizer_ayah_range_format, startAyah, endAyah)
             }
 
             ModernBadgeChip(
@@ -146,7 +148,7 @@ fun ModernAyahActionSheet(
           ) {
             Icon(
               imageVector = QuranIcons.Close,
-              contentDescription = "Close",
+              contentDescription = stringResource(android.R.string.cancel),
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(20.dp)
             )
@@ -162,7 +164,7 @@ fun ModernAyahActionSheet(
         ) {
           ModernAyahActionItem(
             icon = QuranIcons.PlayArrow,
-            label = "Play",
+            label = stringResource(R.string.play_from_here),
             onClick = onPlayClick,
             modifier = Modifier.weight(1f),
             isHighlighted = true,
@@ -171,7 +173,7 @@ fun ModernAyahActionSheet(
 
           ModernAyahActionItem(
             icon = QuranIcons.Repeat,
-            label = "Memorize",
+            label = stringResource(R.string.tab_memorizer),
             onClick = onMemorizeClick,
             modifier = Modifier.weight(1f),
             isHighlighted = true,
@@ -180,7 +182,7 @@ fun ModernAyahActionSheet(
 
           ModernAyahActionItem(
             icon = if (isBookmarked) QuranIcons.BookmarkFilled else QuranIcons.BookmarkBorder,
-            label = "Bookmark",
+            label = stringResource(R.string.bookmark_ayah),
             onClick = onBookmarkClick,
             modifier = Modifier.weight(1f),
             isHighlighted = isBookmarked,
@@ -189,21 +191,21 @@ fun ModernAyahActionSheet(
 
           ModernAyahActionItem(
             icon = QuranIcons.Translate,
-            label = "Translate",
+            label = stringResource(R.string.translation_ayah),
             onClick = onTranslateClick,
             modifier = Modifier.weight(1f)
           )
 
           ModernAyahActionItem(
             icon = QuranIcons.ContentCopy,
-            label = "Copy",
+            label = stringResource(R.string.copy_ayah),
             onClick = onCopyClick,
             modifier = Modifier.weight(1f)
           )
 
           ModernAyahActionItem(
             icon = QuranIcons.Share,
-            label = "Share",
+            label = stringResource(R.string.share_ayah),
             onClick = onShareClick,
             modifier = Modifier.weight(1f)
           )

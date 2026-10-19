@@ -929,22 +929,25 @@ class AudioService : Service(), Player.Listener {
       title = if (audioQueue != null) {
         quranDisplayData.getSuraAyahString(this, audioQueue.getCurrentSura(), audioQueue.getCurrentAyah())
       } else {
-        "Quran Memorizer"
+        getString(R.string.tab_memorizer)
       }
       val step = memState.currentStep
       val stepDesc = when (step?.stepType) {
-        StepType.SOLO -> "Solo (${memState.currentRepeatIteration}/${memState.totalRepeatIterations})"
+        StepType.SOLO -> getString(R.string.memo_step_solo, memState.currentRepeatIteration, memState.totalRepeatIterations)
         StepType.CONNECT -> {
           val first = step.ayahs.firstOrNull()
           val last = step.ayahs.lastOrNull()
-          val range = if (first != null && last != null) "Ayah ${first.ayah}-${last.ayah}" else "Connect"
-          "$range (${memState.currentRepeatIteration}/${memState.totalRepeatIterations})"
+          if (first != null && last != null) {
+            getString(R.string.memo_step_connect_range, first.ayah, last.ayah, memState.currentRepeatIteration, memState.totalRepeatIterations)
+          } else {
+            getString(R.string.memo_step_connect, memState.currentRepeatIteration, memState.totalRepeatIterations)
+          }
         }
-        StepType.PAUSE_FOR_RECITATION -> "Recite Now (${memState.pauseRemainingSeconds}s)"
-        StepType.BRIDGE -> "Bridge"
-        else -> "Memorizing"
+        StepType.PAUSE_FOR_RECITATION -> getString(R.string.memo_step_recite, memState.pauseRemainingSeconds)
+        StepType.BRIDGE -> getString(R.string.memo_step_bridge)
+        else -> getString(R.string.memo_step_memorizing)
       }
-      subtitle = "$stepDesc • Window ${memState.currentWindowIndex + 1}/${memState.totalWindows}"
+      subtitle = getString(R.string.memo_step_window, stepDesc, memState.currentWindowIndex + 1, memState.totalWindows)
     } else {
       title = getTitle()
       subtitle = localAudioRequest.qari.name
@@ -1542,26 +1545,28 @@ class AudioService : Service(), Player.Listener {
       val ayahStr = if (audioQueue != null) {
         quranDisplayData.getSuraAyahString(this, audioQueue.getCurrentSura(), audioQueue.getCurrentAyah())
       } else {
-        "Quran Memorizer"
+        getString(R.string.tab_memorizer)
       }
       val step = memState.currentStep
       val stepDesc = when (step?.stepType) {
-        StepType.SOLO -> "Solo (${memState.currentRepeatIteration}/${memState.totalRepeatIterations})"
+        StepType.SOLO -> getString(R.string.memo_step_solo, memState.currentRepeatIteration, memState.totalRepeatIterations)
         StepType.CONNECT -> {
           val first = step.ayahs.firstOrNull()
           val last = step.ayahs.lastOrNull()
-          val range = if (first != null && last != null) "Ayah ${first.ayah}-${last.ayah}" else "Connect"
-          "$range (${memState.currentRepeatIteration}/${memState.totalRepeatIterations})"
+          if (first != null && last != null) {
+            getString(R.string.memo_step_connect_range, first.ayah, last.ayah, memState.currentRepeatIteration, memState.totalRepeatIterations)
+          } else {
+            getString(R.string.memo_step_connect, memState.currentRepeatIteration, memState.totalRepeatIterations)
+          }
         }
-        StepType.PAUSE_FOR_RECITATION -> "Recite Now (${memState.pauseRemainingSeconds}s)"
-        StepType.BRIDGE -> "Bridge"
-        else -> "Memorizing"
+        StepType.PAUSE_FOR_RECITATION -> getString(R.string.memo_step_recite, memState.pauseRemainingSeconds)
+        StepType.BRIDGE -> getString(R.string.memo_step_bridge)
+        else -> getString(R.string.memo_step_memorizing)
       }
-      val windowInfo = "Window ${memState.currentWindowIndex + 1}/${memState.totalWindows}"
-      val statusTag = if (isPaused) " [Paused]" else ""
+      val statusTag = if (isPaused) " [${getString(R.string.pause)}]" else ""
 
       title = "$ayahStr$statusTag"
-      contentText = "$stepDesc • $windowInfo"
+      contentText = getString(R.string.memo_step_window, stepDesc, memState.currentWindowIndex + 1, memState.totalWindows)
       subText = audioRequest?.qari?.name
     } else {
       title = getString(R.string.app_name)

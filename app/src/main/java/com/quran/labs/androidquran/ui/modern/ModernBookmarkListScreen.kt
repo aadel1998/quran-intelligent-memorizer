@@ -161,7 +161,7 @@ fun ModernBookmarkListScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-              text = "Bookmarks and highlights added to this collection will appear here.",
+              text = stringResource(R.string.bookmark_collection_empty_desc),
               fontSize = 13.sp,
               color = TextMuted,
               lineHeight = 18.sp,
@@ -257,7 +257,7 @@ private fun ModernBookmarkListTopBar(
       ) {
         Icon(
           imageVector = QuranIcons.ArrowBack,
-          contentDescription = "Back",
+          contentDescription = stringResource(R.string.reader_back),
           tint = Color.White
         )
       }
@@ -286,7 +286,7 @@ private fun ModernBookmarkListTopBar(
         }
         if (itemCount > 0) {
           Text(
-            text = "$itemCount saved",
+            text = stringResource(R.string.bookmark_saved_count, itemCount),
             fontSize = 12.sp,
             color = TextMuted
           )
@@ -306,7 +306,7 @@ private fun ModernBookmarkListTopBar(
         ) {
           Icon(
             imageVector = QuranIcons.List,
-            contentDescription = "Sort",
+            contentDescription = stringResource(R.string.menu_sort),
             tint = Color.White
           )
         }
@@ -348,7 +348,7 @@ private fun ModernBookmarkListTopBar(
             DropdownMenuItem(
               text = {
                 Text(
-                  text = "Rename Collection",
+                  text = stringResource(R.string.bookmark_rename_collection),
                   color = Color.White
                 )
               },
@@ -401,13 +401,13 @@ private fun ModernAyahBookmarkCard(
           )
 
           ModernBadgeChip(
-            text = "Ayah ${ayah.ayah}",
+            text = stringResource(R.string.quran_ayah, ayah.ayah),
             backgroundColor = EmeraldAccent.copy(alpha = 0.15f),
             contentColor = EmeraldAccent
           )
 
           ModernBadgeChip(
-            text = "p. ${ayah.page}",
+            text = stringResource(R.string.surah_page_number, ayah.page),
             backgroundColor = Color(0xFF27272A),
             contentColor = TextMuted
           )
@@ -419,7 +419,7 @@ private fun ModernAyahBookmarkCard(
         ) {
           Icon(
             imageVector = QuranIcons.Delete,
-            contentDescription = "Delete",
+            contentDescription = stringResource(R.string.delete),
             tint = Color(0xFF71717A),
             modifier = Modifier.size(16.dp)
           )
@@ -536,7 +536,7 @@ private fun ModernPageBookmarkCard(
       ) {
         Icon(
           imageVector = QuranIcons.Delete,
-          contentDescription = "Delete",
+          contentDescription = stringResource(R.string.delete),
           tint = Color(0xFF71717A),
           modifier = Modifier.size(16.dp)
         )

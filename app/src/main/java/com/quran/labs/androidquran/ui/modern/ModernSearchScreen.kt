@@ -63,8 +63,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 
 data class ModernSearchResultItem(
@@ -156,9 +158,9 @@ fun ModernSearchScreen(
       // Warning Banners
       if (showArabicWarning) {
         ModernWarningCard(
-          title = "Arabic Search Database Missing",
-          description = "Download the Arabic search database to search offline across Arabic verses.",
-          buttonText = "Download Database",
+          title = stringResource(R.string.search_warn_arabic_db_title),
+          description = stringResource(R.string.search_warn_arabic_db_desc),
+          buttonText = stringResource(R.string.search_download_db_btn),
           onClick = onDownloadArabicDb,
           modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
         )
@@ -166,9 +168,9 @@ fun ModernSearchScreen(
 
       if (showNeedTranslationsWarning) {
         ModernWarningCard(
-          title = "No Translations Found",
-          description = "Download translations to search meanings in English and other languages.",
-          buttonText = "Get Translations",
+          title = stringResource(R.string.search_warn_no_trans_title),
+          description = stringResource(R.string.search_warn_no_trans_desc),
+          buttonText = stringResource(R.string.search_get_translations_btn),
           onClick = onOpenTranslations,
           modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
         )
@@ -184,14 +186,14 @@ fun ModernSearchScreen(
           verticalAlignment = Alignment.CenterVertically
         ) {
           ModernFilterChip(
-            label = "All (${searchResults.size})",
+            label = stringResource(R.string.search_filter_all, searchResults.size),
             selected = selectedFilterIndex == 0,
             onClick = { selectedFilterIndex = 0 }
           )
           val arabicCount = searchResults.count { it.isArabic }
           if (arabicCount > 0) {
             ModernFilterChip(
-              label = "Arabic ($arabicCount)",
+              label = stringResource(R.string.search_filter_arabic, arabicCount),
               selected = selectedFilterIndex == 1,
               onClick = { selectedFilterIndex = 1 }
             )
@@ -199,7 +201,7 @@ fun ModernSearchScreen(
           val transCount = searchResults.count { !it.isArabic }
           if (transCount > 0) {
             ModernFilterChip(
-              label = "Translation ($transCount)",
+              label = stringResource(R.string.search_filter_translation, transCount),
               selected = selectedFilterIndex == 2,
               onClick = { selectedFilterIndex = 2 }
             )
@@ -235,7 +237,7 @@ fun ModernSearchScreen(
             ) {
               item {
                 Text(
-                  text = "Popular Quranic Searches",
+                  text = stringResource(R.string.search_popular_searches),
                   fontSize = 15.sp,
                   fontWeight = FontWeight.SemiBold,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -305,7 +307,7 @@ fun ModernSearchScreen(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                  text = "No results found for \"$query\"",
+                  text = stringResource(R.string.search_no_results_for, query),
                   fontSize = 17.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onBackground,
@@ -313,7 +315,7 @@ fun ModernSearchScreen(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                  text = "Try searching with Arabic roots, English keywords, or ensure translation databases are downloaded.",
+                  text = stringResource(R.string.search_no_results_desc),
                   fontSize = 13.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                   textAlign = TextAlign.Center
@@ -368,7 +370,7 @@ private fun ModernSearchBar(
     ) {
       Icon(
         imageVector = QuranIcons.ArrowBack,
-        contentDescription = "Back",
+        contentDescription = stringResource(R.string.reader_back),
         tint = MaterialTheme.colorScheme.onSurface
       )
     }
@@ -381,7 +383,7 @@ private fun ModernSearchBar(
         .height(52.dp),
       placeholder = {
         Text(
-          text = "Search Quran...",
+          text = stringResource(R.string.search_quran_hint),
           fontSize = 14.sp,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -399,7 +401,7 @@ private fun ModernSearchBar(
           IconButton(onClick = onClear) {
             Icon(
               imageVector = QuranIcons.Close,
-              contentDescription = "Clear",
+              contentDescription = stringResource(R.string.action_clear),
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(18.dp)
             )
@@ -477,7 +479,7 @@ private fun ModernSearchResultCard(
             color = MaterialTheme.colorScheme.onBackground
           )
           Text(
-            text = "Ayah ${result.ayah} • Page ${result.page} • Juz ${result.juz}",
+            text = stringResource(R.string.search_verse_location, result.ayah, result.page, result.juz),
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -533,7 +535,7 @@ private fun ModernSearchResultCard(
           )
           Spacer(modifier = Modifier.width(6.dp))
           Text(
-            text = "Mushaf",
+            text = stringResource(R.string.search_btn_mushaf),
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold
           )
@@ -559,7 +561,7 @@ private fun ModernSearchResultCard(
           )
           Spacer(modifier = Modifier.width(6.dp))
           Text(
-            text = "Translation",
+            text = stringResource(R.string.search_btn_translation),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium
           )
@@ -577,7 +579,7 @@ private fun ModernSearchResultCard(
         ) {
           Icon(
             imageVector = QuranIcons.ContentCopy,
-            contentDescription = "Copy",
+            contentDescription = stringResource(R.string.search_action_copy),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp)
           )
@@ -590,7 +592,7 @@ private fun ModernSearchResultCard(
           ) {
             Icon(
               imageVector = QuranIcons.Share,
-              contentDescription = "Share",
+              contentDescription = stringResource(R.string.search_action_share),
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(16.dp)
             )

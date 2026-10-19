@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import com.quran.data.model.SuraAyah
@@ -228,7 +229,7 @@ fun MemorizationSetupSheet(
                 },
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
               ) {
-                Text("Start from Beginning", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(UiCoreR.string.memo_setup_start_beginning), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
               }
 
               Spacer(modifier = Modifier.width(8.dp))
@@ -240,7 +241,7 @@ fun MemorizationSetupSheet(
                   containerColor = MaterialTheme.colorScheme.primary
                 )
               ) {
-                Text("Resume (Step ${activeSavedSessionStep + 1})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(UiCoreR.string.memorizer_resume_step, activeSavedSessionStep + 1), fontSize = 12.sp, fontWeight = FontWeight.Bold)
               }
             }
           }
@@ -311,7 +312,7 @@ fun MemorizationSetupSheet(
                       onClick = { onStartOtherSura(s) },
                       contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
                     ) {
-                      Text("From Beginning", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                      Text(stringResource(UiCoreR.string.memorizer_from_beginning), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                   }
@@ -321,7 +322,7 @@ fun MemorizationSetupSheet(
                       onClick = { onResumeOtherSura(s) },
                       contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 2.dp)
                     ) {
-                      Text("Resume", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                      Text(stringResource(UiCoreR.string.memorize_resume), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                   }
                 }
@@ -394,7 +395,7 @@ fun MemorizationSetupSheet(
                   },
                   contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp)
                 ) {
-                  Text("Review Now", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                  Text(stringResource(UiCoreR.string.memo_setup_review_now), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
               }
             }
@@ -420,7 +421,7 @@ fun MemorizationSetupSheet(
           FilterChip(
             selected = selectedPlaylist == null,
             onClick = { selectedPlaylist = null },
-            label = { Text("Current Surah") }
+            label = { Text(stringResource(UiCoreR.string.memo_setup_current_surah)) }
           )
 
           savedPlaylists.forEach { pl ->
@@ -477,7 +478,7 @@ fun MemorizationSetupSheet(
               startAyahNum = 1
               endAyahNum = maxAyahsForSura
             },
-            label = { Text("Full Surah", fontSize = 11.sp) }
+            label = { Text(stringResource(UiCoreR.string.memo_setup_full_surah), fontSize = 11.sp) }
           )
 
           if (maxAyahsForSura >= 5) {
@@ -522,7 +523,7 @@ fun MemorizationSetupSheet(
           verticalAlignment = Alignment.CenterVertically
         ) {
           NumberInputOrStepper(
-            label = "From Ayah",
+            label = stringResource(UiCoreR.string.memo_setup_from_ayah),
             value = startAyahNum,
             minValue = 1,
             maxValue = maxAyahsForSura,
@@ -533,7 +534,7 @@ fun MemorizationSetupSheet(
           )
 
           NumberInputOrStepper(
-            label = "To Ayah",
+            label = stringResource(UiCoreR.string.memo_setup_to_ayah),
             value = endAyahNum,
             minValue = 1,
             maxValue = maxAyahsForSura,
@@ -634,25 +635,25 @@ fun MemorizationSetupSheet(
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
           NumberStepper(
-            label = "Window Size",
+            label = stringResource(UiCoreR.string.memo_setup_window_size),
             value = windowSize,
             onValueChange = { windowSize = it.coerceIn(1, 10) }
           )
 
           NumberStepper(
-            label = "Solo Repeat",
+            label = stringResource(UiCoreR.string.memo_setup_solo_repeat),
             value = singleRepeat,
             onValueChange = { singleRepeat = it.coerceIn(1, 20) }
           )
 
           NumberStepper(
-            label = "Connect",
+            label = stringResource(UiCoreR.string.memo_setup_connect),
             value = connectRepeat,
             onValueChange = { connectRepeat = it.coerceIn(0, 20) }
           )
 
           NumberStepper(
-            label = "Range",
+            label = stringResource(UiCoreR.string.memo_setup_range),
             value = rangeRepeat,
             onValueChange = { rangeRepeat = it.coerceIn(1, 20) }
           )
@@ -663,13 +664,13 @@ fun MemorizationSetupSheet(
           horizontalArrangement = Arrangement.SpaceEvenly
         ) {
           NumberStepper(
-            label = "Verse Repeat",
+            label = stringResource(UiCoreR.string.memo_setup_verse_repeat),
             value = singleRepeat,
             onValueChange = { singleRepeat = it.coerceIn(1, 50) }
           )
 
           NumberStepper(
-            label = "Range Repeat",
+            label = stringResource(UiCoreR.string.memo_setup_range_repeat),
             value = rangeRepeat,
             onValueChange = { rangeRepeat = it.coerceIn(1, 50) }
           )
@@ -696,7 +697,7 @@ fun MemorizationSetupSheet(
         FilterChip(
           selected = selectedDelayOption == 0,
           onClick = { selectedDelayOption = 0 },
-          label = { Text("None") }
+          label = { Text(stringResource(UiCoreR.string.memo_setup_delay_none)) }
         )
         FilterChip(
           selected = selectedDelayOption == 1,
@@ -721,7 +722,7 @@ fun MemorizationSetupSheet(
         FilterChip(
           selected = selectedDelayOption == 5,
           onClick = { selectedDelayOption = 5 },
-          label = { Text("Echo 1:1") }
+          label = { Text(stringResource(UiCoreR.string.memo_setup_delay_echo)) }
         )
       }
 
@@ -779,17 +780,17 @@ fun MemorizationSetupSheet(
         FilterChip(
           selected = maskingLevel == MaskingLevel.OFF,
           onClick = { maskingLevel = MaskingLevel.OFF },
-          label = { Text("Off") }
+          label = { Text(stringResource(UiCoreR.string.memo_setup_blur_off)) }
         )
         FilterChip(
           selected = maskingLevel == MaskingLevel.MASK_ON_CONNECT,
           onClick = { maskingLevel = MaskingLevel.MASK_ON_CONNECT },
-          label = { Text("Connect Steps") }
+          label = { Text(stringResource(UiCoreR.string.memo_setup_connect_steps)) }
         )
         FilterChip(
           selected = maskingLevel == MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
           onClick = { maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT },
-          label = { Text("Progressive") }
+          label = { Text(stringResource(UiCoreR.string.memo_setup_blur_progressive)) }
         )
       }
 
@@ -865,7 +866,7 @@ fun MemorizationSetupSheet(
         horizontalArrangement = Arrangement.End
       ) {
         TextButton(onClick = onDismissRequest) {
-          Text("Cancel")
+          Text(stringResource(UiCoreR.string.cancel))
         }
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -924,7 +925,7 @@ fun MemorizationSetupSheet(
             onStartMemorization(config)
           }
         ) {
-          Text("Start Memorizing", fontWeight = FontWeight.Bold)
+          Text(stringResource(UiCoreR.string.memo_setup_start), fontWeight = FontWeight.Bold)
         }
       }
     }

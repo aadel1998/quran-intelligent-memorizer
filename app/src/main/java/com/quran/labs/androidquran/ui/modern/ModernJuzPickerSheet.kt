@@ -31,12 +31,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quran.labs.androidquran.common.audio.memorization.MemorizedSurahInfo
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernCard
+import com.quran.mobile.common.ui.core.R as CoreR
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,13 +85,13 @@ fun ModernJuzPickerSheet(
           Spacer(modifier = Modifier.width(12.dp))
           Column {
             Text(
-              text = "Select Juz (Para)",
+              text = stringResource(CoreR.string.juz_matrix_title),
               fontSize = 19.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-              text = "Filter dashboard and batch-revise entire Juz",
+              text = stringResource(CoreR.string.juz_matrix_subtitle),
               fontSize = 11.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -105,7 +107,7 @@ fun ModernJuzPickerSheet(
         ) {
           Icon(
             imageVector = QuranIcons.Close,
-            contentDescription = "Close",
+            contentDescription = stringResource(CoreR.string.cancel),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(18.dp)
           )
@@ -162,13 +164,13 @@ fun ModernJuzPickerSheet(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                   Text(
-                    text = "All Juz (1 — 30)",
+                    text = "${stringResource(CoreR.string.juz_filter_all)} (1 — 30)",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                   )
                   Text(
-                    text = "Show all 114 Surahs across the entire Quran",
+                    text = stringResource(CoreR.string.juz_matrix_subtitle),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
@@ -177,8 +179,8 @@ fun ModernJuzPickerSheet(
 
               if (isSelected) {
                 Text(
-                  text = "Active",
-                  fontSize = 11.sp,
+                  text = "✓",
+                  fontSize = 14.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.primary
                 )

@@ -51,9 +51,9 @@ import com.quran.labs.androidquran.common.ui.core.components.ModernBadgeChip
 
 private data class HelpFaqItem(
   val id: Int,
-  val question: String,
-  val answer: String,
-  val category: String,
+  val questionRes: Int,
+  val answerRes: Int,
+  val categoryRes: Int,
   val icon: ImageVector
 )
 
@@ -73,51 +73,51 @@ fun ModernHelpScreen(
     listOf(
       HelpFaqItem(
         id = 1,
-        question = "How do I play audio recitation?",
-        answer = "Open any Quran page and tap once to reveal the floating Modern Audio Bar at the bottom. Tap the Reciter pill to choose between over 20+ authentic reciters. Tap the emerald Play button to stream or listen gaplessly. You can adjust playback speed and repetition in the Audio Settings sheet.",
-        category = "Audio",
+        questionRes = R.string.help_faq_audio_q,
+        answerRes = R.string.help_faq_audio_a,
+        categoryRes = R.string.help_cat_audio,
         icon = QuranIcons.PlayArrow
       ),
       HelpFaqItem(
         id = 2,
-        question = "How do I view translations & tafsir?",
-        answer = "While reading, tap the Translation icon in the Top HUD or long-press an ayah and select 'Translate'. You can download and prioritize 70+ translations and tafsir in the Modern Translation Manager (Settings > Translations).",
-        category = "Reading",
+        questionRes = R.string.help_faq_reading_q,
+        answerRes = R.string.help_faq_reading_a,
+        categoryRes = R.string.help_cat_reading,
         icon = QuranIcons.Translate
       ),
       HelpFaqItem(
         id = 3,
-        question = "How do I bookmark a page or ayah?",
-        answer = "To bookmark a whole page, tap the Bookmark ribbon in the Top HUD (choose between Teal, Orange, or Red ribbon). To bookmark a specific ayah, long-press the ayah and tap 'Bookmark' or assign tags (Favorites, Duas, Revision) for easy organization.",
-        category = "Bookmarks",
+        questionRes = R.string.help_faq_bookmark_q,
+        answerRes = R.string.help_faq_bookmark_a,
+        categoryRes = R.string.help_cat_bookmarks,
         icon = QuranIcons.BookmarkFilled
       ),
       HelpFaqItem(
         id = 4,
-        question = "How do I use Spaced-Repetition Memorization?",
-        answer = "Long-press any ayah or select a surah and tap 'Memorize' to enter the Intelligent Memorizer. The app helps you memorize ayah-by-ayah through progressive audio loops and recitation testing.",
-        category = "Memorizer",
+        questionRes = R.string.help_faq_memorizer_q,
+        answerRes = R.string.help_faq_memorizer_a,
+        categoryRes = R.string.help_cat_memorizer,
         icon = QuranIcons.Sync
       ),
       HelpFaqItem(
         id = 5,
-        question = "How do I adjust Night Mode & text size?",
-        answer = "Go to Settings > Appearance to toggle Night Mode. You can fine-tune both Text Brightness and Background Brightness sliders in real-time. For translation text size, adjust the slider under Reading Preferences.",
-        category = "Display",
+        questionRes = R.string.help_faq_display_q,
+        answerRes = R.string.help_faq_display_a,
+        categoryRes = R.string.help_cat_display,
         icon = QuranIcons.DarkMode
       ),
       HelpFaqItem(
         id = 6,
-        question = "How do I jump quickly to any Surah or Juz?",
-        answer = "Tap the Jump icon in the Top HUD or the bottom page scrubber. Select the Surah tab to pick a surah and ayah, or use the Page/Juz tab to jump straight to any part of the Quran.",
-        category = "Navigation",
+        questionRes = R.string.help_faq_nav_q,
+        answerRes = R.string.help_faq_nav_a,
+        categoryRes = R.string.help_cat_nav,
         icon = QuranIcons.List
       ),
       HelpFaqItem(
         id = 7,
-        question = "How do I search across the Quran?",
-        answer = "Tap the Search icon on the Home Hub or Reader HUD. You can search instantly by Arabic text, Surah names, or translated words across your downloaded translations.",
-        category = "Search",
+        questionRes = R.string.help_faq_search_q,
+        answerRes = R.string.help_faq_search_a,
+        categoryRes = R.string.help_cat_search,
         icon = QuranIcons.Search
       )
     )
@@ -155,7 +155,7 @@ fun ModernHelpScreen(
           ) {
             Icon(
               imageVector = QuranIcons.ArrowBack,
-              contentDescription = "Back",
+              contentDescription = stringResource(R.string.reader_back),
               tint = MaterialTheme.colorScheme.onSurface,
               modifier = Modifier.size(24.dp)
             )
@@ -169,7 +169,7 @@ fun ModernHelpScreen(
           )
 
           ModernBadgeChip(
-            text = "FAQ & Guides",
+            text = stringResource(R.string.help_badge_faq),
             backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
             contentColor = MaterialTheme.colorScheme.primary
           )
@@ -238,7 +238,7 @@ fun ModernHelpScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                   Text(
-                    text = item.question,
+                    text = stringResource(item.questionRes),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -247,7 +247,7 @@ fun ModernHelpScreen(
                   Spacer(modifier = Modifier.height(2.dp))
 
                   ModernBadgeChip(
-                    text = item.category,
+                    text = stringResource(item.categoryRes),
                     backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                   )
@@ -256,7 +256,7 @@ fun ModernHelpScreen(
 
               Icon(
                 imageVector = QuranIcons.KeyboardArrowDown,
-                contentDescription = if (isExpanded) "Collapse" else "Expand",
+                contentDescription = null,
                 tint = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                   .size(22.dp)
@@ -284,7 +284,7 @@ fun ModernHelpScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                  text = item.answer,
+                  text = stringResource(item.answerRes),
                   fontSize = 13.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                   lineHeight = 20.sp

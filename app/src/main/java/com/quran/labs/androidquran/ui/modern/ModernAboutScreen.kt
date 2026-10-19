@@ -307,8 +307,8 @@ fun ModernAboutScreen(
             ModernDivider()
 
             AboutSourceRow(
-              title = "GitHub Project",
-              subtitle = "Free and open-source Quran app developed by community contributors worldwide.",
+              title = stringResource(R.string.about_github_project),
+              subtitle = stringResource(R.string.about_github_project_desc),
               url = "https://github.com/quran/quran_android",
               icon = QuranIcons.MenuBook,
               onOpenUrl = onOpenUrl
@@ -322,7 +322,7 @@ fun ModernAboutScreen(
                 .padding(16.dp)
             ) {
               Text(
-                text = "Open Source Libraries",
+                text = stringResource(R.string.about_open_source_libs),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface

@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,6 +34,7 @@ import com.quran.labs.androidquran.common.audio.memorization.MemorizationState
 import com.quran.labs.androidquran.common.audio.memorization.StepType
 import com.quran.labs.androidquran.common.ui.core.LocalQuranColors
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
+import com.quran.mobile.common.ui.core.R as CoreR
 
 /**
  * Active HUD / Player Bar for the Intelligent Quran Memorization Mode.
@@ -114,7 +116,7 @@ fun MemorizationHud(
           }
 
           Text(
-            text = "Window ${state.currentWindowIndex + 1}/${state.totalWindows}",
+            text = stringResource(CoreR.string.memorize_window_indicator, state.currentWindowIndex + 1, state.totalWindows),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = colors.defaultTextColor
@@ -129,14 +131,14 @@ fun MemorizationHud(
             ) {
               Icon(
                 QuranIcons.List,
-                contentDescription = "Surah Tracker",
+                contentDescription = stringResource(CoreR.string.memorize_tracker_btn),
                 modifier = Modifier
                   .size(16.dp)
                   .padding(end = 2.dp),
                 tint = MaterialTheme.colorScheme.primary
               )
               Text(
-                text = "Tracker",
+                text = stringResource(CoreR.string.memorize_tracker_btn),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -151,14 +153,14 @@ fun MemorizationHud(
             ) {
               Icon(
                 QuranIcons.Tune,
-                contentDescription = "Tune Settings",
+                contentDescription = stringResource(CoreR.string.memorize_tune_btn),
                 modifier = Modifier
                   .size(16.dp)
                   .padding(end = 2.dp),
                 tint = MaterialTheme.colorScheme.primary
               )
               Text(
-                text = "Tune",
+                text = stringResource(CoreR.string.memorize_tune_btn),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -172,7 +174,7 @@ fun MemorizationHud(
               contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
             ) {
               Text(
-                text = "Float",
+                text = stringResource(CoreR.string.memorize_float_btn),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -184,12 +186,12 @@ fun MemorizationHud(
             TextButton(onClick = onReplayRecitation) {
               Icon(
                 QuranIcons.Mic,
-                contentDescription = "Replay My Recitation",
+                contentDescription = stringResource(CoreR.string.memorize_replay_voice_btn),
                 modifier = Modifier.padding(end = 4.dp),
                 tint = MaterialTheme.colorScheme.primary
               )
               Text(
-                text = "Replay Voice",
+                text = stringResource(CoreR.string.memorize_replay_voice_btn),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -210,7 +212,7 @@ fun MemorizationHud(
             )
             Spacer(modifier = Modifier.width(3.dp))
             Text(
-              text = if (state.isTextMasked) "Peek Text" else "Hide Text",
+              text = if (state.isTextMasked) stringResource(CoreR.string.memorize_peek_text_btn) else stringResource(CoreR.string.memorize_hide_text_btn),
               fontSize = 12.sp,
               fontWeight = FontWeight.Bold,
               color = if (state.isTextMasked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
@@ -245,7 +247,7 @@ fun MemorizationHud(
         IconButton(onClick = onStop) {
           Icon(
             QuranIcons.Close,
-            contentDescription = "Exit Memorization",
+            contentDescription = stringResource(CoreR.string.memorize_exit_btn),
             tint = colors.defaultTextColor
           )
         }
@@ -254,7 +256,7 @@ fun MemorizationHud(
         IconButton(onClick = onPreviousStep) {
           Icon(
             QuranIcons.FastRewind,
-            contentDescription = "Previous Step",
+            contentDescription = stringResource(CoreR.string.memorize_prev_step_btn),
             tint = colors.defaultTextColor
           )
         }
@@ -263,7 +265,7 @@ fun MemorizationHud(
         IconButton(onClick = onPlayPause) {
           Icon(
             if (state.isPaused) QuranIcons.PlayArrow else QuranIcons.Pause,
-            contentDescription = if (state.isPaused) "Resume" else "Pause",
+            contentDescription = if (state.isPaused) stringResource(CoreR.string.memorize_resume) else stringResource(CoreR.string.memorize_pause),
             tint = MaterialTheme.colorScheme.primary
           )
         }
@@ -272,7 +274,7 @@ fun MemorizationHud(
         IconButton(onClick = onSkipStep) {
           Icon(
             QuranIcons.FastForward,
-            contentDescription = "Skip Step",
+            contentDescription = stringResource(CoreR.string.memorize_skip_step_btn),
             tint = colors.defaultTextColor
           )
         }
@@ -282,7 +284,11 @@ fun MemorizationHud(
           IconButton(onClick = onToggleFlagAyah) {
             Icon(
               imageVector = QuranIcons.Flag,
-              contentDescription = if (isCurrentAyahFlagged) "Flagged as Difficult Verse" else "Flag as Difficult Verse",
+              contentDescription = if (isCurrentAyahFlagged) {
+                stringResource(CoreR.string.memorize_flagged_difficult_btn)
+              } else {
+                stringResource(CoreR.string.memorize_flag_difficult_btn)
+              },
               tint = if (isCurrentAyahFlagged) Color(0xFFEF4444) else colors.defaultTextColor
             )
           }

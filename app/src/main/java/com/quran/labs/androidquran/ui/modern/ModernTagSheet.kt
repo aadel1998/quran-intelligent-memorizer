@@ -51,10 +51,12 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernBadgeChip
 
@@ -94,7 +96,7 @@ fun ModernTagSheet(
   modifier: Modifier = Modifier
 ) {
   var newTagName by remember { mutableStateOf("") }
-  var validationError by remember { mutableStateOf<String?>(null) }
+  var validationError by remember { mutableStateOf<Int?>(null) }
 
   val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
   val bottomPadding = if (navBarBottom > 0.dp) navBarBottom + 12.dp else 20.dp
@@ -150,7 +152,7 @@ fun ModernTagSheet(
             ) {
               Column(modifier = Modifier.weight(1f)) {
                 Text(
-                  text = "Bookmark Tags",
+                  text = stringResource(R.string.tag_sheet_title),
                   fontSize = 18.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface
@@ -174,7 +176,7 @@ fun ModernTagSheet(
               ) {
                 Icon(
                   imageVector = QuranIcons.Close,
-                  contentDescription = "Close",
+                  contentDescription = stringResource(R.string.hifz_stats_close),
                   tint = MaterialTheme.colorScheme.onSurfaceVariant,
                   modifier = Modifier.size(20.dp)
                 )
@@ -212,7 +214,7 @@ fun ModernTagSheet(
                 Box(modifier = Modifier.weight(1f)) {
                   if (newTagName.isEmpty()) {
                     Text(
-                      text = "New tag (e.g. Duas, Reflections)...",
+                      text = stringResource(R.string.tag_new_input_hint),
                       fontSize = 14.sp,
                       color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
@@ -221,9 +223,9 @@ fun ModernTagSheet(
                   val submitNewTag = {
                     val trimmed = newTagName.trim()
                     if (trimmed.isEmpty()) {
-                      validationError = "Tag name cannot be empty"
+                      validationError = R.string.tag_err_empty
                     } else if (tags.any { it.name.equals(trimmed, ignoreCase = true) }) {
-                      validationError = "Tag already exists"
+                      validationError = R.string.tag_err_exists
                     } else {
                       validationError = null
                       onCreateTag(trimmed)
@@ -260,7 +262,7 @@ fun ModernTagSheet(
                   ) {
                     Icon(
                       imageVector = QuranIcons.Close,
-                      contentDescription = "Clear input",
+                      contentDescription = null,
                       tint = MaterialTheme.colorScheme.onSurfaceVariant,
                       modifier = Modifier.size(16.dp)
                     )
@@ -275,9 +277,9 @@ fun ModernTagSheet(
                       .clickable {
                         val trimmed = newTagName.trim()
                         if (trimmed.isEmpty()) {
-                          validationError = "Tag name cannot be empty"
+                          validationError = R.string.tag_err_empty
                         } else if (tags.any { it.name.equals(trimmed, ignoreCase = true) }) {
-                          validationError = "Tag already exists"
+                          validationError = R.string.tag_err_exists
                         } else {
                           validationError = null
                           onCreateTag(trimmed)
@@ -288,7 +290,7 @@ fun ModernTagSheet(
                     contentAlignment = Alignment.Center
                   ) {
                     Text(
-                      text = "Add",
+                      text = stringResource(R.string.tag_btn_add),
                       fontSize = 12.sp,
                       fontWeight = FontWeight.Bold,
                       color = MaterialTheme.colorScheme.onPrimary
@@ -302,7 +304,7 @@ fun ModernTagSheet(
             if (validationError != null) {
               Spacer(modifier = Modifier.height(4.dp))
               Text(
-                text = validationError ?: "",
+                text = stringResource(validationError!!),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier
@@ -315,7 +317,7 @@ fun ModernTagSheet(
 
             // Tags List
             Text(
-              text = "COLLECTIONS (${tags.size})",
+              text = stringResource(R.string.tag_collections_header, tags.size),
               fontSize = 11.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
@@ -333,7 +335,7 @@ fun ModernTagSheet(
                 contentAlignment = Alignment.Center
               ) {
                 Text(
-                  text = "No custom tags created yet.\nEnter a name above to create your first tag!",
+                  text = stringResource(R.string.tag_empty_desc),
                   fontSize = 13.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                   textAlign = TextAlign.Center
@@ -378,7 +380,7 @@ fun ModernTagSheet(
               )
             ) {
               Text(
-                text = "Save & Apply",
+                text = stringResource(R.string.tag_btn_save_apply),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
               )
@@ -448,7 +450,7 @@ private fun TagSelectionRow(
       if (tag.isDefault) {
         Spacer(modifier = Modifier.width(8.dp))
         ModernBadgeChip(
-          text = "Default",
+          text = stringResource(R.string.tag_badge_default),
           backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
           contentColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -463,7 +465,7 @@ private fun TagSelectionRow(
         ) {
           Icon(
             imageVector = QuranIcons.Delete,
-            contentDescription = "Delete tag",
+            contentDescription = stringResource(R.string.tag_btn_delete),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
             modifier = Modifier.size(15.dp)
           )

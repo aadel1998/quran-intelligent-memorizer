@@ -23,3 +23,7 @@ crashlytics-build.properties
 com_crashlytics_export_strings.xml
 extras
 app/google-services.json
+
+# Temporary scratch and test files
+scratch/
+*.png

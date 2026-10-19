@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -121,8 +122,8 @@ fun PlaylistEditorSheet(
       OutlinedTextField(
         value = playlistName,
         onValueChange = { playlistName = it },
-        label = { Text("Playlist Name") },
-        placeholder = { Text("e.g. Daily Recitation, Morning Adhkar") },
+        label = { Text(stringResource(UiCoreR.string.playlist_name_label)) },
+        placeholder = { Text(stringResource(UiCoreR.string.playlist_name_hint)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true
       )
@@ -324,7 +325,7 @@ fun PlaylistEditorSheet(
                 startAyah = 1
                 endAyah = maxAyahsForSelectedSura
               },
-              label = { Text("Full Surah ($maxAyahsForSelectedSura Ayahs)") }
+              label = { Text(stringResource(UiCoreR.string.playlist_full_surah_ayahs, maxAyahsForSelectedSura)) }
             )
 
             FilterChip(
@@ -332,7 +333,7 @@ fun PlaylistEditorSheet(
               onClick = {
                 isFullSurah = false
               },
-              label = { Text("Custom Range") }
+              label = { Text(stringResource(UiCoreR.string.playlist_custom_range)) }
             )
           }
 
@@ -345,7 +346,7 @@ fun PlaylistEditorSheet(
               verticalAlignment = Alignment.CenterVertically
             ) {
               NumberInputOrStepper(
-                label = "From Ayah",
+                label = stringResource(UiCoreR.string.memo_setup_from_ayah),
                 value = startAyah,
                 minValue = 1,
                 maxValue = maxAyahsForSelectedSura,
@@ -356,7 +357,7 @@ fun PlaylistEditorSheet(
               )
 
               NumberInputOrStepper(
-                label = "To Ayah",
+                label = stringResource(UiCoreR.string.memo_setup_to_ayah),
                 value = endAyah,
                 minValue = 1,
                 maxValue = maxAyahsForSelectedSura,
@@ -413,7 +414,7 @@ fun PlaylistEditorSheet(
             modifier = Modifier.fillMaxWidth()
           ) {
             Icon(QuranIcons.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-            Text("Add to Playlist", fontWeight = FontWeight.SemiBold)
+            Text(stringResource(UiCoreR.string.playlist_add_to), fontWeight = FontWeight.SemiBold)
           }
         }
       }
@@ -429,7 +430,7 @@ fun PlaylistEditorSheet(
           onClick = onDismissRequest,
           modifier = Modifier.weight(1f)
         ) {
-          Text("Cancel")
+          Text(stringResource(UiCoreR.string.cancel))
         }
 
         Button(
@@ -448,7 +449,7 @@ fun PlaylistEditorSheet(
           enabled = playlistName.isNotBlank() && segments.isNotEmpty(),
           modifier = Modifier.weight(1f)
         ) {
-          Text("Save Playlist", fontWeight = FontWeight.Bold)
+          Text(stringResource(UiCoreR.string.playlist_save), fontWeight = FontWeight.Bold)
         }
       }
     }

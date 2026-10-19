@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -107,7 +108,7 @@ fun PlaylistListSheet(
           }
         ) {
           Icon(QuranIcons.Add, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-          Text("New")
+          Text(stringResource(UiCoreR.string.playlist_new))
         }
       }
 
@@ -155,7 +156,7 @@ fun PlaylistListSheet(
               }
             ) {
               Icon(QuranIcons.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-              Text("Create First Playlist")
+              Text(stringResource(UiCoreR.string.playlist_create_first))
             }
           }
         }
@@ -248,7 +249,7 @@ fun PlaylistListSheet(
                     modifier = Modifier.weight(1f)
                   ) {
                     Icon(QuranIcons.PlayArrow, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                    Text("Play All")
+                    Text(stringResource(UiCoreR.string.playlist_play_all))
                   }
 
                   Button(
@@ -260,7 +261,7 @@ fun PlaylistListSheet(
                     modifier = Modifier.weight(1f)
                   ) {
                     Icon(QuranIcons.MenuBook, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                    Text("Memorize", fontWeight = FontWeight.Bold)
+                    Text(stringResource(UiCoreR.string.playlist_memorize), fontWeight = FontWeight.Bold)
                   }
                 }
               }

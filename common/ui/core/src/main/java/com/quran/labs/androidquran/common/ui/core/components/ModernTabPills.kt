@@ -29,9 +29,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+
 data class ModernTabItem(
   val title: String,
-  val badgeCount: Int? = null
+  val badgeCount: Int? = null,
+  val icon: ImageVector? = null
 )
 
 /**
@@ -91,6 +95,15 @@ fun ModernTabRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
           ) {
+            if (tab.icon != null) {
+              Icon(
+                imageVector = tab.icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(14.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+            }
             Text(
               text = tab.title,
               color = contentColor,

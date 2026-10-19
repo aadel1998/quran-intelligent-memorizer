@@ -62,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.res.stringResource
+import com.quran.mobile.common.ui.core.R as CoreR
 import com.quran.labs.androidquran.common.audio.memorization.HifzPlan
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationProfile
 import com.quran.labs.androidquran.common.audio.memorization.MemorizedSurahInfo
@@ -123,6 +125,7 @@ fun ModernRevisionDashboardScreen(
   var showStatsDialog by remember { mutableStateOf(false) }
   var showProfileSheet by remember { mutableStateOf(false) }
   var showPlanSheet by remember { mutableStateOf(false) }
+  var showLanguageSheet by remember { mutableStateOf(false) }
 
   val memorizedCount = surahs.count { memorizedInfos[it.number]?.isMemorized == true }
   val dueCount = surahs.count { memorizedInfos[it.number]?.isDue == true }
@@ -212,13 +215,13 @@ fun ModernRevisionDashboardScreen(
               Spacer(modifier = Modifier.width(10.dp))
               Column {
                 Text(
-                  text = "${selectedQueue.size} Surahs Selected",
+                  text = stringResource(CoreR.string.hifz_selected_surahs_count, selectedQueue.size),
                   fontSize = 15.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                  text = "Ready for batch revision",
+                  text = stringResource(CoreR.string.hifz_ready_for_batch),
                   fontSize = 12.sp,
                   color = MaterialTheme.colorScheme.primary
                 )
@@ -233,7 +236,7 @@ fun ModernRevisionDashboardScreen(
               ) {
                 Icon(QuranIcons.Close, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Clear", fontSize = 12.sp)
+                Text(stringResource(CoreR.string.hifz_clear), fontSize = 12.sp)
               }
 
               Button(
@@ -251,7 +254,7 @@ fun ModernRevisionDashboardScreen(
                   modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Revise", fontWeight = FontWeight.Bold)
+                Text(stringResource(CoreR.string.hifz_revise_now), fontWeight = FontWeight.Bold)
               }
             }
           }
@@ -310,14 +313,14 @@ fun ModernRevisionDashboardScreen(
 
           Column {
             Text(
-              text = "Quran Revision",
+              text = stringResource(CoreR.string.hifz_hub_title),
               fontSize = 18.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onBackground,
               maxLines = 1
             )
             Text(
-              text = "Hifz Mastery",
+              text = stringResource(CoreR.string.hifz_mastery_plan),
               fontSize = 11.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
               maxLines = 1
@@ -421,11 +424,36 @@ fun ModernRevisionDashboardScreen(
             ) {
               Icon(
                 imageVector = QuranIcons.CloudUpload,
-                contentDescription = "Backup & Restore",
+                contentDescription = stringResource(CoreR.string.backup_title),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(16.dp)
               )
             }
+          }
+
+          // Language Switcher Icon Button
+          Spacer(modifier = Modifier.width(5.dp))
+          Box(
+            modifier = Modifier
+              .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = CircleShape
+              )
+              .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                shape = CircleShape
+              )
+              .clip(CircleShape)
+              .clickable { showLanguageSheet = true }
+              .padding(6.dp)
+          ) {
+            Icon(
+              imageVector = QuranIcons.Translate,
+              contentDescription = stringResource(CoreR.string.lang_select_title),
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(16.dp)
+            )
           }
         }
       }
@@ -450,7 +478,7 @@ fun ModernRevisionDashboardScreen(
           ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Text(
-                text = "🔥 ${if (currentStreak > 0) "$currentStreak Day Streak" else "Start Streak"}",
+                text = "🔥 ${if (currentStreak > 0) stringResource(CoreR.string.hifz_day_streak, currentStreak) else stringResource(CoreR.string.hifz_current_streak)}",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFF59E0B)
@@ -458,7 +486,7 @@ fun ModernRevisionDashboardScreen(
               if (bestStreak > 0) {
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                  text = "Best: $bestStreak d",
+                  text = stringResource(CoreR.string.hifz_best_streak, bestStreak),
                   fontSize = 11.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -501,13 +529,13 @@ fun ModernRevisionDashboardScreen(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
-              text = "Daily Goal: $ayahsToday / $safeGoal Ayahs",
+              text = stringResource(CoreR.string.hifz_daily_goal, ayahsToday, safeGoal),
               fontSize = 12.sp,
               fontWeight = FontWeight.SemiBold,
               color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-              text = if (ayahsToday >= safeGoal) "Achieved! ✨" else "${(progress * 100).toInt()}%",
+              text = if (ayahsToday >= safeGoal) stringResource(CoreR.string.hifz_achieved) else "${(progress * 100).toInt()}%",
               fontSize = 11.sp,
               fontWeight = FontWeight.Bold,
               color = if (ayahsToday >= safeGoal) Color(0xFF10B981) else MaterialTheme.colorScheme.primary
@@ -557,7 +585,7 @@ fun ModernRevisionDashboardScreen(
                 Text("🎯", fontSize = 14.sp)
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                  text = "TARGET: ${hifzPlan.targetSuraName.ifBlank { "Surah ${hifzPlan.targetSura}" }}",
+                  text = stringResource(CoreR.string.hifz_target_label, hifzPlan.targetSuraName.ifBlank { "${stringResource(CoreR.string.hifz_surah)} ${hifzPlan.targetSura}" }),
                   fontSize = 12.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.primary,
@@ -569,7 +597,7 @@ fun ModernRevisionDashboardScreen(
                 onClick = { onClearHifzPlan?.invoke() },
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
               ) {
-                Text("Clear", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                Text(stringResource(CoreR.string.hifz_clear), fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
               }
             }
 
@@ -580,13 +608,13 @@ fun ModernRevisionDashboardScreen(
               horizontalArrangement = Arrangement.SpaceBetween
             ) {
               Text(
-                text = "$daysLeft days left • Need $requiredPace v/day",
+                text = stringResource(CoreR.string.hifz_plan_progress, daysLeft, requiredPace),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = if (isTargetSuraMemorized) "Completed! 🎉" else "${(planProgress * 100).toInt()}%",
+                text = if (isTargetSuraMemorized) stringResource(CoreR.string.hifz_achieved) else "${(planProgress * 100).toInt()}%",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isTargetSuraMemorized) Color(0xFF10B981) else MaterialTheme.colorScheme.primary
@@ -636,13 +664,13 @@ fun ModernRevisionDashboardScreen(
               Spacer(modifier = Modifier.width(10.dp))
               Column {
                 Text(
-                  text = "Hifz Target Planner",
+                  text = stringResource(CoreR.string.hifz_target_planner_title),
                   fontSize = 13.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                  text = "Set a deadline & daily pace for any Surah",
+                  text = stringResource(CoreR.string.hifz_target_planner_subtitle),
                   fontSize = 11.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -655,7 +683,7 @@ fun ModernRevisionDashboardScreen(
                 .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
               Text(
-                text = "+ Set Plan",
+                text = stringResource(CoreR.string.hifz_set_plan_action),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -674,7 +702,7 @@ fun ModernRevisionDashboardScreen(
         OutlinedTextField(
           value = searchQuery,
           onValueChange = { searchQuery = it },
-          placeholder = { Text("Search by Surah name or number...", fontSize = 14.sp) },
+          placeholder = { Text(stringResource(CoreR.string.hifz_search_surah_hint), fontSize = 14.sp) },
           leadingIcon = {
             Icon(
               imageVector = QuranIcons.Search,
@@ -724,7 +752,7 @@ fun ModernRevisionDashboardScreen(
           FilterChip(
             selected = selectedFilterTab == 0,
             onClick = { selectedFilterTab = 0 },
-            label = { Text("All (114)", fontSize = 12.sp) },
+            label = { Text("${stringResource(CoreR.string.juz_filter_all)} (114)", fontSize = 12.sp) },
             leadingIcon = {
               Icon(
                 imageVector = QuranIcons.MenuBook,
@@ -744,7 +772,7 @@ fun ModernRevisionDashboardScreen(
             onClick = { selectedFilterTab = 1 },
             label = {
               Text(
-                text = if (dueCount > 0) "Due ($dueCount)" else "Due",
+                text = if (dueCount > 0) "${stringResource(CoreR.string.hifz_due_today)} ($dueCount)" else stringResource(CoreR.string.hifz_due_today),
                 fontSize = 12.sp,
                 fontWeight = if (dueCount > 0) FontWeight.Bold else FontWeight.Normal
               )
@@ -767,7 +795,7 @@ fun ModernRevisionDashboardScreen(
           FilterChip(
             selected = selectedFilterTab == 2,
             onClick = { selectedFilterTab = 2 },
-            label = { Text("Memorized ($memorizedCount)", fontSize = 12.sp) },
+            label = { Text("${stringResource(CoreR.string.juz_filter_mastered)} ($memorizedCount)", fontSize = 12.sp) },
             leadingIcon = {
               Icon(
                 imageVector = QuranIcons.Star,
@@ -787,7 +815,7 @@ fun ModernRevisionDashboardScreen(
             FilterChip(
               selected = selectedFilterTab == 3,
               onClick = { selectedFilterTab = 3 },
-              label = { Text("Queue (${selectedQueue.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+              label = { Text(stringResource(CoreR.string.hifz_filter_queue_count, selectedQueue.size), fontSize = 12.sp, fontWeight = FontWeight.Bold) },
               leadingIcon = {
                 Icon(
                   imageVector = QuranIcons.Layers,
@@ -807,7 +835,7 @@ fun ModernRevisionDashboardScreen(
             FilterChip(
               selected = selectedFilterTab == 4,
               onClick = { selectedFilterTab = 4 },
-              label = { Text("Flagged (${flaggedSurahs.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+              label = { Text(stringResource(CoreR.string.hifz_filter_flagged_count, flaggedSurahs.size), fontSize = 12.sp, fontWeight = FontWeight.Bold) },
               leadingIcon = {
                 Icon(
                   imageVector = QuranIcons.Flag,
@@ -871,9 +899,9 @@ fun ModernRevisionDashboardScreen(
               Spacer(modifier = Modifier.width(4.dp))
               Text(
                 text = when (sortOrder) {
-                  1 -> "Due"
-                  2 -> "Verses"
-                  else -> "1..114"
+                  1 -> stringResource(CoreR.string.hifz_sort_by_due)
+                  2 -> stringResource(CoreR.string.hifz_sort_by_memorized)
+                  else -> stringResource(CoreR.string.hifz_sort_by_number)
                 },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -887,7 +915,7 @@ fun ModernRevisionDashboardScreen(
             onDismissRequest = { showSortMenu = false }
           ) {
             DropdownMenuItem(
-              text = { Text("Surah Number (1 → 114)") },
+              text = { Text(stringResource(CoreR.string.hifz_sort_by_number)) },
               leadingIcon = {
                 Icon(
                   imageVector = QuranIcons.MenuBook,
@@ -901,7 +929,7 @@ fun ModernRevisionDashboardScreen(
               }
             )
             DropdownMenuItem(
-              text = { Text("Revision Due First") },
+              text = { Text(stringResource(CoreR.string.hifz_sort_by_due)) },
               leadingIcon = {
                 Icon(
                   imageVector = QuranIcons.Hourglass,
@@ -916,7 +944,7 @@ fun ModernRevisionDashboardScreen(
               }
             )
             DropdownMenuItem(
-              text = { Text("Most Verses Memorized") },
+              text = { Text(stringResource(CoreR.string.hifz_sort_by_memorized)) },
               leadingIcon = {
                 Icon(
                   imageVector = QuranIcons.Star,
@@ -944,14 +972,14 @@ fun ModernRevisionDashboardScreen(
           verticalAlignment = Alignment.CenterVertically
         ) {
           Text(
-            text = "$dueCount ${if (dueCount == 1) "Surah is" else "Surahs are"} due for revision",
+            text = stringResource(CoreR.string.hifz_surahs_due_banner, dueCount, stringResource(CoreR.string.hifz_surah)),
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Medium
           )
 
           TextButton(onClick = onSelectAllDue) {
-            Text("Select All Due", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(CoreR.string.hifz_select_all_due), fontSize = 13.sp, fontWeight = FontWeight.Bold)
           }
         }
       }
@@ -1057,7 +1085,7 @@ fun ModernRevisionDashboardScreen(
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                       ) {
-                        Text("⚡ Select All", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("⚡ " + stringResource(CoreR.string.hifz_select_all), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                       }
 
                       IconButton(
@@ -1066,7 +1094,7 @@ fun ModernRevisionDashboardScreen(
                       ) {
                         Icon(
                           imageVector = QuranIcons.Close,
-                          contentDescription = "Clear Juz",
+                          contentDescription = stringResource(CoreR.string.hifz_clear_juz),
                           tint = MaterialTheme.colorScheme.onSurfaceVariant,
                           modifier = Modifier.size(16.dp)
                         )
@@ -1136,7 +1164,7 @@ fun ModernRevisionDashboardScreen(
           }
           Spacer(modifier = Modifier.width(10.dp))
           Text(
-            text = "Hifz Mastery Overview",
+            text = stringResource(CoreR.string.hifz_stats_dialog_title),
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp
           )
@@ -1160,7 +1188,7 @@ fun ModernRevisionDashboardScreen(
                 modifier = Modifier.size(16.dp)
               )
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Surahs Memorized:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(stringResource(CoreR.string.hifz_mastered_ayahs), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text("$memorizedCount / 114", fontWeight = FontWeight.Bold, color = Color(0xFFEAB308))
           }
@@ -1178,7 +1206,7 @@ fun ModernRevisionDashboardScreen(
                 modifier = Modifier.size(16.dp)
               )
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Verses Memorized:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(stringResource(CoreR.string.hifz_stats_verses_memorized), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text("$totalMemorizedAyahs / 6,236", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
           }
@@ -1190,8 +1218,8 @@ fun ModernRevisionDashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("🔥 Current Streak:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("$currentStreak Days", fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B))
+            Text("🔥 ${stringResource(CoreR.string.hifz_current_streak)}:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$currentStreak ${stringResource(CoreR.string.hifz_days)}", fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B))
           }
 
           Row(
@@ -1199,8 +1227,8 @@ fun ModernRevisionDashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("⚡ Longest Streak:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("$bestStreak Days", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text(stringResource(CoreR.string.hifz_stats_longest_streak), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$bestStreak ${stringResource(CoreR.string.hifz_days)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
           }
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -1210,7 +1238,7 @@ fun ModernRevisionDashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Text("🎯 Practiced Today:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(CoreR.string.hifz_stats_practiced_today), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("$ayahsToday / $dailyGoal v", fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
           }
 
@@ -1227,9 +1255,9 @@ fun ModernRevisionDashboardScreen(
                 modifier = Modifier.size(16.dp)
               )
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Flagged Mistakes:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(stringResource(CoreR.string.hifz_stats_flagged_mistakes), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("$totalFlaggedAyahs Verses", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+            Text("$totalFlaggedAyahs ${stringResource(CoreR.string.hifz_ayah)}", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
           }
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -1241,10 +1269,10 @@ fun ModernRevisionDashboardScreen(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Column {
-              Text("🎯 Memorization Plan:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(stringResource(CoreR.string.hifz_stats_active_plan), color = MaterialTheme.colorScheme.onSurfaceVariant)
               Text(
                 text = if (hifzPlan != null) "${hifzPlan.targetSuraName} (${hifzPlan.daysRemaining}d left)"
-                       else "No active plan",
+                       else stringResource(CoreR.string.hifz_stats_no_active_plan),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -1256,7 +1284,7 @@ fun ModernRevisionDashboardScreen(
                 showPlanSheet = true
               }
             ) {
-              Text(if (hifzPlan != null) "Edit Plan" else "+ Set Plan", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+              Text(if (hifzPlan != null) stringResource(CoreR.string.hifz_edit_plan_action) else stringResource(CoreR.string.hifz_set_plan_action), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
           }
 
@@ -1269,13 +1297,13 @@ fun ModernRevisionDashboardScreen(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Column {
-              Text("⏰ Daily Hifz Reminder:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+              Text(stringResource(CoreR.string.hifz_stats_daily_reminder), color = MaterialTheme.colorScheme.onSurfaceVariant)
               Text(
                 text = if (isDailyReminderEnabled) {
                   val hourStr = dailyReminderTime.first.toString().padStart(2, '0')
                   val minStr = dailyReminderTime.second.toString().padStart(2, '0')
-                  "Alarm set for $hourStr:$minStr"
-                } else "Disabled",
+                  stringResource(CoreR.string.hifz_stats_alarm_set, "$hourStr:$minStr")
+                } else stringResource(CoreR.string.hifz_stats_disabled),
                 fontSize = 11.sp,
                 color = if (isDailyReminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
               )
@@ -1312,13 +1340,13 @@ fun ModernRevisionDashboardScreen(
               ) {
                 val hourStr = dailyReminderTime.first.toString().padStart(2, '0')
                 val minStr = dailyReminderTime.second.toString().padStart(2, '0')
-                Text("⏰ Time: $hourStr:$minStr ▾", fontSize = 11.sp)
+                Text("⏰ " + stringResource(CoreR.string.hifz_reminder_time_label, hourStr, minStr) + " ▾", fontSize = 11.sp)
               }
 
               TextButton(
                 onClick = onSendTestReminder
               ) {
-                Text("🔔 Test Alarm", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(CoreR.string.hifz_stats_test_alarm), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
               }
             }
           }
@@ -1344,7 +1372,7 @@ fun ModernRevisionDashboardScreen(
                 modifier = Modifier.size(16.dp)
               )
               Spacer(modifier = Modifier.width(6.dp))
-              Text("30 Juz Matrix", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+              Text(stringResource(CoreR.string.juz_matrix_title), fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
 
             if (onExportBackup != null && onImportBackup != null) {
@@ -1362,7 +1390,7 @@ fun ModernRevisionDashboardScreen(
                   modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Backup", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(CoreR.string.backup_title), fontSize = 11.sp, fontWeight = FontWeight.Bold)
               }
             }
           }
@@ -1381,7 +1409,7 @@ fun ModernRevisionDashboardScreen(
                   },
                   modifier = Modifier.weight(1f)
                 ) {
-                  Text("Reset Streak", fontSize = 11.sp)
+                  Text(stringResource(CoreR.string.hifz_stats_reset_streak), fontSize = 11.sp)
                 }
               }
               if (onClearAllFlagged != null && totalFlaggedAyahs > 0) {
@@ -1392,7 +1420,7 @@ fun ModernRevisionDashboardScreen(
                   },
                   modifier = Modifier.weight(1f)
                 ) {
-                  Text("Clear Flags", fontSize = 11.sp)
+                  Text(stringResource(CoreR.string.hifz_stats_clear_flags), fontSize = 11.sp)
                 }
               }
             }
@@ -1401,7 +1429,7 @@ fun ModernRevisionDashboardScreen(
       },
       confirmButton = {
         Button(onClick = { showStatsDialog = false }) {
-          Text("Done")
+          Text(stringResource(CoreR.string.hifz_stats_close))
         }
       }
     )
@@ -1444,6 +1472,12 @@ fun ModernRevisionDashboardScreen(
       onExportJson = exportFn,
       onImportJson = importFn,
       onDismissRequest = { showBackupSheet = false }
+    )
+  }
+
+  if (showLanguageSheet) {
+    ModernLanguagePickerSheet(
+      onDismissRequest = { showLanguageSheet = false }
     )
   }
 }
@@ -1598,7 +1632,7 @@ private fun RevisionSurahCard(
                 )
                 Spacer(modifier = Modifier.width(3.dp))
                 Text(
-                  text = "FRESH",
+                  text = stringResource(CoreR.string.hifz_badge_fresh),
                   fontSize = 9.sp,
                   fontWeight = FontWeight.Bold,
                   color = Color(0xFF10B981)
@@ -1619,7 +1653,7 @@ private fun RevisionSurahCard(
           )
           Spacer(modifier = Modifier.width(3.dp))
           Text(
-            text = "${sura.numberOfAyahs} ayahs",
+            text = stringResource(CoreR.string.hifz_ayahs_count, sura.numberOfAyahs),
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -1654,7 +1688,7 @@ private fun RevisionSurahCard(
         ) {
           Icon(
             imageVector = QuranIcons.Flag,
-            contentDescription = "Practice Flagged Verses",
+            contentDescription = stringResource(CoreR.string.hifz_action_practice_flagged),
             tint = Color(0xFFEF4444),
             modifier = Modifier.size(18.dp)
           )
@@ -1671,7 +1705,7 @@ private fun RevisionSurahCard(
       ) {
         Icon(
           imageVector = QuranIcons.School,
-          contentDescription = "Active Recall Quiz",
+          contentDescription = stringResource(CoreR.string.hifz_action_quiz),
           tint = MaterialTheme.colorScheme.primary,
           modifier = Modifier.size(18.dp)
         )
@@ -1692,7 +1726,7 @@ private fun RevisionSurahCard(
       ) {
         Icon(
           imageVector = if (isMemorized) QuranIcons.Star else QuranIcons.BookmarkBorder,
-          contentDescription = if (isMemorized) "Memorized" else "Mark as memorized",
+          contentDescription = if (isMemorized) stringResource(CoreR.string.hifz_action_memorized) else stringResource(CoreR.string.hifz_action_mark_memorized),
           tint = if (isMemorized) Color(0xFFEAB308) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
           modifier = Modifier.size(18.dp)
         )
@@ -1701,18 +1735,18 @@ private fun RevisionSurahCard(
   }
 }
 
+@Composable
 private fun getRelativeTimeText(timestamp: Long): String {
   val diff = System.currentTimeMillis() - timestamp
-  val seconds = diff / 1000
-  val minutes = seconds / 60
+  val minutes = diff / (1000 * 60)
   val hours = minutes / 60
   val days = hours / 24
 
   return when {
-    days > 30 -> "${days / 30}mo ago"
-    days > 0 -> "${days}d ago"
-    hours > 0 -> "${hours}h ago"
-    minutes > 0 -> "${minutes}m ago"
-    else -> "just now"
+    days > 30 -> stringResource(CoreR.string.hifz_time_months_ago, (days / 30).toInt())
+    days > 0 -> stringResource(CoreR.string.hifz_time_days_ago, days.toInt())
+    hours > 0 -> stringResource(CoreR.string.hifz_time_hours_ago, hours.toInt())
+    minutes > 0 -> stringResource(CoreR.string.hifz_time_minutes_ago, minutes.toInt())
+    else -> stringResource(CoreR.string.hifz_time_just_now)
   }
 }

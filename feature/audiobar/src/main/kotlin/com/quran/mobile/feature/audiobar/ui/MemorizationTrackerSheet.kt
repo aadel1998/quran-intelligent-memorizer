@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -158,7 +159,7 @@ fun MemorizationTrackerSheet(
               ) {
                 Icon(QuranIcons.Repeat, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Restart Current Surah from Beginning (Ayah 1)")
+                Text(stringResource(UiCoreR.string.memo_setup_restart_surah))
               }
             }
           }
@@ -255,7 +256,7 @@ fun MemorizationTrackerSheet(
                     onClick = { onStartFromBeginning(session.config) },
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                   ) {
-                    Text("From Beginning", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(UiCoreR.string.memorizer_from_beginning), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                   }
 
                   Spacer(modifier = Modifier.width(8.dp))
@@ -264,7 +265,7 @@ fun MemorizationTrackerSheet(
                     onClick = { onResumeSession(session.config) },
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 4.dp)
                   ) {
-                    Text("Resume", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(UiCoreR.string.memorize_resume), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                   }
                 }
               }

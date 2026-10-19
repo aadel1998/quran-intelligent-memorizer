@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import com.quran.mobile.common.ui.core.R as CoreR
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -99,7 +100,7 @@ fun ModernSettingsScreen(
   // State
   var useModernUi by remember { mutableStateOf(quranSettings.isModernUiEnabled) }
   var appTheme by remember { mutableStateOf(quranSettings.currentTheme()) }
-  var isArabic by remember { mutableStateOf(QuranUtils.getCurrentLocale().language == "ar") }
+  var showLanguagePicker by remember { mutableStateOf(false) }
   var nightMode by remember { mutableStateOf(quranSettings.isNightMode) }
   var nightTextBrightness by remember {
     mutableFloatStateOf(quranSettings.nightModeTextBrightness.toFloat())
@@ -189,24 +190,27 @@ fun ModernSettingsScreen(
 
             ModernSettingsDivider()
 
-            // Arabic Names Toggle
-            ModernSettingsSwitchItem(
-              title = stringResource(R.string.prefs_use_arabic_title),
-              subtitle = stringResource(R.string.prefs_use_arabic_summary_on),
-              checked = isArabic,
-              onCheckedChange = { checked ->
-                isArabic = checked
-                val localeList = if (checked) {
-                  LocaleListCompat.forLanguageTags("ar-EG")
-                } else {
-                  val locales = LocaleListCompat.getDefault()
-                  val tags = locales.toLanguageTags().split(",")
-                    .filter { it != "ar" && !it.startsWith("ar-") }
-                  val tagString = tags.joinToString(",").ifEmpty { "en" }
-                  LocaleListCompat.forLanguageTags(tagString)
-                }
-                AppCompatDelegate.setApplicationLocales(localeList)
-              }
+            // App Language Selector
+            val currentAppLocales = remember { AppCompatDelegate.getApplicationLocales() }
+            val currentLangTag = if (currentAppLocales.isEmpty) "" else (currentAppLocales.get(0)?.language ?: "")
+            val activeLang = ALL_SUPPORTED_LANGUAGES.find { it.tag.isNotEmpty() && currentLangTag.startsWith(it.tag) }
+              ?: ALL_SUPPORTED_LANGUAGES.first()
+            val languageLabel = if (activeLang.tag.isEmpty()) {
+              "${activeLang.flagEmoji} ${stringResource(CoreR.string.lang_system_default)}"
+            } else {
+              "${activeLang.flagEmoji} ${activeLang.nativeName}"
+            }
+            val languageSubtitle = if (activeLang.tag.isEmpty()) {
+              stringResource(CoreR.string.lang_select_subtitle)
+            } else {
+              "${activeLang.englishName} • ${activeLang.countryName}"
+            }
+
+            ModernSettingsActionItem(
+              title = stringResource(CoreR.string.lang_select_title),
+              subtitle = languageSubtitle,
+              valuePill = languageLabel,
+              onClick = { showLanguagePicker = true }
             )
 
             ModernSettingsDivider()
@@ -727,6 +731,13 @@ fun ModernSettingsScreen(
         shape = RoundedCornerShape(20.dp)
       )
     }
+
+    // In-App Language Picker Sheet
+    if (showLanguagePicker) {
+      ModernLanguagePickerSheet(
+        onDismissRequest = { showLanguagePicker = false }
+      )
+    }
   }
 }
 
@@ -756,7 +767,7 @@ private fun ModernSettingsTopBar(
         ) {
           Icon(
             imageVector = QuranIcons.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = stringResource(R.string.reader_back),
             tint = Color.White
           )
         }

@@ -38,10 +38,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernBadgeChip
 import com.quran.mobile.translation.model.LocalTranslation
@@ -128,13 +130,13 @@ fun ModernTranslationPickerSheet(
 
               Column {
                 Text(
-                  text = "Translations & Tafsir",
+                  text = stringResource(R.string.picker_trans_title),
                   fontSize = 17.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                  text = "Choose active translation to display",
+                  text = stringResource(R.string.picker_trans_subtitle),
                   fontSize = 12.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -147,7 +149,7 @@ fun ModernTranslationPickerSheet(
             ) {
               Icon(
                 imageVector = QuranIcons.Close,
-                contentDescription = "Close",
+                contentDescription = stringResource(R.string.hifz_stats_close),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
               )
@@ -165,7 +167,7 @@ fun ModernTranslationPickerSheet(
               horizontalAlignment = Alignment.CenterHorizontally
             ) {
               Text(
-                text = "No translations downloaded yet",
+                text = stringResource(R.string.picker_trans_none_downloaded),
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -177,7 +179,7 @@ fun ModernTranslationPickerSheet(
                 ),
                 shape = RoundedCornerShape(14.dp)
               ) {
-                Text("Download Translations")
+                Text(stringResource(R.string.picker_trans_btn_download))
               }
             }
           } else {
@@ -264,7 +266,7 @@ fun ModernTranslationPickerSheet(
 
                   if (isActive) {
                     ModernBadgeChip(
-                      text = "Active",
+                      text = stringResource(R.string.picker_trans_badge_active),
                       backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
                       contentColor = MaterialTheme.colorScheme.primary
                     )
@@ -297,7 +299,7 @@ fun ModernTranslationPickerSheet(
                 modifier = Modifier.size(18.dp)
               )
               Text(
-                text = "Manage & Download More Translations",
+                text = stringResource(R.string.picker_trans_btn_manage),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary

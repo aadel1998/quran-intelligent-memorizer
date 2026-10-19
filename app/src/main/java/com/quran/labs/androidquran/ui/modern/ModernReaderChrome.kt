@@ -50,8 +50,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernBadgeChip
 
@@ -132,7 +134,7 @@ fun ModernReaderTopBar(
         ) {
           Icon(
             imageVector = QuranIcons.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = stringResource(R.string.reader_back),
             tint = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.size(22.dp)
           )
@@ -175,13 +177,13 @@ fun ModernReaderTopBar(
             verticalAlignment = Alignment.CenterVertically
           ) {
             ModernBadgeChip(
-              text = "p. $pageNumber",
+              text = stringResource(R.string.reader_page_number, pageNumber),
               backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
               contentColor = MaterialTheme.colorScheme.primary
             )
 
             ModernBadgeChip(
-              text = "Juz $juzNumber",
+              text = stringResource(R.string.reader_juz_number, juzNumber),
               backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
               contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -194,7 +196,7 @@ fun ModernReaderTopBar(
                 else -> "¼"
               }
               ModernBadgeChip(
-                text = "Hizb $hizbNumber • $rubSymbol",
+                text = stringResource(R.string.reader_hizb_quarter, hizbNumber, rubSymbol),
                 backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -236,7 +238,7 @@ fun ModernReaderTopBar(
                 )
                 Icon(
                   imageVector = QuranIcons.KeyboardArrowDown,
-                  contentDescription = "Switch translation",
+                  contentDescription = stringResource(R.string.reader_switch_translation),
                   tint = MaterialTheme.colorScheme.primary,
                   modifier = Modifier.size(13.dp)
                 )
@@ -257,7 +259,7 @@ fun ModernReaderTopBar(
           ) {
             Icon(
               imageVector = if (isReadingBookmarked) QuranIcons.BookmarkFilled else QuranIcons.BookmarkBorder,
-              contentDescription = if (isReadingBookmarked) "Bookmarked" else "Bookmark",
+              contentDescription = if (isReadingBookmarked) stringResource(R.string.reader_bookmarked) else stringResource(R.string.reader_bookmark),
               tint = if (isReadingBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(20.dp)
             )
@@ -277,7 +279,7 @@ fun ModernReaderTopBar(
             ) {
               Icon(
                 imageVector = QuranIcons.Translate,
-                contentDescription = "Translation",
+                contentDescription = stringResource(R.string.reader_translation),
                 tint = if (isTranslationMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
               )
@@ -291,7 +293,7 @@ fun ModernReaderTopBar(
           ) {
             Icon(
               imageVector = QuranIcons.DarkMode,
-              contentDescription = "Night Mode",
+              contentDescription = stringResource(R.string.reader_night_mode),
               tint = if (isNightMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(20.dp)
             )
@@ -304,7 +306,7 @@ fun ModernReaderTopBar(
           ) {
             Icon(
               imageVector = QuranIcons.List,
-              contentDescription = "Jump",
+              contentDescription = stringResource(R.string.reader_jump),
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(20.dp)
             )
@@ -317,7 +319,7 @@ fun ModernReaderTopBar(
           ) {
             Icon(
               imageVector = QuranIcons.Settings,
-              contentDescription = "Settings",
+              contentDescription = stringResource(R.string.reader_settings),
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(20.dp)
             )
@@ -391,7 +393,7 @@ fun ModernPageScrubber(
         ) {
           Icon(
             imageVector = QuranIcons.ArrowBack,
-            contentDescription = "Previous Page",
+            contentDescription = stringResource(R.string.reader_previous_page),
             tint = if (currentPage > 1) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
             modifier = Modifier.size(18.dp)
           )
@@ -409,14 +411,14 @@ fun ModernPageScrubber(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
           ) {
             Text(
-              text = "p. $displayPage",
+              text = stringResource(R.string.reader_page_number, displayPage),
               fontSize = 12.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary
             )
 
             Text(
-              text = "of $totalPages",
+              text = stringResource(R.string.reader_page_of_total, totalPages),
               fontSize = 11.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -468,7 +470,7 @@ fun ModernPageScrubber(
         ) {
           Icon(
             imageVector = QuranIcons.ChevronRight,
-            contentDescription = "Next Page",
+            contentDescription = stringResource(R.string.reader_next_page),
             tint = if (currentPage < totalPages) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
             modifier = Modifier.size(18.dp)
           )
@@ -481,7 +483,7 @@ fun ModernPageScrubber(
         ) {
           Icon(
             imageVector = QuranIcons.Search,
-            contentDescription = "Jump to page",
+            contentDescription = stringResource(R.string.jump_sheet_title),
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(18.dp)
           )

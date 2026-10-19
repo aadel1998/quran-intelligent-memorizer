@@ -141,6 +141,7 @@ fun QuranModernHomeScreen(
   onOpenJump: () -> Unit,
   onOpenPlaylists: () -> Unit,
   onOpenSettings: () -> Unit,
+  onOpenLanguage: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var selectedTab by remember { mutableIntStateOf(0) }
@@ -149,10 +150,24 @@ fun QuranModernHomeScreen(
 
   val totalBookmarksCount = bookmarks.size + readingBookmarks.size
   val tabs = listOf(
-    ModernTabItem(title = "Surahs", badgeCount = null),
-    ModernTabItem(title = "Juz", badgeCount = null),
-    ModernTabItem(title = "Bookmarks", badgeCount = if (totalBookmarksCount > 0) totalBookmarksCount else null),
-    ModernTabItem(title = "Memorizer", badgeCount = if (savedSessions.isNotEmpty()) savedSessions.size else null)
+    ModernTabItem(
+      title = stringResource(R.string.tab_surahs),
+      icon = QuranIcons.MenuBook
+    ),
+    ModernTabItem(
+      title = stringResource(R.string.tab_juz),
+      icon = QuranIcons.Layers
+    ),
+    ModernTabItem(
+      title = stringResource(R.string.tab_bookmarks),
+      icon = QuranIcons.BookmarkFilled,
+      badgeCount = if (totalBookmarksCount > 0) totalBookmarksCount else null
+    ),
+    ModernTabItem(
+      title = stringResource(R.string.tab_memorizer),
+      icon = QuranIcons.School,
+      badgeCount = if (savedSessions.isNotEmpty()) savedSessions.size else null
+    )
   )
 
   val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -179,7 +194,8 @@ fun QuranModernHomeScreen(
         onOpenSearch = onOpenSearch,
         onOpenJump = onOpenJump,
         onOpenPlaylists = onOpenPlaylists,
-        onOpenSettings = onOpenSettings
+        onOpenSettings = onOpenSettings,
+        onOpenLanguage = onOpenLanguage
       )
 
       // Continue Reading Hero Card (Shown when not searching and last read exists)
@@ -261,6 +277,7 @@ private fun ModernHomeTopBar(
   onOpenJump: () -> Unit,
   onOpenPlaylists: () -> Unit,
   onOpenSettings: () -> Unit,
+  onOpenLanguage: () -> Unit,
   modifier: Modifier = Modifier
 ) {
   val focusManager = LocalFocusManager.current
@@ -303,28 +320,35 @@ private fun ModernHomeTopBar(
         IconButton(onClick = onToggleSearch) {
           Icon(
             imageVector = if (isSearchExpanded) QuranIcons.Close else QuranIcons.Search,
-            contentDescription = "Search",
+            contentDescription = stringResource(R.string.action_search),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
         IconButton(onClick = onOpenJump) {
           Icon(
             imageVector = QuranIcons.FastForward,
-            contentDescription = "Jump",
+            contentDescription = stringResource(R.string.action_jump),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
         IconButton(onClick = onOpenPlaylists) {
           Icon(
             imageVector = QuranIcons.List,
-            contentDescription = "Playlists",
+            contentDescription = stringResource(R.string.action_playlists),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+        IconButton(onClick = onOpenLanguage) {
+          Icon(
+            imageVector = QuranIcons.Translate,
+            contentDescription = stringResource(R.string.action_language),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
         IconButton(onClick = onOpenSettings) {
           Icon(
             imageVector = QuranIcons.Settings,
-            contentDescription = "Settings",
+            contentDescription = stringResource(R.string.action_settings),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
@@ -336,7 +360,7 @@ private fun ModernHomeTopBar(
         OutlinedTextField(
           value = searchQuery,
           onValueChange = onSearchQueryChange,
-          placeholder = { Text("Filter Surahs by name or number...") },
+          placeholder = { Text(stringResource(R.string.search_surahs_hint)) },
           singleLine = true,
           shape = RoundedCornerShape(12.dp),
           colors = OutlinedTextFieldDefaults.colors(
@@ -359,7 +383,7 @@ private fun ModernHomeTopBar(
                 IconButton(onClick = { onSearchQueryChange("") }) {
                   Icon(
                     imageVector = QuranIcons.Close,
-                    contentDescription = "Clear",
+                    contentDescription = stringResource(R.string.action_clear),
                     modifier = Modifier.size(18.dp)
                   )
                 }
@@ -367,7 +391,7 @@ private fun ModernHomeTopBar(
               IconButton(onClick = { onOpenSearch(searchQuery) }) {
                 Icon(
                   imageVector = QuranIcons.Search,
-                  contentDescription = "Search whole Quran",
+                  contentDescription = stringResource(R.string.search_whole_quran_deep),
                   tint = MaterialTheme.colorScheme.primary,
                   modifier = Modifier.size(20.dp)
                 )
@@ -381,8 +405,8 @@ private fun ModernHomeTopBar(
           modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .clickable { onOpenSearch(searchQuery) }
-            .padding(vertical = 6.dp, horizontal = 4.dp),
+          .clickable { onOpenSearch(searchQuery) }
+          .padding(vertical = 6.dp, horizontal = 4.dp),
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -395,7 +419,11 @@ private fun ModernHomeTopBar(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-              text = if (searchQuery.isNotBlank()) "Search whole Quran for \"$searchQuery\"" else "Deep search across entire Quran",
+              text = if (searchQuery.isNotBlank()) {
+                stringResource(R.string.search_whole_quran, searchQuery)
+              } else {
+                stringResource(R.string.search_whole_quran_deep)
+              },
               fontSize = 12.sp,
               fontWeight = FontWeight.Medium,
               color = MaterialTheme.colorScheme.primary
@@ -442,7 +470,7 @@ private fun ContinueReadingHeroCard(
           )
           Spacer(modifier = Modifier.width(6.dp))
           Text(
-            text = "CONTINUE READING",
+            text = stringResource(R.string.continue_reading_title),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
@@ -466,12 +494,12 @@ private fun ContinueReadingHeroCard(
           verticalAlignment = Alignment.CenterVertically
         ) {
           ModernBadgeChip(
-            text = "Page ${lastRead.page}",
+            text = stringResource(R.string.reading_card_page, lastRead.page),
             backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
             contentColor = MaterialTheme.colorScheme.onSurface
           )
           ModernBadgeChip(
-            text = "Juz ${lastRead.juzNumber}",
+            text = stringResource(R.string.reading_card_juz, lastRead.juzNumber),
             backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
             contentColor = MaterialTheme.colorScheme.onSurface
           )
@@ -494,7 +522,7 @@ private fun ContinueReadingHeroCard(
         ) {
           Icon(
             imageVector = QuranIcons.PlayArrow,
-            contentDescription = "Read",
+            contentDescription = stringResource(R.string.action_read),
             tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(20.dp)
           )
@@ -590,7 +618,7 @@ private fun SurahCard(
               verticalAlignment = Alignment.CenterVertically
             ) {
               ModernBadgeChip(
-                text = if (sura.isMakki) "Makki" else "Madani",
+                text = if (sura.isMakki) stringResource(R.string.surah_makki) else stringResource(R.string.surah_madani),
                 backgroundColor = if (sura.isMakki) {
                   MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                 } else {
@@ -604,13 +632,13 @@ private fun SurahCard(
               )
 
               ModernBadgeChip(
-                text = "${sura.numberOfAyahs} ayahs",
+                text = stringResource(R.string.surah_ayah_count, sura.numberOfAyahs),
                 backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
               )
 
               ModernBadgeChip(
-                text = "p. ${sura.startPage}",
+                text = stringResource(R.string.surah_page_number, sura.startPage),
                 backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -659,7 +687,7 @@ private fun SurahCard(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-              text = "Memorizing • Step ${sura.savedSession.stepIndex + 1}",
+              text = stringResource(R.string.memorizing_step_badge, sura.savedSession.stepIndex + 1),
               fontSize = 11.sp,
               fontWeight = FontWeight.SemiBold,
               color = MaterialTheme.colorScheme.primary
@@ -667,7 +695,7 @@ private fun SurahCard(
           }
 
           Text(
-            text = "Tap to resume ▶",
+            text = stringResource(R.string.tap_to_resume),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
@@ -757,20 +785,20 @@ private fun JuzCard(
 
           Column {
             Text(
-              text = "Juz ${juz.number}",
+              text = stringResource(R.string.juz_title_format, juz.number),
               fontSize = 16.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-              text = "Begins at ${juz.startingSuraName}",
+              text = stringResource(R.string.juz_begins_at, juz.startingSuraName),
               fontSize = 13.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(4.dp))
             ModernBadgeChip(
-              text = "Page ${juz.startingPage}",
+              text = stringResource(R.string.juz_page_format, juz.startingPage),
               backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
               contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -795,7 +823,11 @@ private fun JuzCard(
             Spacer(modifier = Modifier.width(4.dp))
             Icon(
               imageVector = if (isExpanded) QuranIcons.KeyboardArrowUp else QuranIcons.KeyboardArrowDown,
-              contentDescription = if (isExpanded) "Collapse" else "Expand quarters",
+              contentDescription = if (isExpanded) {
+                stringResource(R.string.collapse_quarters)
+              } else {
+                stringResource(R.string.expand_quarters)
+              },
               tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
               modifier = Modifier.size(20.dp)
             )
@@ -829,7 +861,7 @@ private fun JuzCard(
             ) {
               Row(verticalAlignment = Alignment.CenterVertically) {
                 ModernBadgeChip(
-                  text = "Hizb ${quarter.hizb} • ¼ ${quarter.rub}",
+                  text = stringResource(R.string.quarter_hizb_rub, quarter.hizb, quarter.rub),
                   backgroundColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
                   contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                 )
@@ -842,7 +874,7 @@ private fun JuzCard(
               }
 
               ModernBadgeChip(
-                text = "p. ${quarter.page}",
+                text = stringResource(R.string.surah_page_number, quarter.page),
                 backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -909,14 +941,14 @@ private fun MemorizerTabContent(
               Spacer(modifier = Modifier.width(12.dp))
               Column {
                 Text(
-                  text = "REVISION DASHBOARD",
+                  text = stringResource(R.string.memorizer_revision_dashboard_badge),
                   fontSize = 11.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.primary,
                   letterSpacing = 1.sp
                 )
                 Text(
-                  text = "$memorizedCount of 114 Surahs Memorized",
+                  text = stringResource(R.string.memorizer_surahs_count_format, memorizedCount),
                   fontSize = 15.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface
@@ -931,7 +963,7 @@ private fun MemorizerTabContent(
                   .padding(horizontal = 8.dp, vertical = 4.dp)
               ) {
                 Text(
-                  text = "$dueCount DUE",
+                  text = stringResource(R.string.memorizer_due_badge, dueCount),
                   fontSize = 11.sp,
                   fontWeight = FontWeight.Bold,
                   color = Color(0xFFF59E0B)
@@ -966,13 +998,13 @@ private fun MemorizerTabContent(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
-              text = "🔥 ${if (currentStreak > 0) "$currentStreak Day Streak" else "Start Streak"}",
+              text = "🔥 " + if (currentStreak > 0) stringResource(R.string.memorizer_streak_format, currentStreak) else stringResource(R.string.memorizer_start_streak),
               fontSize = 12.sp,
               fontWeight = FontWeight.Bold,
               color = Color(0xFFF59E0B)
             )
             Text(
-              text = "Today: $ayahsToday / $dailyGoal v",
+              text = stringResource(R.string.memorizer_today_progress, ayahsToday, dailyGoal),
               fontSize = 12.sp,
               fontWeight = FontWeight.SemiBold,
               color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -997,7 +1029,7 @@ private fun MemorizerTabContent(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = "Open Revision Dashboard & Queue",
+              text = stringResource(R.string.memorizer_open_dashboard_btn),
               fontWeight = FontWeight.Bold,
               fontSize = 13.sp
             )
@@ -1016,7 +1048,7 @@ private fun MemorizerTabContent(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          text = "ACTIVE MEMORIZATION SESSIONS",
+          text = stringResource(R.string.memorizer_active_sessions_title),
           fontSize = 12.sp,
           fontWeight = FontWeight.Bold,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1024,7 +1056,7 @@ private fun MemorizerTabContent(
         )
         if (savedSessions.isNotEmpty()) {
           Text(
-            text = "${savedSessions.size} Active",
+            text = stringResource(R.string.memorizer_active_count, savedSessions.size),
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary
@@ -1059,14 +1091,14 @@ private fun MemorizerTabContent(
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-              text = "No In-Progress Sessions",
+              text = stringResource(R.string.memorizer_no_sessions_title),
               fontSize = 15.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-              text = "Select any Surah to begin spaced-repetition memorization, or review memorized Surahs in the Revision Dashboard.",
+              text = stringResource(R.string.memorizer_no_sessions_desc),
               fontSize = 12.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
               textAlign = TextAlign.Center
@@ -1110,7 +1142,7 @@ private fun MemorizerTabContent(
                   )
                   Spacer(modifier = Modifier.height(2.dp))
                   Text(
-                    text = "Ayahs ${session.config.startAyah.ayah}..${session.config.endAyah.ayah}",
+                    text = stringResource(R.string.memorizer_ayah_range_format, session.config.startAyah.ayah, session.config.endAyah.ayah),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
@@ -1134,14 +1166,14 @@ private fun MemorizerTabContent(
               verticalAlignment = Alignment.CenterVertically
             ) {
               ModernBadgeChip(
-                text = "Step ${session.stepIndex + 1}",
+                text = stringResource(R.string.memorizer_step_format, session.stepIndex + 1),
                 backgroundColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 leadingDotColor = Color(0xFF10B981)
               )
 
               ModernBadgeChip(
-                text = "Window: ${session.config.windowSize} • Repeat: ${session.config.singleRepeat}x",
+                text = stringResource(R.string.memorizer_window_repeat_format, session.config.windowSize, session.config.singleRepeat),
                 backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -1172,7 +1204,7 @@ private fun MemorizerTabContent(
                   )
                   Spacer(modifier = Modifier.width(6.dp))
                   Text(
-                    text = "Resume (Step ${session.stepIndex + 1})",
+                    text = stringResource(R.string.memorizer_resume_step, session.stepIndex + 1),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimary
@@ -1191,7 +1223,7 @@ private fun MemorizerTabContent(
                 contentAlignment = Alignment.Center
               ) {
                 Text(
-                  text = "From Beginning",
+                  text = stringResource(R.string.memorizer_from_beginning),
                   fontSize = 12.sp,
                   fontWeight = FontWeight.SemiBold,
                   color = MaterialTheme.colorScheme.onSurface

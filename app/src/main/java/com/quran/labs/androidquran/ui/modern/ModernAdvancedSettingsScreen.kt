@@ -166,7 +166,7 @@ fun ModernAdvancedSettingsScreen(
         // Section 3: System & Diagnostics
         item {
           ModernSettingsGroup(
-            title = "Diagnostics & Specs",
+            title = stringResource(R.string.advanced_diagnostics_specs),
             icon = QuranIcons.Settings
           ) {
             // App Spec Info

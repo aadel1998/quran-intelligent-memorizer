@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +50,7 @@ import com.quran.labs.androidquran.common.audio.memorization.MemorizationPrefere
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationProfile
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernCard
+import com.quran.mobile.common.ui.core.R as CoreR
 
 /**
  * Bottom sheet for managing multiple user profiles (Easy Quran Memorizer Pro).
@@ -106,7 +108,7 @@ fun ModernProfileManagementSheet(
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-              text = "Hifz Profiles",
+              text = stringResource(CoreR.string.profile_title),
               fontSize = 18.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
@@ -114,7 +116,7 @@ fun ModernProfileManagementSheet(
           }
           Spacer(modifier = Modifier.height(2.dp))
           Text(
-            text = "Track memorization for family members or students separately",
+            text = stringResource(CoreR.string.profile_subtitle),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -123,7 +125,7 @@ fun ModernProfileManagementSheet(
         IconButton(onClick = onDismissRequest) {
           Icon(
             imageVector = QuranIcons.Close,
-            contentDescription = "Close",
+            contentDescription = stringResource(CoreR.string.cancel),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
@@ -184,8 +186,11 @@ fun ModernProfileManagementSheet(
                     color = MaterialTheme.colorScheme.onSurface
                   )
                   Text(
-                    text = if (profile.id == MemorizationPreferences.DEFAULT_PROFILE_ID) "Primary Profile"
-                    else "Student / Family Profile",
+                    text = if (profile.id == MemorizationPreferences.DEFAULT_PROFILE_ID) {
+                      stringResource(CoreR.string.profile_primary)
+                    } else {
+                      stringResource(CoreR.string.profile_student_family)
+                    },
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
@@ -207,7 +212,7 @@ fun ModernProfileManagementSheet(
                     )
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                      text = "ACTIVE",
+                      text = stringResource(CoreR.string.profile_active_badge).uppercase(),
                       fontSize = 10.sp,
                       fontWeight = FontWeight.Bold,
                       color = Color(0xFF10B981)
@@ -221,7 +226,7 @@ fun ModernProfileManagementSheet(
                 ) {
                   Icon(
                     imageVector = QuranIcons.Delete,
-                    contentDescription = "Delete Profile",
+                    contentDescription = stringResource(CoreR.string.profile_delete_title),
                     tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                     modifier = Modifier.size(16.dp)
                   )
@@ -243,7 +248,7 @@ fun ModernProfileManagementSheet(
             .padding(14.dp)
         ) {
           Text(
-            text = "Create New Profile",
+            text = stringResource(CoreR.string.profile_create_new),
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -254,7 +259,7 @@ fun ModernProfileManagementSheet(
           OutlinedTextField(
             value = newProfileName,
             onValueChange = { newProfileName = it },
-            placeholder = { Text("e.g. Ahmad, Fatima, Student 1", fontSize = 13.sp) },
+            placeholder = { Text(stringResource(CoreR.string.profile_name_hint), fontSize = 13.sp) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
@@ -300,7 +305,7 @@ fun ModernProfileManagementSheet(
               ),
               enabled = newProfileName.isNotBlank()
             ) {
-              Text("Create Profile", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+              Text(stringResource(CoreR.string.profile_save_btn), fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
 
             Button(
@@ -312,7 +317,7 @@ fun ModernProfileManagementSheet(
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
               )
             ) {
-              Text("Cancel", fontSize = 13.sp)
+              Text(stringResource(CoreR.string.cancel), fontSize = 13.sp)
             }
           }
         }
@@ -326,7 +331,7 @@ fun ModernProfileManagementSheet(
             contentColor = MaterialTheme.colorScheme.primary
           )
         ) {
-          Text("+ Add New Student / Family Profile", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+          Text(stringResource(CoreR.string.profile_add_new_btn), fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
       }
     }

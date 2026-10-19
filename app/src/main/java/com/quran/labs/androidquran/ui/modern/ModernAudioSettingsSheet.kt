@@ -55,10 +55,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.quran.data.model.SuraAyah
+import com.quran.labs.androidquran.R
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 
 /**
@@ -183,13 +185,13 @@ fun ModernAudioSettingsSheet(
                 }
                 Column {
                   Text(
-                    text = "Audio & Playback Options",
+                    text = stringResource(R.string.audio_sheet_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                   )
                   Text(
-                    text = "Configure range, verse repeats, and speed",
+                    text = stringResource(R.string.audio_sheet_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
@@ -202,7 +204,7 @@ fun ModernAudioSettingsSheet(
               ) {
                 Icon(
                   imageVector = QuranIcons.Close,
-                  contentDescription = "Close",
+                  contentDescription = stringResource(R.string.action_clear),
                   tint = MaterialTheme.colorScheme.onSurfaceVariant,
                   modifier = Modifier.size(18.dp)
                 )
@@ -218,10 +220,10 @@ fun ModernAudioSettingsSheet(
               verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
               // 1. PLAYBACK RANGE SECTION
-              SettingsCard(title = "PLAYBACK RANGE") {
+              SettingsCard(title = stringResource(R.string.audio_section_range)) {
                 // Play From
                 AyahRangeRow(
-                  label = "Play From",
+                  label = stringResource(R.string.audio_play_from),
                   suraName = suraNames.getOrNull(selectedStartSura - 1) ?: "Surah $selectedStartSura",
                   suraNumber = selectedStartSura,
                   ayahNumber = selectedStartAyah,
@@ -239,7 +241,7 @@ fun ModernAudioSettingsSheet(
 
                 // Play To
                 AyahRangeRow(
-                  label = "Play To",
+                  label = stringResource(R.string.audio_play_to),
                   suraName = suraNames.getOrNull(selectedEndSura - 1) ?: "Surah $selectedEndSura",
                   suraNumber = selectedEndSura,
                   ayahNumber = selectedEndAyah,
@@ -267,13 +269,13 @@ fun ModernAudioSettingsSheet(
                 ) {
                   Column(modifier = Modifier.weight(1f)) {
                     Text(
-                      text = "Restrict to Range",
+                      text = stringResource(R.string.audio_restrict_range),
                       style = MaterialTheme.typography.bodyMedium,
                       fontWeight = FontWeight.Medium,
                       color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                      text = "Stop playback when end of range is reached",
+                      text = stringResource(R.string.audio_restrict_range_desc),
                       style = MaterialTheme.typography.bodySmall,
                       color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -290,10 +292,10 @@ fun ModernAudioSettingsSheet(
               }
 
               // 2. REPETITION CONTROLS
-              SettingsCard(title = "REPETITIONS") {
+              SettingsCard(title = stringResource(R.string.audio_section_repetitions)) {
                 // Verse Repeat
                 Text(
-                  text = "Repeat Each Verse",
+                  text = stringResource(R.string.audio_repeat_verse),
                   style = MaterialTheme.typography.bodyMedium,
                   fontWeight = FontWeight.Medium,
                   color = MaterialTheme.colorScheme.onSurface,
@@ -336,7 +338,7 @@ fun ModernAudioSettingsSheet(
 
                 // Range Repeat
                 Text(
-                  text = "Repeat Entire Range",
+                  text = stringResource(R.string.audio_repeat_range),
                   style = MaterialTheme.typography.bodyMedium,
                   fontWeight = FontWeight.Medium,
                   color = MaterialTheme.colorScheme.onSurface,
@@ -377,7 +379,7 @@ fun ModernAudioSettingsSheet(
               }
 
               // 3. PLAYBACK SPEED
-              SettingsCard(title = "PLAYBACK SPEED") {
+              SettingsCard(title = stringResource(R.string.audio_section_speed)) {
                 FlowRow(
                   horizontalArrangement = Arrangement.spacedBy(6.dp),
                   verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -445,7 +447,7 @@ fun ModernAudioSettingsSheet(
               )
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = if (isPlaying) "Apply Settings" else "Apply & Play",
+                text = if (isPlaying) stringResource(R.string.audio_btn_apply) else stringResource(R.string.audio_btn_apply_play),
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp
               )
@@ -649,7 +651,7 @@ private fun SuraPickerDialog(
     ) {
       Column(modifier = Modifier.padding(16.dp)) {
         Text(
-          text = "Select Surah",
+          text = stringResource(R.string.audio_select_surah),
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
           color = MaterialTheme.colorScheme.onSurface,
@@ -659,7 +661,7 @@ private fun SuraPickerDialog(
         OutlinedTextField(
           value = filter,
           onValueChange = { filter = it },
-          placeholder = { Text("Search by name or number...") },
+          placeholder = { Text(stringResource(R.string.audio_search_surah)) },
           leadingIcon = { Icon(QuranIcons.Search, contentDescription = null) },
           shape = RoundedCornerShape(12.dp),
           singleLine = true,
@@ -718,7 +720,7 @@ private fun SuraPickerDialog(
           onClick = onDismiss,
           modifier = Modifier.align(Alignment.End)
         ) {
-          Text("Cancel")
+          Text(stringResource(android.R.string.cancel))
         }
       }
     }

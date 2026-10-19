@@ -40,10 +40,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.ui.res.stringResource
 import com.quran.labs.androidquran.common.audio.memorization.MaskingLevel
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationConfig
 import com.quran.labs.androidquran.common.audio.memorization.MemorizationDelayMode
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
+import com.quran.mobile.common.ui.core.R as CoreR
 
 /**
  * Bottom sheet allowing live on-the-fly adjustment of memorization parameters
@@ -110,12 +112,12 @@ fun MemorizationLiveSettingsSheet(
         Spacer(modifier = Modifier.width(10.dp))
         Column {
           Text(
-            text = "Tuning Memorization",
+            text = stringResource(CoreR.string.memorize_live_tuning_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
           )
           Text(
-            text = "Changes take effect immediately on current session",
+            text = stringResource(CoreR.string.memorize_live_tuning_subtitle),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -187,25 +189,25 @@ fun MemorizationLiveSettingsSheet(
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
           NumberStepper(
-            label = "Window Size",
+            label = stringResource(CoreR.string.memo_setup_window_size),
             value = windowSize,
             onValueChange = { windowSize = it.coerceIn(1, 10) }
           )
 
           NumberStepper(
-            label = "Solo Repeat",
+            label = stringResource(CoreR.string.memo_setup_solo_repeat),
             value = singleRepeat,
             onValueChange = { singleRepeat = it.coerceIn(1, 20) }
           )
 
           NumberStepper(
-            label = "Connect",
+            label = stringResource(CoreR.string.memo_setup_connect),
             value = connectRepeat,
             onValueChange = { connectRepeat = it.coerceIn(0, 20) }
           )
 
           NumberStepper(
-            label = "Range",
+            label = stringResource(CoreR.string.memo_setup_range),
             value = rangeRepeat,
             onValueChange = { rangeRepeat = it.coerceIn(1, 20) }
           )
@@ -216,13 +218,13 @@ fun MemorizationLiveSettingsSheet(
           horizontalArrangement = Arrangement.SpaceEvenly
         ) {
           NumberStepper(
-            label = "Verse Repeat",
+            label = stringResource(CoreR.string.memo_setup_verse_repeat),
             value = singleRepeat,
             onValueChange = { singleRepeat = it.coerceIn(1, 50) }
           )
 
           NumberStepper(
-            label = "Range Repeat",
+            label = stringResource(CoreR.string.memo_setup_range_repeat),
             value = rangeRepeat,
             onValueChange = { rangeRepeat = it.coerceIn(1, 50) }
           )
@@ -249,7 +251,7 @@ fun MemorizationLiveSettingsSheet(
         FilterChip(
           selected = selectedDelayOption == 0,
           onClick = { selectedDelayOption = 0 },
-          label = { Text("None") }
+          label = { Text(stringResource(CoreR.string.memo_setup_delay_none)) }
         )
         FilterChip(
           selected = selectedDelayOption == 1,
@@ -274,7 +276,7 @@ fun MemorizationLiveSettingsSheet(
         FilterChip(
           selected = selectedDelayOption == 5,
           onClick = { selectedDelayOption = 5 },
-          label = { Text("Echo 1:1") }
+          label = { Text(stringResource(CoreR.string.memo_setup_delay_echo)) }
         )
       }
 
@@ -324,17 +326,17 @@ fun MemorizationLiveSettingsSheet(
         FilterChip(
           selected = maskingLevel == MaskingLevel.OFF,
           onClick = { maskingLevel = MaskingLevel.OFF },
-          label = { Text("Off") }
+          label = { Text(stringResource(CoreR.string.memo_setup_blur_off)) }
         )
         FilterChip(
           selected = maskingLevel == MaskingLevel.MASK_ON_CONNECT,
           onClick = { maskingLevel = MaskingLevel.MASK_ON_CONNECT },
-          label = { Text("On Connect") }
+          label = { Text(stringResource(CoreR.string.memo_setup_blur_connect)) }
         )
         FilterChip(
           selected = maskingLevel == MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT,
           onClick = { maskingLevel = MaskingLevel.PROGRESSIVE_SOLO_AND_CONNECT },
-          label = { Text("Progressive") }
+          label = { Text(stringResource(CoreR.string.memo_setup_blur_progressive)) }
         )
       }
 
@@ -377,7 +379,7 @@ fun MemorizationLiveSettingsSheet(
           onClick = onDismissRequest,
           modifier = Modifier.weight(1f)
         ) {
-          Text("Cancel")
+          Text(stringResource(CoreR.string.cancel))
         }
 
         Button(
@@ -406,7 +408,7 @@ fun MemorizationLiveSettingsSheet(
           },
           modifier = Modifier.weight(1f)
         ) {
-          Text("Apply Changes", fontWeight = FontWeight.Bold)
+          Text(stringResource(CoreR.string.memo_setup_apply_changes), fontWeight = FontWeight.Bold)
         }
       }
     }

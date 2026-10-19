@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -95,7 +96,7 @@ fun ModernTranslationScreen(
   modifier: Modifier = Modifier
 ) {
   var searchQuery by remember { mutableStateOf("") }
-  var selectedFilter by remember { mutableStateOf("All") }
+  var selectedFilterIndex by remember { mutableIntStateOf(0) } // 0: All, 1: Downloaded, 2: Available
   var itemPendingRemoval by remember { mutableStateOf<TranslationItem?>(null) }
 
   // Partition into downloaded and available
@@ -112,11 +113,11 @@ fun ModernTranslationScreen(
   }
 
   val filteredDownloaded = sortedDownloads.filter { item ->
-    matchesSearch(item) && (selectedFilter == "All" || selectedFilter == "Downloaded")
+    matchesSearch(item) && (selectedFilterIndex == 0 || selectedFilterIndex == 1)
   }
 
   val filteredAvailable = availableList.filter { item ->
-    matchesSearch(item) && (selectedFilter == "All" || selectedFilter == "Available")
+    matchesSearch(item) && (selectedFilterIndex == 0 || selectedFilterIndex == 2)
   }
 
   // Removal confirmation dialog
@@ -191,10 +192,10 @@ fun ModernTranslationScreen(
 
       // Filter Chips
       TranslationFilterChips(
-        selectedFilter = selectedFilter,
+        selectedIndex = selectedFilterIndex,
         downloadedCount = downloadedList.size,
         availableCount = availableList.size,
-        onFilterSelected = { selectedFilter = it }
+        onFilterSelected = { selectedFilterIndex = it }
       )
 
       // Content List
@@ -296,7 +297,7 @@ private fun TranslationTopBar(
     IconButton(onClick = onBack) {
       Icon(
         imageVector = QuranIcons.ArrowBack,
-        contentDescription = "Back",
+        contentDescription = stringResource(R.string.reader_back),
         tint = TextWhite
       )
     }
@@ -328,7 +329,7 @@ private fun TranslationTopBar(
     ) {
       Icon(
         imageVector = QuranIcons.Sync,
-        contentDescription = "Refresh",
+        contentDescription = stringResource(R.string.action_search),
         tint = if (isRefreshing) Emerald else TextMuted,
         modifier = if (isRefreshing) Modifier.rotate(rotation) else Modifier
       )
@@ -357,7 +358,7 @@ private fun TranslationSearchBar(
     ) {
       Icon(
         imageVector = QuranIcons.Search,
-        contentDescription = "Search",
+        contentDescription = stringResource(R.string.action_search),
         tint = if (query.isNotEmpty()) Emerald else TextMuted,
         modifier = Modifier.size(18.dp)
       )
@@ -377,7 +378,7 @@ private fun TranslationSearchBar(
         decorationBox = { innerTextField ->
           if (query.isEmpty()) {
             Text(
-              text = "Search translations or translators...",
+              text = stringResource(R.string.trans_search_hint),
               color = TextMuted.copy(alpha = 0.6f),
               fontSize = 14.sp
             )
@@ -389,7 +390,7 @@ private fun TranslationSearchBar(
       if (query.isNotEmpty()) {
         Icon(
           imageVector = QuranIcons.Close,
-          contentDescription = "Clear",
+          contentDescription = stringResource(R.string.action_clear),
           tint = TextMuted,
           modifier = Modifier
             .size(18.dp)
@@ -403,15 +404,15 @@ private fun TranslationSearchBar(
 
 @Composable
 private fun TranslationFilterChips(
-  selectedFilter: String,
+  selectedIndex: Int,
   downloadedCount: Int,
   availableCount: Int,
-  onFilterSelected: (String) -> Unit
+  onFilterSelected: (Int) -> Unit
 ) {
   val filters = listOf(
-    "All" to (downloadedCount + availableCount),
-    "Downloaded" to downloadedCount,
-    "Available" to availableCount
+    Triple(0, stringResource(R.string.trans_filter_all), downloadedCount + availableCount),
+    Triple(1, stringResource(R.string.trans_filter_downloaded), downloadedCount),
+    Triple(2, stringResource(R.string.trans_filter_available), availableCount)
   )
 
   Row(
@@ -421,8 +422,8 @@ private fun TranslationFilterChips(
       .padding(horizontal = 16.dp, vertical = 8.dp),
     horizontalArrangement = Arrangement.spacedBy(8.dp)
   ) {
-    filters.forEach { (filterName, count) ->
-      val isSelected = selectedFilter == filterName
+    filters.forEach { (idx, filterName, count) ->
+      val isSelected = selectedIndex == idx
       Surface(
         shape = RoundedCornerShape(20.dp),
         color = if (isSelected) Emerald.copy(alpha = 0.15f) else SurfaceDark,
@@ -430,7 +431,7 @@ private fun TranslationFilterChips(
           width = 0.5.dp,
           color = if (isSelected) Emerald else BorderDark
         ),
-        modifier = Modifier.clickable { onFilterSelected(filterName) }
+        modifier = Modifier.clickable { onFilterSelected(idx) }
       ) {
         Row(
           modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -600,7 +601,7 @@ private fun DownloadedTranslationCard(
         ) {
           Icon(
             imageVector = QuranIcons.KeyboardArrowUp,
-            contentDescription = "Move Up",
+            contentDescription = stringResource(R.string.trans_btn_move_up),
             tint = if (canMoveUp) TextWhite else TextMuted.copy(alpha = 0.3f),
             modifier = Modifier.size(18.dp)
           )
@@ -613,7 +614,7 @@ private fun DownloadedTranslationCard(
         ) {
           Icon(
             imageVector = QuranIcons.KeyboardArrowDown,
-            contentDescription = "Move Down",
+            contentDescription = stringResource(R.string.trans_btn_move_down),
             tint = if (canMoveDown) TextWhite else TextMuted.copy(alpha = 0.3f),
             modifier = Modifier.size(18.dp)
           )
@@ -628,7 +629,7 @@ private fun DownloadedTranslationCard(
         ) {
           Icon(
             imageVector = QuranIcons.Delete,
-            contentDescription = "Remove",
+            contentDescription = stringResource(R.string.trans_btn_remove),
             tint = Color(0xFFEF4444).copy(alpha = 0.85f),
             modifier = Modifier.size(18.dp)
           )
@@ -758,7 +759,7 @@ private fun EmptyTranslationsState(query: String) {
     Spacer(modifier = Modifier.height(14.dp))
 
     Text(
-      text = if (query.isNotBlank()) "No translations found matching \"$query\"" else "No translations available",
+      text = if (query.isNotBlank()) stringResource(R.string.trans_empty_matching, query) else stringResource(R.string.trans_empty_available),
       color = TextWhite,
       fontSize = 15.sp,
       fontWeight = FontWeight.Medium
@@ -767,7 +768,7 @@ private fun EmptyTranslationsState(query: String) {
     Spacer(modifier = Modifier.height(4.dp))
 
     Text(
-      text = "Try adjusting your search terms or filters",
+      text = stringResource(R.string.trans_empty_adjust),
       color = TextMuted,
       fontSize = 12.sp
     )

@@ -49,12 +49,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernCard
+import com.quran.mobile.common.ui.core.R as CoreR
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,13 +114,13 @@ fun ModernBackupRestoreSheet(
           Spacer(modifier = Modifier.width(12.dp))
           Column {
             Text(
-              text = "Backup & Restore",
+              text = stringResource(CoreR.string.backup_title),
               fontSize = 19.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-              text = "Safeguard & transfer your memorization data",
+              text = stringResource(CoreR.string.backup_subtitle),
               fontSize = 11.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -134,7 +136,7 @@ fun ModernBackupRestoreSheet(
         ) {
           Icon(
             imageVector = QuranIcons.Close,
-            contentDescription = "Close",
+            contentDescription = stringResource(CoreR.string.cancel),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(18.dp)
           )
@@ -166,7 +168,7 @@ fun ModernBackupRestoreSheet(
           },
           text = {
             Text(
-              text = "Export Backup",
+              text = stringResource(CoreR.string.backup_export_title),
               fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
               color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -184,7 +186,7 @@ fun ModernBackupRestoreSheet(
           },
           text = {
             Text(
-              text = "Restore Backup",
+              text = stringResource(CoreR.string.backup_import_title),
               fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
               color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -212,13 +214,13 @@ fun ModernBackupRestoreSheet(
           ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
               Text(
-                text = "💾 Export Hifz Data",
+                text = "💾 " + stringResource(CoreR.string.backup_export_title),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = "Creates a complete snapshot of all your profiles, memorized Surahs, spaced repetition intervals, mistake flags, habit streaks, and active Hifz target plans.",
+                text = stringResource(CoreR.string.backup_export_desc),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 17.sp
@@ -250,7 +252,7 @@ fun ModernBackupRestoreSheet(
               val clip = ClipData.newPlainText("Hifz Backup", exportJsonText)
               clipboardManager.setPrimaryClip(clip)
               exportCopied = true
-              Toast.makeText(context, "✅ Hifz backup copied to clipboard!", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, "✅ " + context.getString(CoreR.string.backup_export_success), Toast.LENGTH_SHORT).show()
             },
             modifier = Modifier
               .fillMaxWidth()
@@ -259,7 +261,7 @@ fun ModernBackupRestoreSheet(
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
           ) {
             Text(
-              text = if (exportCopied) "✓ Backup Copied to Clipboard!" else "📋 Copy Backup to Clipboard",
+              text = if (exportCopied) "✓ " + stringResource(CoreR.string.backup_export_success) else "📋 " + stringResource(CoreR.string.backup_export_btn),
               fontWeight = FontWeight.Bold,
               fontSize = 14.sp
             )
@@ -283,13 +285,13 @@ fun ModernBackupRestoreSheet(
           ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
               Text(
-                text = "📥 Restore Hifz Data",
+                text = "📥 " + stringResource(CoreR.string.backup_import_title),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = "Paste a previously exported Hifz JSON snapshot to restore all memorization records, profiles, and streak history.",
+                text = stringResource(CoreR.string.backup_import_desc),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 17.sp
@@ -303,7 +305,7 @@ fun ModernBackupRestoreSheet(
               restoreInputText = it
               restoreStatus = null
             },
-            placeholder = { Text("Paste Hifz JSON backup here...", fontSize = 12.sp) },
+            placeholder = { Text(stringResource(CoreR.string.backup_import_desc), fontSize = 12.sp) },
             modifier = Modifier
               .fillMaxWidth()
               .height(130.dp),
@@ -344,10 +346,10 @@ fun ModernBackupRestoreSheet(
                     restoreInputText = text
                     restoreStatus = null
                   } else {
-                    Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(CoreR.string.backup_clipboard_empty), Toast.LENGTH_SHORT).show()
                   }
                 } else {
-                  Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                  Toast.makeText(context, context.getString(CoreR.string.backup_clipboard_empty), Toast.LENGTH_SHORT).show()
                 }
               },
               modifier = Modifier
@@ -355,22 +357,22 @@ fun ModernBackupRestoreSheet(
                 .height(48.dp),
               shape = RoundedCornerShape(14.dp)
             ) {
-              Text("📋 Paste", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+              Text("📋 " + stringResource(CoreR.string.backup_btn_paste), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
 
             Button(
               onClick = {
                 if (restoreInputText.isBlank()) {
-                  restoreStatus = "⚠️ Please paste backup JSON text first."
+                  restoreStatus = "⚠️ " + context.getString(CoreR.string.backup_invalid_json)
                   return@Button
                 }
                 val success = onImportJson(restoreInputText)
                 if (success) {
-                  restoreStatus = "✅ Data restored successfully! Refreshing..."
-                  Toast.makeText(context, "✅ Hifz data restored successfully!", Toast.LENGTH_LONG).show()
+                  restoreStatus = "✅ " + context.getString(CoreR.string.backup_restore_success)
+                  Toast.makeText(context, "✅ " + context.getString(CoreR.string.backup_restore_success), Toast.LENGTH_LONG).show()
                   onDismissRequest()
                 } else {
-                  restoreStatus = "❌ Invalid JSON backup format. Please verify your backup string."
+                  restoreStatus = "❌ " + context.getString(CoreR.string.backup_restore_failed)
                 }
               },
               modifier = Modifier
@@ -379,7 +381,7 @@ fun ModernBackupRestoreSheet(
               shape = RoundedCornerShape(14.dp),
               colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-              Text("Restore Data", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+              Text(stringResource(CoreR.string.backup_import_btn), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
           }
         }

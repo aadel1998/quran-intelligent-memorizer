@@ -39,12 +39,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernCard
+import com.quran.mobile.common.ui.core.R as CoreR
 import kotlin.random.Random
 
 /**
@@ -117,7 +119,7 @@ fun ModernRecallQuizSheet(
           Spacer(modifier = Modifier.width(10.dp))
           Column {
             Text(
-              text = "SELF-TESTING RECALL QUIZ",
+              text = stringResource(CoreR.string.quiz_title).uppercase(),
               fontSize = 11.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary,
@@ -139,7 +141,7 @@ fun ModernRecallQuizSheet(
               .padding(horizontal = 10.dp, vertical = 4.dp)
           ) {
             Text(
-              text = "$correctCount / $questionsAnswered Correct",
+              text = "$correctCount / $questionsAnswered ${stringResource(CoreR.string.quiz_correct)}",
               fontSize = 12.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary
@@ -163,7 +165,7 @@ fun ModernRecallQuizSheet(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
-              text = "PROMPT AYAH",
+              text = stringResource(CoreR.string.hifz_ayah).uppercase(),
               fontSize = 11.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary,
@@ -177,7 +179,7 @@ fun ModernRecallQuizSheet(
               ) {
                 Icon(
                   imageVector = QuranIcons.PlayArrow,
-                  contentDescription = "Listen to Prompt Ayah",
+                  contentDescription = stringResource(CoreR.string.quiz_audio_playing),
                   tint = MaterialTheme.colorScheme.primary,
                   modifier = Modifier.size(20.dp)
                 )
@@ -188,7 +190,7 @@ fun ModernRecallQuizSheet(
           Spacer(modifier = Modifier.height(6.dp))
 
           Text(
-            text = "Ayah $promptAyah of ${sura.numberOfAyahs}",
+            text = "${stringResource(CoreR.string.hifz_ayah)} $promptAyah / ${sura.numberOfAyahs}",
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
@@ -197,7 +199,7 @@ fun ModernRecallQuizSheet(
           Spacer(modifier = Modifier.height(4.dp))
 
           Text(
-            text = "Recite this verse aloud to anchor your memory, then recall the next verse.",
+            text = stringResource(CoreR.string.quiz_prompt_next),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -227,7 +229,7 @@ fun ModernRecallQuizSheet(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
-              text = "NEXT AYAH (TARGET)",
+              text = stringResource(CoreR.string.quiz_prompt_next).uppercase(),
               fontSize = 11.sp,
               fontWeight = FontWeight.Bold,
               color = if (isRevealed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
@@ -235,7 +237,7 @@ fun ModernRecallQuizSheet(
             )
 
             Text(
-              text = "Ayah $targetAyah",
+              text = "${stringResource(CoreR.string.hifz_ayah)} $targetAyah",
               fontSize = 13.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary
@@ -265,14 +267,14 @@ fun ModernRecallQuizSheet(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                  text = "Recite Ayah $targetAyah from memory",
+                  text = "${stringResource(CoreR.string.hifz_ayah)} $targetAyah",
                   fontSize = 13.sp,
                   fontWeight = FontWeight.SemiBold,
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                  text = "Tap to Reveal & Verify Recitation",
+                  text = stringResource(CoreR.string.quiz_reveal_answer),
                   fontSize = 11.sp,
                   color = MaterialTheme.colorScheme.primary
                 )
@@ -296,7 +298,7 @@ fun ModernRecallQuizSheet(
                 modifier = Modifier.size(16.dp)
               )
               Spacer(modifier = Modifier.width(8.dp))
-              Text("Reveal Ayah $targetAyah", fontWeight = FontWeight.Bold)
+              Text(stringResource(CoreR.string.quiz_reveal_answer), fontWeight = FontWeight.Bold)
             }
           } else {
             // Revealed state: user self-verification
@@ -320,7 +322,7 @@ fun ModernRecallQuizSheet(
                   )
                   Spacer(modifier = Modifier.width(6.dp))
                   Text(
-                    text = "Ayah $targetAyah Revealed",
+                    text = "${stringResource(CoreR.string.hifz_ayah)} $targetAyah",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -331,7 +333,7 @@ fun ModernRecallQuizSheet(
               Spacer(modifier = Modifier.height(14.dp))
 
               Text(
-                text = "Did you recite Ayah $targetAyah correctly?",
+                text = stringResource(CoreR.string.quiz_subtitle),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
@@ -364,7 +366,7 @@ fun ModernRecallQuizSheet(
                     modifier = Modifier.size(16.dp)
                   )
                   Spacer(modifier = Modifier.width(6.dp))
-                  Text("Correct", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                  Text(stringResource(CoreR.string.quiz_correct), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
                 // Needs Practice Button
@@ -387,7 +389,7 @@ fun ModernRecallQuizSheet(
                     modifier = Modifier.size(16.dp)
                   )
                   Spacer(modifier = Modifier.width(6.dp))
-                  Text("Flag & Practice", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                  Text(stringResource(CoreR.string.hifz_action_practice_flagged), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                 }
               }
             }
@@ -407,7 +409,7 @@ fun ModernRecallQuizSheet(
           onClick = onDismissRequest,
           shape = RoundedCornerShape(10.dp)
         ) {
-          Text("Finish Quiz")
+          Text(stringResource(CoreR.string.quiz_finish))
         }
 
         Button(
@@ -418,7 +420,7 @@ fun ModernRecallQuizSheet(
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
           )
         ) {
-          Text("Skip to Next Ayah")
+          Text(stringResource(CoreR.string.quiz_skip_question))
         }
       }
     }

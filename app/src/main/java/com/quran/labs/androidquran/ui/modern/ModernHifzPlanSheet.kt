@@ -38,12 +38,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quran.labs.androidquran.common.audio.memorization.HifzPlan
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
 import com.quran.labs.androidquran.common.ui.core.components.ModernCard
+import com.quran.mobile.common.ui.core.R as CoreR
 
 /**
  * Bottom sheet to configure a structured Memorization Plan (Easy Quran Memorizer Pro).
@@ -101,7 +103,7 @@ fun ModernHifzPlanSheet(
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-              text = "Hifz Target Planner",
+              text = stringResource(CoreR.string.hifz_target_planner_title),
               fontSize = 18.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
@@ -109,7 +111,7 @@ fun ModernHifzPlanSheet(
           }
           Spacer(modifier = Modifier.height(2.dp))
           Text(
-            text = "Set a goal deadline to calculate your daily required memorization pace",
+            text = stringResource(CoreR.string.hifz_target_planner_subtitle),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -118,7 +120,7 @@ fun ModernHifzPlanSheet(
         IconButton(onClick = onDismissRequest) {
           Icon(
             imageVector = QuranIcons.Close,
-            contentDescription = "Close",
+            contentDescription = stringResource(CoreR.string.cancel),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
@@ -128,7 +130,7 @@ fun ModernHifzPlanSheet(
 
       // 1. Select Target Surah
       Text(
-        text = "TARGET SURAH",
+        text = stringResource(CoreR.string.plan_target_surah_header),
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
@@ -179,7 +181,7 @@ fun ModernHifzPlanSheet(
             selectedSuraNumber = num
           }
         },
-        label = { Text("Or enter Surah number (1–114)") },
+        label = { Text(stringResource(CoreR.string.plan_enter_surah_num)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -193,7 +195,7 @@ fun ModernHifzPlanSheet(
 
       // 2. Select Deadline / Days
       Text(
-        text = "TARGET TIMEFRAME",
+        text = stringResource(CoreR.string.plan_target_timeframe_header),
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
@@ -212,7 +214,7 @@ fun ModernHifzPlanSheet(
           FilterChip(
             selected = selectedDays == days,
             onClick = { selectedDays = days },
-            label = { Text("$days Days", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+            label = { Text(stringResource(CoreR.string.plan_days_count, days), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
             colors = FilterChipDefaults.filterChipColors(
               selectedContainerColor = Color(0xFF10B981),
               selectedLabelColor = Color.White
@@ -246,7 +248,7 @@ fun ModernHifzPlanSheet(
               color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-              text = "$totalVerses Ayahs",
+              text = stringResource(CoreR.string.plan_surah_ayahs_count, totalVerses),
               fontSize = 13.sp,
               fontWeight = FontWeight.SemiBold,
               color = MaterialTheme.colorScheme.primary
@@ -261,12 +263,12 @@ fun ModernHifzPlanSheet(
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
-              text = "Required Daily Pace:",
+              text = stringResource(CoreR.string.plan_required_pace),
               fontSize = 13.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-              text = "⚡ $dailyPace Ayahs / Day",
+              text = stringResource(CoreR.string.plan_pace_per_day, dailyPace),
               fontSize = 15.sp,
               fontWeight = FontWeight.Bold,
               color = Color(0xFF10B981)
@@ -301,7 +303,7 @@ fun ModernHifzPlanSheet(
               modifier = Modifier.size(15.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Clear", fontSize = 13.sp)
+            Text(stringResource(CoreR.string.plan_clear_btn), fontSize = 13.sp)
           }
         }
 
@@ -330,7 +332,7 @@ fun ModernHifzPlanSheet(
             modifier = Modifier.size(16.dp)
           )
           Spacer(modifier = Modifier.width(6.dp))
-          Text("Save Plan", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+          Text(stringResource(CoreR.string.plan_save_btn), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
       }
     }

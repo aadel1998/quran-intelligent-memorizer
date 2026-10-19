@@ -54,6 +54,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
+import com.quran.labs.androidquran.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quran.labs.androidquran.common.ui.core.QuranIcons
@@ -183,13 +185,13 @@ fun ModernJumpSheet(
 
               Column {
                 Text(
-                  text = "Jump to Destination",
+                  text = stringResource(R.string.jump_sheet_title),
                   fontSize = 17.sp,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                  text = "Navigate by Page, Surah & Ayah, or Juz",
+                  text = stringResource(R.string.jump_sheet_subtitle),
                   fontSize = 12.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -202,7 +204,7 @@ fun ModernJumpSheet(
             ) {
               Icon(
                 imageVector = QuranIcons.Close,
-                contentDescription = "Close",
+                contentDescription = stringResource(android.R.string.cancel),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
               )
@@ -212,9 +214,9 @@ fun ModernJumpSheet(
           // Mode Selector Tabs
           ModernTabRow(
             tabs = listOf(
-              ModernTabItem(title = "Page"),
-              ModernTabItem(title = "Surah"),
-              ModernTabItem(title = "Juz")
+              ModernTabItem(title = stringResource(R.string.jump_tab_page), icon = QuranIcons.MenuBook),
+              ModernTabItem(title = stringResource(R.string.jump_tab_surah), icon = QuranIcons.List),
+              ModernTabItem(title = stringResource(R.string.jump_tab_juz), icon = QuranIcons.Layers)
             ),
             selectedTabIndex = selectedTab,
             onTabSelected = { selectedTab = it },
@@ -321,13 +323,13 @@ fun ModernJumpSheet(
               )
               Spacer(modifier = Modifier.width(8.dp))
               val buttonText = when (selectedTab) {
-                0 -> "Jump to Page $resolvedPage"
+                0 -> stringResource(R.string.jump_btn_page, resolvedPage)
                 1 -> {
                   val name = suraNames.getOrNull(selectedSura - 1) ?: "Surah $selectedSura"
-                  "Jump to $name : Ayah $selectedAyah"
+                  stringResource(R.string.jump_btn_ayah, name, selectedAyah)
                 }
-                2 -> "Jump to Juz $selectedJuz (Page ${getStartingPageForJuz(selectedJuz)})"
-                else -> "Jump"
+                2 -> stringResource(R.string.jump_btn_juz, selectedJuz, getStartingPageForJuz(selectedJuz))
+                else -> stringResource(R.string.jump_btn_general)
               }
               Text(
                 text = buttonText,
@@ -395,13 +397,13 @@ private fun PageJumpContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
           ) {
             Text(
-              text = if (inputPageString.isEmpty()) "—" else "Page $resolvedPage",
+              text = if (inputPageString.isEmpty()) "—" else stringResource(R.string.bookmarks_page_format, resolvedPage),
               fontSize = 22.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary
             )
             Text(
-              text = "of $totalPages",
+              text = stringResource(R.string.jump_page_of_total, totalPages),
               fontSize = 13.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -417,7 +419,7 @@ private fun PageJumpContent(
         }
 
         ModernBadgeChip(
-          text = "Juz $juzNumber",
+          text = stringResource(R.string.juz_title_format, juzNumber),
           backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
           contentColor = MaterialTheme.colorScheme.primary
         )
@@ -427,7 +429,7 @@ private fun PageJumpContent(
     // Quick Presets Row
     Column(modifier = Modifier.fillMaxWidth()) {
       Text(
-        text = "POPULAR JUMPS",
+        text = stringResource(R.string.jump_popular_jumps),
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.5.sp,
@@ -592,7 +594,7 @@ private fun SurahJumpContent(
           onValueChange = onSearchQueryChanged,
           placeholder = {
             Text(
-              text = "Search surah (e.g. Kahf, 18)...",
+              text = stringResource(R.string.jump_search_surah_hint),
               fontSize = 13.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -613,7 +615,7 @@ private fun SurahJumpContent(
           ) {
             Icon(
               imageVector = QuranIcons.Close,
-              contentDescription = "Clear",
+              contentDescription = stringResource(R.string.action_clear),
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(16.dp)
             )
@@ -650,7 +652,7 @@ private fun SurahJumpContent(
             color = MaterialTheme.colorScheme.onSurface
           )
           Text(
-            text = "Page $targetPage • Total $maxAyahs verses",
+            text = stringResource(R.string.jump_total_verses_format, targetPage, maxAyahs),
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -682,7 +684,7 @@ private fun SurahJumpContent(
             modifier = Modifier.padding(horizontal = 4.dp)
           ) {
             Text(
-              text = "Ayah $selectedAyah",
+              text = stringResource(R.string.jump_ayah_indicator, selectedAyah),
               fontSize = 12.sp,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary,
@@ -769,7 +771,7 @@ private fun SurahJumpContent(
                   color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                  text = "$ayahs verses • Page $startPage",
+                  text = stringResource(R.string.jump_total_verses_format, startPage, ayahs),
                   fontSize = 11.sp,
                   color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -859,13 +861,13 @@ private fun JuzJumpContent(
 
             Column {
               Text(
-                text = "Juz $juzNum",
+                text = stringResource(R.string.juz_title_format, juzNum),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
               )
               Text(
-                text = "$suraName • Starts at page $startPage",
+                text = "$suraName • " + stringResource(R.string.juz_begins_at, stringResource(R.string.bookmarks_page_format, startPage)),
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -873,7 +875,7 @@ private fun JuzJumpContent(
           }
 
           ModernBadgeChip(
-            text = "Page $startPage",
+            text = stringResource(R.string.bookmarks_page_format, startPage),
             backgroundColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                               else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             contentColor = if (isSelected) MaterialTheme.colorScheme.primary

@@ -30,10 +30,10 @@ object HifzReminderScheduler {
       val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
       val channel = NotificationChannel(
         CHANNEL_ID,
-        "Daily Hifz Reminders",
+        context.getString(R.string.hifz_reminder_channel_name),
         NotificationManager.IMPORTANCE_HIGH
       ).apply {
-        description = "Reminders to maintain daily Quran memorization goals and streaks"
+        description = context.getString(R.string.hifz_reminder_channel_desc)
         enableLights(true)
         enableVibration(true)
       }
@@ -57,11 +57,11 @@ object HifzReminderScheduler {
 
     val notification = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(R.drawable.ic_notification)
-      .setContentTitle("Quran Memorization Reminder 📖")
-      .setContentText("Time for your daily memorization session! Keep your streak alive 🔥")
+      .setContentTitle(context.getString(R.string.hifz_reminder_notif_title))
+      .setContentText(context.getString(R.string.hifz_reminder_notif_body))
       .setStyle(
         NotificationCompat.BigTextStyle()
-          .bigText("Time for your daily memorization session! Practice your queued Surahs and protect your Hifz streak.")
+          .bigText(context.getString(R.string.hifz_reminder_notif_big))
       )
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setAutoCancel(true)
